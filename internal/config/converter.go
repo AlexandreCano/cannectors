@@ -163,9 +163,11 @@ func convertAuthConfig(data map[string]interface{}) (*connector.AuthConfig, erro
 	// Extract credentials
 	if credentials, ok := data["credentials"].(map[string]interface{}); ok {
 		for key, value := range credentials {
-			if strValue, ok := value.(string); ok {
-				authConfig.Credentials[key] = strValue
+			strValue, ok := value.(string)
+			if !ok {
+				return nil, fmt.Errorf("invalid credential value for key %q: expected string, got %T", key, value)
 			}
+			authConfig.Credentials[key] = strValue
 		}
 	}
 

@@ -194,6 +194,12 @@ func (e *Executor) Execute(pipeline *connector.Pipeline) (*connector.ExecutionRe
 	currentRecords := records
 	for i, filterModule := range e.filterModules {
 		if filterModule == nil {
+			logger.Warn("nil filter module encountered; skipping",
+				slog.String("pipeline_id", pipeline.ID),
+				slog.String("stage", "filter"),
+				slog.Int("filter_index", i),
+				slog.Int("input_records", len(currentRecords)),
+			)
 			continue
 		}
 

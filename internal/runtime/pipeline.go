@@ -144,7 +144,7 @@ func (e *Executor) Execute(pipeline *connector.Pipeline) (*connector.ExecutionRe
 		return result, ErrNilInputModule
 	}
 
-	if e.outputModule == nil && !e.dryRun {
+	if e.outputModule == nil {
 		logger.Error("pipeline execution failed: output module is nil",
 			slog.String("pipeline_id", pipeline.ID),
 		)

@@ -40,7 +40,7 @@ func TestValidateConfig_MissingRequiredField(t *testing.T) {
 	// Check that error mentions the missing field
 	found := false
 	for _, err := range result.Errors {
-		if err.Type == "required" || contains(err.Message, "required") || contains(err.Message, "filters") {
+		if err.Type == "required" || strings.Contains(strings.ToLower(err.Message), strings.ToLower("required")) || strings.Contains(strings.ToLower(err.Message), strings.ToLower("filters")) {
 			found = true
 			break
 		}
@@ -71,7 +71,7 @@ func TestValidateConfig_WrongType(t *testing.T) {
 	// Check that error mentions type issue
 	found := false
 	for _, err := range result.Errors {
-		if err.Type == "type" || contains(err.Message, "type") || contains(err.Message, "string") {
+		if err.Type == "type" || strings.Contains(strings.ToLower(err.Message), strings.ToLower("type")) || strings.Contains(strings.ToLower(err.Message), strings.ToLower("string")) {
 			found = true
 			break
 		}
@@ -129,34 +129,4 @@ func TestGetSchema_ReturnsSchema(t *testing.T) {
 	if schema == nil || len(schema) == 0 {
 		t.Error("expected embedded schema to be non-empty")
 	}
-}
-
-// contains checks if a string contains a substring (case-insensitive)
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr ||
-		len(s) > 0 && containsLower(s, substr))
-}
-
-func containsLower(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		match := true
-		for j := 0; j < len(substr); j++ {
-			sc := s[i+j]
-			tc := substr[j]
-			if sc >= 'A' && sc <= 'Z' {
-				sc += 32
-			}
-			if tc >= 'A' && tc <= 'Z' {
-				tc += 32
-			}
-			if sc != tc {
-				match = false
-				break
-			}
-		}
-		if match {
-			return true
-		}
-	}
-	return false
 }

@@ -42,26 +42,26 @@ func ConvertToPipeline(data map[string]interface{}) (*connector.Pipeline, error)
 	}
 
 	// Extract required fields
-	if name, ok := connectorData["name"].(string); ok {
-		pipeline.Name = name
-		// Use name as ID if not specified
-		pipeline.ID = name
-	} else {
+	var name string
+	if name, ok = connectorData["name"].(string); !ok {
 		return nil, fmt.Errorf("missing required field 'connector.name'")
 	}
+	pipeline.Name = name
+	// Use name as ID if not specified
+	pipeline.ID = name
 
-	if version, ok := connectorData["version"].(string); ok {
-		pipeline.Version = version
-	} else {
+	var version string
+	if version, ok = connectorData["version"].(string); !ok {
 		return nil, fmt.Errorf("missing required field 'connector.version'")
 	}
+	pipeline.Version = version
 
 	// Extract optional fields
-	if description, ok := connectorData["description"].(string); ok {
+	if description, okDesc := connectorData["description"].(string); okDesc {
 		pipeline.Description = description
 	}
 
-	if id, ok := connectorData["id"].(string); ok {
+	if id, okID := connectorData["id"].(string); okID {
 		pipeline.ID = id
 	}
 
@@ -77,28 +77,28 @@ func ConvertToPipeline(data map[string]interface{}) (*connector.Pipeline, error)
 	pipeline.Input = inputConfig
 
 	// Extract schedule from input if present (for pipeline-level schedule)
-	if schedule, ok := inputData["schedule"].(string); ok {
+	if schedule, okSchedule := inputData["schedule"].(string); okSchedule {
 		pipeline.Schedule = schedule
 	}
 
 	// Extract filters (optional)
-	if filtersData, ok := connectorData["filters"].([]interface{}); ok {
+	if filtersData, okFilters := connectorData["filters"].([]interface{}); okFilters {
 		for i, filterData := range filtersData {
-			filterMap, ok := filterData.(map[string]interface{})
-			if !ok {
+			filterMap, isMap := filterData.(map[string]interface{})
+			if !isMap {
 				return nil, fmt.Errorf("invalid filter at index %d", i)
 			}
-			filterConfig, err := convertModuleConfig(filterMap)
-			if err != nil {
-				return nil, fmt.Errorf("invalid filter at index %d: %w", i, err)
+			filterConfig, convertErr := convertModuleConfig(filterMap)
+			if convertErr != nil {
+				return nil, fmt.Errorf("invalid filter at index %d: %w", i, convertErr)
 			}
 			pipeline.Filters = append(pipeline.Filters, *filterConfig)
 		}
 	}
 
 	// Extract output module config
-	outputData, ok := connectorData["output"].(map[string]interface{})
-	if !ok {
+	outputData, okOutput := connectorData["output"].(map[string]interface{})
+	if !okOutput {
 		return nil, fmt.Errorf("missing or invalid 'connector.output' section")
 	}
 	outputConfig, err := convertModuleConfig(outputData)
@@ -108,7 +108,7 @@ func ConvertToPipeline(data map[string]interface{}) (*connector.Pipeline, error)
 	pipeline.Output = outputConfig
 
 	// Extract error handling (optional)
-	if errorHandling, ok := connectorData["errorHandling"].(map[string]interface{}); ok {
+	if errorHandling, okErrHandling := connectorData["errorHandling"].(map[string]interface{}); okErrHandling {
 		pipeline.ErrorHandling = convertErrorHandling(errorHandling)
 	}
 

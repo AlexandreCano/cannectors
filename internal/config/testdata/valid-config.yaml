@@ -1,0 +1,20 @@
+schemaVersion: "1.1.0"
+connector:
+  name: test-yaml-connector
+  version: "1.0.0"
+  description: A test connector in YAML format
+  input:
+    type: httpPolling
+    endpoint: https://api.example.com/data
+    schedule: "*/5 * * * *"
+  filters:
+    - type: mapping
+      mappings:
+        - source: id
+          target: externalId
+        - source: name
+          target: displayName
+  output:
+    type: httpRequest
+    endpoint: https://api.destination.com/import
+    method: POST

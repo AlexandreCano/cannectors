@@ -36,7 +36,7 @@ func NewHTTPRequest(endpoint string, method string) *HTTPRequest {
 
 // Send transmits records via HTTP.
 // TODO: Implement in Story 3.5
-func (h *HTTPRequest) Send(records []map[string]interface{}) (int, error) {
+func (h *HTTPRequest) Send(_ []map[string]interface{}) (int, error) {
 	return 0, ErrNotImplemented
 }
 

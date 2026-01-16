@@ -17,6 +17,7 @@ func TestLoggerInitialization(t *testing.T) {
 }
 
 func TestSetLevel(t *testing.T) {
+	t.Helper()
 	// Test setting log level - should not panic
 	logger.SetLevel(slog.LevelDebug)
 	logger.SetLevel(slog.LevelInfo)

@@ -28,7 +28,7 @@ func New() *Scheduler {
 
 // Register adds a pipeline to the scheduler.
 // TODO: Implement in Story 4.1
-func (s *Scheduler) Register(pipeline *connector.Pipeline) error {
+func (s *Scheduler) Register(_ *connector.Pipeline) error {
 	return ErrNotImplemented
 }
 

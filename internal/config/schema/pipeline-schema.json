@@ -1,0 +1,631 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://canectors.io/schemas/pipeline/v1.1.0/pipeline-schema.json",
+  "title": "Canectors Pipeline Configuration Schema",
+  "description": "Schema for defining declarative modular pipeline configurations. Supports Input → Filter → Output pattern with extensible module types.",
+  "type": "object",
+  "required": ["schemaVersion", "connector"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "description": "Version of the schema this configuration conforms to.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "examples": ["1.0.0", "1.1.0"]
+    },
+    "connector": {
+      "$ref": "#/$defs/connector"
+    },
+    "connections": {
+      "$ref": "#/$defs/connections"
+    }
+  },
+  "additionalProperties": false,
+
+  "$defs": {
+    "connections": {
+      "type": "object",
+      "description": "Reusable connection configurations. Reference by name using connectionRef in modules.",
+      "additionalProperties": {
+        "$ref": "#/$defs/connection"
+      }
+    },
+
+    "connection": {
+      "type": "object",
+      "description": "A reusable connection configuration.",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Connection type.",
+          "examples": ["http", "sql", "kafka"]
+        },
+        "baseUrl": {
+          "type": "string",
+          "description": "Base URL for HTTP connections. Module endpoint is appended unless endpoint is absolute URL.",
+          "examples": ["https://api.example.com"]
+        },
+        "auth": {
+          "$ref": "#/$defs/authentication"
+        },
+        "headers": {
+          "$ref": "#/$defs/httpHeaders",
+          "description": "Default headers. Module headers override these."
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "description": "Default timeout. Module timeoutMs overrides.",
+          "minimum": 0,
+          "default": 30000
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "connector": {
+      "type": "object",
+      "description": "The connector pipeline configuration.",
+      "required": ["name", "version", "input", "filters", "output"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique identifier for this connector.",
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "version": {
+          "type": "string",
+          "description": "Connector version (semver).",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+          "uniqueItems": true
+        },
+        "labels": {
+          "type": "object",
+          "description": "Key-value metadata (team, domain, etc.).",
+          "additionalProperties": { "type": "string" }
+        },
+        "defaults": {
+          "$ref": "#/$defs/moduleDefaults",
+          "description": "Default settings for all modules. Module-level settings override these."
+        },
+        "input": {
+          "$ref": "#/$defs/inputModule"
+        },
+        "filters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/filterModule" }
+        },
+        "output": {
+          "$ref": "#/$defs/outputModule"
+        },
+        "errorHandling": {
+          "$ref": "#/$defs/errorHandling",
+          "description": "DEPRECATED: Use 'defaults' instead. Kept for backward compatibility."
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "moduleDefaults": {
+      "type": "object",
+      "description": "Default settings applied to all modules unless overridden at module level.",
+      "properties": {
+        "onError": {
+          "type": "string",
+          "description": "Default error action.",
+          "enum": ["fail", "skip", "log"],
+          "default": "fail"
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "description": "Default timeout in milliseconds.",
+          "minimum": 0,
+          "default": 30000
+        },
+        "retry": {
+          "$ref": "#/$defs/retryConfig"
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "retryConfig": {
+      "type": "object",
+      "description": "Retry configuration. Precedence: module > defaults > errorHandling.",
+      "properties": {
+        "maxAttempts": {
+          "type": "integer",
+          "description": "Maximum retry attempts (0 = no retry).",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 3
+        },
+        "delayMs": {
+          "type": "integer",
+          "description": "Initial delay between retries in milliseconds.",
+          "minimum": 0,
+          "default": 1000
+        },
+        "backoffMultiplier": {
+          "type": "number",
+          "description": "Multiplier for exponential backoff.",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 2
+        },
+        "maxDelayMs": {
+          "type": "integer",
+          "description": "Maximum delay between retries.",
+          "minimum": 0,
+          "default": 30000
+        },
+        "retryableStatusCodes": {
+          "type": "array",
+          "description": "HTTP status codes that trigger retry.",
+          "items": { "type": "integer", "minimum": 400, "maximum": 599 },
+          "default": [429, 500, 502, 503, 504]
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "moduleBase": {
+      "type": "object",
+      "description": "Common properties for all modules.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier within the pipeline.",
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable name.",
+          "maxLength": 128
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether module is active.",
+          "default": true
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "notes": {
+          "type": "string",
+          "description": "Internal notes (not used at runtime)."
+        },
+        "onError": {
+          "type": "string",
+          "description": "Error action for this module. Overrides defaults.",
+          "enum": ["fail", "skip", "log"]
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "description": "Timeout for this module. Overrides defaults.",
+          "minimum": 0
+        },
+        "retry": {
+          "$ref": "#/$defs/retryConfig",
+          "description": "Retry config for this module. Overrides defaults."
+        }
+      }
+    },
+
+    "inputModule": {
+      "type": "object",
+      "description": "Input module configuration.",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Input type. Canonical: httpPolling, webhook.",
+          "minLength": 1
+        },
+        "connectionRef": {
+          "type": "string",
+          "description": "Reference to connection in connections section."
+        },
+        "endpoint": {
+          "type": "string",
+          "description": "API endpoint. If absolute URL, ignores connectionRef.baseUrl."
+        },
+        "path": {
+          "type": "string",
+          "description": "Webhook path."
+        },
+        "schedule": {
+          "type": "string",
+          "description": "CRON expression. Validated at runtime.",
+          "minLength": 9
+        },
+        "method": { "$ref": "#/$defs/httpMethod" },
+        "headers": { "$ref": "#/$defs/httpHeaders" },
+        "queryParams": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "authentication": { "$ref": "#/$defs/authentication" },
+        "pagination": { "$ref": "#/$defs/pagination" }
+      },
+      "additionalProperties": true,
+      "allOf": [
+        { "$ref": "#/$defs/moduleBase" },
+        {
+          "if": { "properties": { "type": { "const": "httpPolling" } }, "required": ["type"] },
+          "then": { "required": ["endpoint", "schedule"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "webhook" } }, "required": ["type"] },
+          "then": { "required": ["path"] }
+        }
+      ]
+    },
+
+    "pagination": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["cursor", "offset", "page", "link"]
+        },
+        "cursorPath": { "type": "string" },
+        "cursorParam": { "type": "string" },
+        "itemsPath": { "type": "string" },
+        "limitParam": { "type": "string" },
+        "limit": { "type": "integer", "minimum": 1, "default": 100 }
+      },
+      "additionalProperties": true
+    },
+
+    "filterModule": {
+      "type": "object",
+      "description": "Filter module configuration.",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Filter type. Canonical: mapping, condition.",
+          "minLength": 1
+        },
+        "connectionRef": { "type": "string" },
+        "sourceSchema": { "type": "string" },
+        "targetSchema": { "type": "string" },
+        "mappings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/fieldMapping" }
+        },
+        "mapping": { "$ref": "#/$defs/advancedMapping" },
+        "lang": {
+          "type": "string",
+          "description": "Expression language for conditions.",
+          "enum": ["cel", "jsonata", "jmespath", "simple"],
+          "default": "simple"
+        },
+        "expression": {
+          "type": "string",
+          "description": "Condition expression."
+        },
+        "onTrue": {
+          "type": "string",
+          "enum": ["continue", "skip"],
+          "default": "continue"
+        },
+        "onFalse": {
+          "type": "string",
+          "enum": ["continue", "skip"],
+          "default": "skip"
+        },
+        "copies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/cloneCopy" }
+        }
+      },
+      "additionalProperties": true,
+      "allOf": [
+        { "$ref": "#/$defs/moduleBase" },
+        {
+          "if": { "properties": { "type": { "const": "mapping" } }, "required": ["type"] },
+          "then": { "required": ["mappings"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "condition" } }, "required": ["type"] },
+          "then": { "required": ["expression"] }
+        }
+      ]
+    },
+
+    "cloneCopy": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string" },
+        "select": { "type": "string" },
+        "build": { "type": "object", "additionalProperties": true }
+      },
+      "additionalProperties": true
+    },
+
+    "advancedMapping": {
+      "type": "object",
+      "properties": {
+        "targetRoot": { "type": "string", "default": "$" },
+        "fields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/fieldMapping" }
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "outputModule": {
+      "type": "object",
+      "description": "Output module configuration.",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Output type. Canonical: httpRequest, multi.",
+          "minLength": 1
+        },
+        "connectionRef": { "type": "string" },
+        "endpoint": { "type": "string" },
+        "method": { "$ref": "#/$defs/httpMethod" },
+        "headers": { "$ref": "#/$defs/httpHeaders" },
+        "authentication": { "$ref": "#/$defs/authentication" },
+        "request": { "$ref": "#/$defs/httpRequestConfig" },
+        "outputs": {
+          "type": "array",
+          "description": "Sub-outputs for type=multi.",
+          "items": { "$ref": "#/$defs/outputModule" },
+          "minItems": 1
+        },
+        "success": { "$ref": "#/$defs/successCondition" }
+      },
+      "additionalProperties": true,
+      "allOf": [
+        { "$ref": "#/$defs/moduleBase" },
+        {
+          "if": { "properties": { "type": { "const": "httpRequest" } }, "required": ["type"] },
+          "then": { "required": ["endpoint", "method"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "multi" } }, "required": ["type"] },
+          "then": { "required": ["outputs"] }
+        }
+      ]
+    },
+
+    "httpRequestConfig": {
+      "type": "object",
+      "properties": {
+        "method": { "$ref": "#/$defs/httpMethod" },
+        "path": { "type": "string" },
+        "pathParams": { "type": "object", "additionalProperties": { "type": "string" } },
+        "query": { "type": "object", "additionalProperties": { "type": "string" } },
+        "bodyFrom": { "type": "string" },
+        "headers": { "$ref": "#/$defs/httpHeaders" }
+      },
+      "additionalProperties": true
+    },
+
+    "successCondition": {
+      "type": "object",
+      "properties": {
+        "lang": { "type": "string", "enum": ["cel", "jsonata", "simple"], "default": "simple" },
+        "expression": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+
+    "fieldMapping": {
+      "type": "object",
+      "description": "Field mapping. Use either {source, target} or {from, to}, not both.",
+      "oneOf": [
+        {
+          "required": ["source", "target"],
+          "not": { "anyOf": [{ "required": ["from"] }, { "required": ["to"] }] },
+          "properties": {
+            "source": { "type": "string", "description": "Source field path." },
+            "target": { "type": "string", "description": "Target field path." }
+          }
+        },
+        {
+          "required": ["from", "to"],
+          "not": { "anyOf": [{ "required": ["source"] }, { "required": ["target"] }] },
+          "properties": {
+            "from": { "type": "string", "description": "Source field path (alias)." },
+            "to": { "type": "string", "description": "Target field path (alias)." }
+          }
+        }
+      ],
+      "properties": {
+        "source": { "type": "string" },
+        "target": { "type": "string" },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "transform": { "$ref": "#/$defs/transform" },
+        "transforms": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/transformOp" }
+        },
+        "defaultValue": {},
+        "onMissing": {
+          "type": "string",
+          "enum": ["setNull", "skipField", "useDefault", "fail"],
+          "default": "setNull"
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "transform": {
+      "description": "Single transform: string shorthand or object.",
+      "oneOf": [
+        { "type": "string" },
+        { "$ref": "#/$defs/transformOp" }
+      ]
+    },
+
+    "transformOp": {
+      "type": "object",
+      "required": ["op"],
+      "properties": {
+        "op": {
+          "type": "string",
+          "description": "Operation name.",
+          "examples": ["trim", "lowercase", "uppercase", "dateFormat", "replace", "split", "join"]
+        },
+        "format": { "type": "string" },
+        "pattern": { "type": "string" },
+        "replacement": { "type": "string" },
+        "separator": { "type": "string" },
+        "locale": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+
+    "authentication": {
+      "type": "object",
+      "required": ["type"],
+      "oneOf": [
+        { "$ref": "#/$defs/apiKeyAuth" },
+        { "$ref": "#/$defs/bearerAuth" },
+        { "$ref": "#/$defs/oauth2Auth" },
+        { "$ref": "#/$defs/extensibleAuth" }
+      ]
+    },
+
+    "apiKeyAuth": {
+      "type": "object",
+      "required": ["type", "header", "valueRef"],
+      "properties": {
+        "type": { "const": "apiKey" },
+        "header": { "type": "string" },
+        "valueRef": { "type": "string", "pattern": "^\\$\\{[A-Z_][A-Z0-9_]*\\}$" }
+      },
+      "additionalProperties": false
+    },
+
+    "bearerAuth": {
+      "type": "object",
+      "required": ["type", "token"],
+      "properties": {
+        "type": { "const": "bearer" },
+        "token": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "oauth2Auth": {
+      "type": "object",
+      "description": "OAuth2 authentication. Use either clientId or clientIdRef (not both), same for clientSecret.",
+      "required": ["type", "tokenUrl"],
+      "properties": {
+        "type": { "enum": ["oauth2Basic", "oauth2_client_credentials"] },
+        "tokenUrl": { "type": "string", "format": "uri" },
+        "clientIdRef": { "type": "string", "description": "Reference to env var: ${VAR_NAME}" },
+        "clientId": { "type": "string", "description": "Direct value (avoid in production)" },
+        "clientSecretRef": { "type": "string", "description": "Reference to env var: ${VAR_NAME}" },
+        "clientSecret": { "type": "string", "description": "Direct value (avoid in production)" },
+        "scope": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "not": { "required": ["clientId", "clientIdRef"] },
+          "errorMessage": "Use either clientId or clientIdRef, not both"
+        },
+        {
+          "not": { "required": ["clientSecret", "clientSecretRef"] },
+          "errorMessage": "Use either clientSecret or clientSecretRef, not both"
+        }
+      ],
+      "additionalProperties": false
+    },
+
+    "extensibleAuth": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "not": { "enum": ["apiKey", "bearer", "oauth2Basic", "oauth2_client_credentials"] }
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "errorHandling": {
+      "type": "object",
+      "description": "DEPRECATED: Use connector.defaults instead. Kept for backward compatibility.",
+      "properties": {
+        "retryCount": {
+          "type": "integer",
+          "description": "DEPRECATED: Use defaults.retry.maxAttempts",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 3
+        },
+        "retryDelayMs": {
+          "type": "integer",
+          "description": "DEPRECATED: Use defaults.retry.delayMs",
+          "minimum": 0,
+          "default": 1000
+        },
+        "backoffMultiplier": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 2
+        },
+        "maxRetryDelayMs": {
+          "type": "integer",
+          "description": "DEPRECATED: Use defaults.retry.maxDelayMs",
+          "minimum": 0,
+          "default": 30000
+        },
+        "retryableStatusCodes": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 400, "maximum": 599 },
+          "default": [429, 500, 502, 503, 504]
+        },
+        "onError": {
+          "type": "string",
+          "enum": ["fail", "skip", "log"],
+          "default": "fail"
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "httpMethod": {
+      "type": "string",
+      "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"],
+      "default": "GET"
+    },
+
+    "httpHeaders": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    }
+  }
+}

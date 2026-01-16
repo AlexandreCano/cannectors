@@ -4,8 +4,10 @@
 *.dll
 *.so
 *.dylib
-canectors
-canectors-*
+# Ignore binary files but not source code directories
+/canectors
+/canectors-*
+/dist/canectors*
 
 # Build output
 /bin/

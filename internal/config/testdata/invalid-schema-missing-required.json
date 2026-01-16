@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.1.0",
+  "connector": {
+    "name": "test-connector",
+    "version": "1.0.0",
+    "input": {
+      "type": "httpPolling",
+      "endpoint": "https://api.example.com/data",
+      "schedule": "*/5 * * * *"
+    },
+    "output": {
+      "type": "httpRequest",
+      "endpoint": "https://api.destination.com/import",
+      "method": "POST"
+    }
+  }
+}

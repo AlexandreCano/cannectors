@@ -31,7 +31,7 @@ func NewMapping(mappings map[string]string) *Mapping {
 
 // Process applies field mappings to records.
 // TODO: Implement in Story 3.3
-func (m *Mapping) Process(records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (m *Mapping) Process(_ []map[string]interface{}) ([]map[string]interface{}, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -50,6 +50,6 @@ func NewCondition(expression string) *Condition {
 
 // Process filters records based on conditions.
 // TODO: Implement in Story 3.4
-func (c *Condition) Process(records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (c *Condition) Process(_ []map[string]interface{}) ([]map[string]interface{}, error) {
 	return nil, ErrNotImplemented
 }

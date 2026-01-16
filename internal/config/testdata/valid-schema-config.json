@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.1.0",
+  "connector": {
+    "name": "test-connector",
+    "version": "1.0.0",
+    "description": "A test connector",
+    "input": {
+      "type": "httpPolling",
+      "endpoint": "https://api.example.com/data",
+      "schedule": "*/5 * * * *"
+    },
+    "filters": [
+      {
+        "type": "mapping",
+        "mappings": [
+          { "source": "id", "target": "externalId" }
+        ]
+      }
+    ],
+    "output": {
+      "type": "httpRequest",
+      "endpoint": "https://api.destination.com/import",
+      "method": "POST"
+    }
+  }
+}

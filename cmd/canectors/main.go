@@ -32,6 +32,11 @@ var (
 
 	// Run command flags
 	dryRun bool
+
+	// Build information (set via ldflags during build)
+	version   = "dev"
+	commit    = "unknown"
+	buildDate = "unknown"
 )
 
 func main() {
@@ -113,6 +118,13 @@ Examples:
 	Run:  runPipeline,
 }
 
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print version information",
+	Long:  "Print version, commit hash, and build date information.",
+	Run:   runVersion,
+}
+
 func init() {
 	// Global flags
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
@@ -124,6 +136,7 @@ func init() {
 	// Add commands
 	rootCmd.AddCommand(validateCmd)
 	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(versionCmd)
 }
 
 func runValidate(_ *cobra.Command, args []string) {
@@ -159,8 +172,8 @@ func runValidate(_ *cobra.Command, args []string) {
 					if name, ok := connector["name"].(string); ok {
 						fmt.Printf("  Connector: %s\n", name)
 					}
-					if version, ok := connector["version"].(string); ok {
-						fmt.Printf("  Version: %s\n", version)
+					if connectorVersion, ok := connector["version"].(string); ok {
+						fmt.Printf("  Version: %s\n", connectorVersion)
 					}
 				}
 			}
@@ -238,6 +251,12 @@ func runPipeline(_ *cobra.Command, args []string) {
 	}
 
 	os.Exit(ExitSuccess)
+}
+
+func runVersion(_ *cobra.Command, _ []string) {
+	fmt.Printf("Version: %s\n", version)
+	fmt.Printf("Commit: %s\n", commit)
+	fmt.Printf("Build Date: %s\n", buildDate)
 }
 
 // createInputModule creates an input module instance from configuration.

@@ -216,6 +216,38 @@ func TestCLI_RunDryRun(t *testing.T) {
 	}
 }
 
+func TestCLI_Version(t *testing.T) {
+	stdout, stderr, exitCode := runCLI(t, "version")
+
+	if exitCode != ExitSuccess {
+		t.Errorf("expected exit code %d, got %d\nstderr: %s", ExitSuccess, exitCode, stderr)
+	}
+
+	// Should contain version information
+	if !strings.Contains(stdout, "Version:") {
+		t.Errorf("expected output to contain 'Version:', got: %s", stdout)
+	}
+
+	if !strings.Contains(stdout, "Commit:") {
+		t.Errorf("expected output to contain 'Commit:', got: %s", stdout)
+	}
+
+	if !strings.Contains(stdout, "Build Date:") {
+		t.Errorf("expected output to contain 'Build Date:', got: %s", stdout)
+	}
+
+	// Version should not be empty
+	lines := strings.Split(stdout, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "Version:") {
+			parts := strings.Split(line, ":")
+			if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
+				t.Errorf("version value should not be empty, got: %s", line)
+			}
+		}
+	}
+}
+
 func TestCLI_ValidateMissingArg(t *testing.T) {
 	_, stderr, exitCode := runCLI(t, "validate")
 

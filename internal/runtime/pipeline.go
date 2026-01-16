@@ -4,7 +4,14 @@
 // This package will be implemented in Story 2.3: Implement Pipeline Orchestration.
 package runtime
 
-import "github.com/canectors/runtime/pkg/connector"
+import (
+	"errors"
+
+	"github.com/canectors/runtime/pkg/connector"
+)
+
+// ErrNotImplemented is returned when a feature is not yet implemented.
+var ErrNotImplemented = errors.New("not implemented: will be added in Story 2.3")
 
 // Executor is responsible for executing pipeline configurations.
 type Executor struct {
@@ -24,6 +31,5 @@ func NewExecutor(dryRun bool) *Executor {
 //
 // TODO: Implement in Story 2.3
 func (e *Executor) Execute(pipeline *connector.Pipeline) (*connector.ExecutionResult, error) {
-	// Placeholder implementation
-	return nil, nil
+	return nil, ErrNotImplemented
 }

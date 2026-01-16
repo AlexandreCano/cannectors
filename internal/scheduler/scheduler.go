@@ -4,7 +4,14 @@
 // This package will be implemented in Story 4.1: Implement CRON Scheduler.
 package scheduler
 
-import "github.com/canectors/runtime/pkg/connector"
+import (
+	"errors"
+
+	"github.com/canectors/runtime/pkg/connector"
+)
+
+// ErrNotImplemented is returned when a feature is not yet implemented.
+var ErrNotImplemented = errors.New("not implemented: will be added in Story 4.1")
 
 // Scheduler manages scheduled pipeline executions.
 type Scheduler struct {
@@ -22,17 +29,17 @@ func New() *Scheduler {
 // Register adds a pipeline to the scheduler.
 // TODO: Implement in Story 4.1
 func (s *Scheduler) Register(pipeline *connector.Pipeline) error {
-	return nil
+	return ErrNotImplemented
 }
 
 // Start begins executing scheduled pipelines.
 // TODO: Implement in Story 4.1
 func (s *Scheduler) Start() error {
-	return nil
+	return ErrNotImplemented
 }
 
 // Stop halts all scheduled executions.
 // TODO: Implement in Story 4.1
 func (s *Scheduler) Stop() error {
-	return nil
+	return ErrNotImplemented
 }

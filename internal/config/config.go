@@ -4,7 +4,14 @@
 // This package will be implemented in Story 2.2: Implement Configuration Parser.
 package config
 
-import "github.com/canectors/runtime/pkg/connector"
+import (
+	"errors"
+
+	"github.com/canectors/runtime/pkg/connector"
+)
+
+// ErrNotImplemented is returned when a feature is not yet implemented.
+var ErrNotImplemented = errors.New("not implemented: will be added in Story 2.2")
 
 // Loader is responsible for loading pipeline configurations from files.
 type Loader struct {
@@ -24,14 +31,12 @@ func NewLoader(basePath string) *Loader {
 //
 // TODO: Implement in Story 2.2
 func (l *Loader) Load(filepath string) (*connector.Pipeline, error) {
-	// Placeholder implementation
-	return nil, nil
+	return nil, ErrNotImplemented
 }
 
 // Validate checks a pipeline configuration against the JSON schema.
 //
 // TODO: Implement in Story 2.2
 func (l *Loader) Validate(pipeline *connector.Pipeline) error {
-	// Placeholder implementation
-	return nil
+	return ErrNotImplemented
 }

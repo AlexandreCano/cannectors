@@ -40,7 +40,7 @@ canectors-runtime/
 
 ## Requirements
 
-- **Go**: 1.21 or later
+- **Go**: 1.23 or later
 - **Make**: For build automation (optional, but recommended)
 
 ## Installation
@@ -223,7 +223,7 @@ Canectors is designed with a modular architecture:
 - **Scheduler**: CRON-based scheduling for periodic execution
 - **Runtime**: Pipeline orchestration and execution engine
 
-For detailed architecture documentation, see the [Architecture Document](../_bmad-output/planning-artifacts/architecture.md).
+For detailed architecture documentation, see the Architecture Document in the `canectors` planning repository (`_bmad-output/planning-artifacts/architecture.md`).
 
 ## Related Projects
 

@@ -4,6 +4,11 @@
 // This package will be implemented in Epic 3: Module Execution.
 package input
 
+import "errors"
+
+// ErrNotImplemented is returned when a feature is not yet implemented.
+var ErrNotImplemented = errors.New("not implemented: will be added in Story 3.1")
+
 // Module represents an input module that fetches data from a source.
 type Module interface {
 	// Fetch retrieves data from the source system.
@@ -32,7 +37,7 @@ func NewHTTPPolling(endpoint string, interval int) *HTTPPolling {
 // Fetch retrieves data via HTTP polling.
 // TODO: Implement in Story 3.1
 func (h *HTTPPolling) Fetch() ([]map[string]interface{}, error) {
-	return nil, nil
+	return nil, ErrNotImplemented
 }
 
 // Close releases HTTP resources.

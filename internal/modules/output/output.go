@@ -4,6 +4,11 @@
 // This package will be implemented in Epic 3: Module Execution.
 package output
 
+import "errors"
+
+// ErrNotImplemented is returned when a feature is not yet implemented.
+var ErrNotImplemented = errors.New("not implemented: will be added in Story 3.5")
+
 // Module represents an output module that sends data to a destination.
 type Module interface {
 	// Send transmits records to the destination system.
@@ -32,7 +37,7 @@ func NewHTTPRequest(endpoint string, method string) *HTTPRequest {
 // Send transmits records via HTTP.
 // TODO: Implement in Story 3.5
 func (h *HTTPRequest) Send(records []map[string]interface{}) (int, error) {
-	return 0, nil
+	return 0, ErrNotImplemented
 }
 
 // Close releases HTTP resources.

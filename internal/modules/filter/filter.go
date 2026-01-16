@@ -4,6 +4,11 @@
 // This package will be implemented in Epic 3: Module Execution.
 package filter
 
+import "errors"
+
+// ErrNotImplemented is returned when a feature is not yet implemented.
+var ErrNotImplemented = errors.New("not implemented: will be added in Epic 3")
+
 // Module represents a filter module that transforms data.
 type Module interface {
 	// Process transforms the input records.
@@ -27,7 +32,7 @@ func NewMapping(mappings map[string]string) *Mapping {
 // Process applies field mappings to records.
 // TODO: Implement in Story 3.3
 func (m *Mapping) Process(records []map[string]interface{}) ([]map[string]interface{}, error) {
-	return records, nil
+	return nil, ErrNotImplemented
 }
 
 // Condition implements conditional filtering.
@@ -46,5 +51,5 @@ func NewCondition(expression string) *Condition {
 // Process filters records based on conditions.
 // TODO: Implement in Story 3.4
 func (c *Condition) Process(records []map[string]interface{}) ([]map[string]interface{}, error) {
-	return records, nil
+	return nil, ErrNotImplemented
 }

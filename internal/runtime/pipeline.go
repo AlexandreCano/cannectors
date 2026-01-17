@@ -158,16 +158,7 @@ func (e *Executor) Execute(pipeline *connector.Pipeline) (*connector.ExecutionRe
 		return result, ErrNilOutputModule
 	}
 
-	// Ensure modules are properly closed after execution (resource cleanup)
-	defer func() {
-		if err := e.inputModule.Close(); err != nil {
-			logger.Warn("failed to close input module",
-				slog.String("pipeline_id", pipeline.ID),
-				slog.String("error", err.Error()),
-			)
-		}
-	}()
-
+	// Ensure output module is properly closed after execution (resource cleanup)
 	if e.outputModule != nil {
 		defer func() {
 			if err := e.outputModule.Close(); err != nil {

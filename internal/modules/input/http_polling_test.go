@@ -770,9 +770,12 @@ func TestHTTPPolling_Fetch_HTTPError401(t *testing.T) {
 		},
 	}
 
-	polling, _ := NewHTTPPollingFromConfig(config)
+	polling, err := NewHTTPPollingFromConfig(config)
+	if err != nil {
+		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
+	}
 
-	_, err := polling.Fetch()
+	_, err = polling.Fetch()
 
 	if err == nil {
 		t.Error("expected error for HTTP 401, got nil")
@@ -793,9 +796,12 @@ func TestHTTPPolling_Fetch_HTTPError403(t *testing.T) {
 		},
 	}
 
-	polling, _ := NewHTTPPollingFromConfig(config)
+	polling, err := NewHTTPPollingFromConfig(config)
+	if err != nil {
+		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
+	}
 
-	_, err := polling.Fetch()
+	_, err = polling.Fetch()
 
 	if err == nil {
 		t.Error("expected error for HTTP 403, got nil")
@@ -816,9 +822,12 @@ func TestHTTPPolling_Fetch_HTTPError404(t *testing.T) {
 		},
 	}
 
-	polling, _ := NewHTTPPollingFromConfig(config)
+	polling, err := NewHTTPPollingFromConfig(config)
+	if err != nil {
+		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
+	}
 
-	_, err := polling.Fetch()
+	_, err = polling.Fetch()
 
 	if err == nil {
 		t.Error("expected error for HTTP 404, got nil")
@@ -839,9 +848,12 @@ func TestHTTPPolling_Fetch_HTTPError500(t *testing.T) {
 		},
 	}
 
-	polling, _ := NewHTTPPollingFromConfig(config)
+	polling, err := NewHTTPPollingFromConfig(config)
+	if err != nil {
+		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
+	}
 
-	_, err := polling.Fetch()
+	_, err = polling.Fetch()
 
 	if err == nil {
 		t.Error("expected error for HTTP 500, got nil")
@@ -885,9 +897,12 @@ func TestHTTPPolling_Fetch_JSONParseError(t *testing.T) {
 		},
 	}
 
-	polling, _ := NewHTTPPollingFromConfig(config)
+	polling, err := NewHTTPPollingFromConfig(config)
+	if err != nil {
+		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
+	}
 
-	_, err := polling.Fetch()
+	_, err = polling.Fetch()
 
 	if err == nil {
 		t.Error("expected JSON parse error, got nil")
@@ -982,7 +997,10 @@ func TestHTTPPolling_Fetch_DeterministicPaginationOrder(t *testing.T) {
 
 	// Execute multiple times
 	for i := 0; i < 3; i++ {
-		polling, _ := NewHTTPPollingFromConfig(config)
+		polling, err := NewHTTPPollingFromConfig(config)
+		if err != nil {
+			t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
+		}
 		records, err := polling.Fetch()
 		if err != nil {
 			t.Fatalf("Fetch() %d returned error: %v", i, err)
@@ -1045,7 +1063,10 @@ func TestHTTPPolling_Fetch_LargeDataset(t *testing.T) {
 		},
 	}
 
-	polling, _ := NewHTTPPollingFromConfig(config)
+	polling, err := NewHTTPPollingFromConfig(config)
+	if err != nil {
+		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
+	}
 
 	start := time.Now()
 	records, err := polling.Fetch()

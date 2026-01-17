@@ -27,12 +27,16 @@ const (
 
 // Error types for HTTP polling module
 var (
-	ErrNilConfig         = errors.New("module configuration is nil")
-	ErrMissingEndpoint   = errors.New("endpoint is required in module configuration")
-	ErrHTTPRequest       = errors.New("http request failed")
-	ErrJSONParse         = errors.New("failed to parse JSON response")
-	ErrInvalidDataField  = errors.New("dataField does not contain an array")
-	ErrOAuth2TokenFailed = errors.New("failed to obtain OAuth2 access token")
+	ErrNilConfig          = errors.New("module configuration is nil")
+	ErrMissingEndpoint    = errors.New("endpoint is required in module configuration")
+	ErrHTTPRequest        = errors.New("http request failed")
+	ErrJSONParse          = errors.New("failed to parse JSON response")
+	ErrInvalidDataField   = errors.New("dataField does not contain an array")
+	ErrOAuth2TokenFailed  = errors.New("failed to obtain OAuth2 access token")
+	ErrMissingAPIKey      = errors.New("api key is required for api-key authentication")
+	ErrMissingBearerToken = errors.New("token is required for bearer authentication")
+	ErrMissingBasicAuth   = errors.New("username and password are required for basic authentication")
+	ErrMissingOAuth2Creds = errors.New("tokenUrl, clientId, and clientSecret are required for oauth2 authentication")
 )
 
 // HTTPError represents an HTTP error with status code and context
@@ -353,6 +357,10 @@ func (h *HTTPPolling) applyAuthentication(ctx context.Context, req *http.Request
 // applyAPIKeyAuth applies API key authentication
 func (h *HTTPPolling) applyAPIKeyAuth(req *http.Request) error {
 	key := h.auth.Credentials["key"]
+	if key == "" {
+		return ErrMissingAPIKey
+	}
+
 	location := h.auth.Credentials["location"]
 
 	switch location {
@@ -375,6 +383,9 @@ func (h *HTTPPolling) applyAPIKeyAuth(req *http.Request) error {
 // applyBearerAuth applies bearer token authentication
 func (h *HTTPPolling) applyBearerAuth(req *http.Request) error {
 	token := h.auth.Credentials["token"]
+	if token == "" {
+		return ErrMissingBearerToken
+	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	return nil
 }
@@ -383,6 +394,9 @@ func (h *HTTPPolling) applyBearerAuth(req *http.Request) error {
 func (h *HTTPPolling) applyBasicAuth(req *http.Request) error {
 	username := h.auth.Credentials["username"]
 	password := h.auth.Credentials["password"]
+	if username == "" || password == "" {
+		return ErrMissingBasicAuth
+	}
 	req.SetBasicAuth(username, password)
 	return nil
 }
@@ -413,6 +427,11 @@ func (h *HTTPPolling) obtainOAuth2Token(ctx context.Context) (string, time.Time,
 	tokenURL := h.auth.Credentials["tokenUrl"]
 	clientID := h.auth.Credentials["clientId"]
 	clientSecret := h.auth.Credentials["clientSecret"]
+
+	// Validate required OAuth2 credentials
+	if tokenURL == "" || clientID == "" || clientSecret == "" {
+		return "", time.Time{}, ErrMissingOAuth2Creds
+	}
 
 	// Build form data
 	formData := url.Values{}

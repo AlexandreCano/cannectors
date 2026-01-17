@@ -162,6 +162,44 @@ func TestExecutor_Execute_Success(t *testing.T) {
 	}
 }
 
+func TestExecutor_ExecuteWithRecords_Success(t *testing.T) {
+	records := []map[string]interface{}{
+		{"id": "1", "name": "Record 1"},
+		{"id": "2", "name": "Record 2"},
+	}
+	mockOutput := NewMockOutputModule(nil)
+
+	pipeline := &connector.Pipeline{
+		ID:      "test-pipeline",
+		Name:    "Test Pipeline",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(nil, nil, mockOutput, false)
+
+	result, err := executor.ExecuteWithRecords(pipeline, records)
+	if err != nil {
+		t.Fatalf("ExecuteWithRecords() returned unexpected error: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("ExecuteWithRecords() returned nil result")
+	}
+
+	if result.Status != "success" {
+		t.Errorf("Expected status 'success', got '%s'", result.Status)
+	}
+
+	if result.RecordsProcessed != 2 {
+		t.Errorf("Expected RecordsProcessed 2, got %d", result.RecordsProcessed)
+	}
+
+	if !mockOutput.sendCalled {
+		t.Error("Output.Send() was not called")
+	}
+}
+
 func TestExecutor_Execute_WithFilters(t *testing.T) {
 	// Arrange
 	inputData := []map[string]interface{}{

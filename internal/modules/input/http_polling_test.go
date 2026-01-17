@@ -29,7 +29,7 @@ func TestHTTPPolling_Fetch_SuccessfulGET(t *testing.T) {
 			t.Errorf("expected GET method, got %s", r.Method)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(expected)
+		_ = json.NewEncoder(w).Encode(expected)
 	}))
 	defer server.Close()
 
@@ -71,7 +71,7 @@ func TestHTTPPolling_Fetch_JSONArrayResponse(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(expected)
+		_ = json.NewEncoder(w).Encode(expected)
 	}))
 	defer server.Close()
 
@@ -111,7 +111,7 @@ func TestHTTPPolling_Fetch_JSONObjectWithArrayField(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(responseBody)
+		_ = json.NewEncoder(w).Encode(responseBody)
 	}))
 	defer server.Close()
 
@@ -142,7 +142,7 @@ func TestHTTPPolling_Fetch_JSONObjectWithArrayField(t *testing.T) {
 func TestHTTPPolling_Fetch_EmptyResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]map[string]interface{}{})
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
 	}))
 	defer server.Close()
 
@@ -176,7 +176,7 @@ func TestHTTPPolling_Fetch_CustomHeaders(t *testing.T) {
 		receivedHeaders["X-Custom-Header"] = r.Header.Get("X-Custom-Header")
 		receivedHeaders["Accept"] = r.Header.Get("Accept")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]map[string]interface{}{})
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
 	}))
 	defer server.Close()
 
@@ -212,7 +212,7 @@ func TestHTTPPolling_Fetch_ConfigurableTimeout(t *testing.T) {
 		// Delay response longer than timeout
 		time.Sleep(200 * time.Millisecond)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]map[string]interface{}{})
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
 	}))
 	defer server.Close()
 
@@ -270,7 +270,7 @@ func TestHTTPPolling_Fetch_APIKeyHeader(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]map[string]interface{}{{"status": "ok"}})
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"status": "ok"}})
 	}))
 	defer server.Close()
 
@@ -311,7 +311,7 @@ func TestHTTPPolling_Fetch_APIKeyQuery(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedAPIKey = r.URL.Query().Get("api_key")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]map[string]interface{}{{"status": "ok"}})
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"status": "ok"}})
 	}))
 	defer server.Close()
 
@@ -359,7 +359,7 @@ func TestHTTPPolling_Fetch_OAuth2ClientCredentials(t *testing.T) {
 			t.Errorf("token endpoint: expected grant_type 'client_credentials', got '%s'", r.FormValue("grant_type"))
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"access_token": "test-access-token",
 			"token_type":   "Bearer",
 			"expires_in":   3600,
@@ -372,7 +372,7 @@ func TestHTTPPolling_Fetch_OAuth2ClientCredentials(t *testing.T) {
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]map[string]interface{}{{"data": "value"}})
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"data": "value"}})
 	}))
 	defer apiServer.Close()
 
@@ -414,7 +414,7 @@ func TestHTTPPolling_Fetch_BearerToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]map[string]interface{}{{"status": "ok"}})
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"status": "ok"}})
 	}))
 	defer server.Close()
 
@@ -455,7 +455,7 @@ func TestHTTPPolling_Fetch_BasicAuth(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedUser, receivedPass, authOK = r.BasicAuth()
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]map[string]interface{}{{"status": "ok"}})
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"status": "ok"}})
 	}))
 	defer server.Close()
 
@@ -499,7 +499,7 @@ func TestHTTPPolling_Fetch_AuthenticationError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"error": "unauthorized",
 		})
 	}))
@@ -546,22 +546,22 @@ func TestHTTPPolling_Fetch_PageBasedPagination(t *testing.T) {
 
 		switch page {
 		case "", "1":
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"data":        []map[string]interface{}{{"id": float64(1)}, {"id": float64(2)}},
 				"total_pages": float64(3),
 			})
 		case "2":
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"data":        []map[string]interface{}{{"id": float64(3)}, {"id": float64(4)}},
 				"total_pages": float64(3),
 			})
 		case "3":
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"data":        []map[string]interface{}{{"id": float64(5)}},
 				"total_pages": float64(3),
 			})
 		default:
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"data":        []map[string]interface{}{},
 				"total_pages": float64(3),
 			})
@@ -611,22 +611,22 @@ func TestHTTPPolling_Fetch_OffsetBasedPagination(t *testing.T) {
 
 		switch offset {
 		case "", "0":
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"items": []map[string]interface{}{{"id": float64(1)}, {"id": float64(2)}},
 				"total": float64(5),
 			})
 		case "2":
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"items": []map[string]interface{}{{"id": float64(3)}, {"id": float64(4)}},
 				"total": float64(5),
 			})
 		case "4":
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"items": []map[string]interface{}{{"id": float64(5)}},
 				"total": float64(5),
 			})
 		default:
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"items": []map[string]interface{}{},
 				"total": float64(5),
 			})
@@ -675,17 +675,17 @@ func TestHTTPPolling_Fetch_CursorBasedPagination(t *testing.T) {
 
 		switch cursor {
 		case "":
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"results":     []map[string]interface{}{{"id": float64(1)}, {"id": float64(2)}},
 				"next_cursor": "cursor_page2",
 			})
 		case "cursor_page2":
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"results":     []map[string]interface{}{{"id": float64(3)}},
 				"next_cursor": "",
 			})
 		default:
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"results":     []map[string]interface{}{},
 				"next_cursor": "",
 			})
@@ -733,7 +733,7 @@ func TestHTTPPolling_Fetch_HTTPError400(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "bad request"})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "bad request"})
 	}))
 	defer server.Close()
 
@@ -874,7 +874,7 @@ func TestHTTPPolling_Fetch_NetworkError(t *testing.T) {
 func TestHTTPPolling_Fetch_JSONParseError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("invalid json {{{"))
+		_, _ = w.Write([]byte("invalid json {{{"))
 	}))
 	defer server.Close()
 
@@ -908,7 +908,7 @@ func TestHTTPPolling_Fetch_DeterministicOutput(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(data)
+		_ = json.NewEncoder(w).Encode(data)
 	}))
 	defer server.Close()
 
@@ -954,12 +954,12 @@ func TestHTTPPolling_Fetch_DeterministicPaginationOrder(t *testing.T) {
 
 		switch page {
 		case "", "1":
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"data":        []map[string]interface{}{{"order": float64(1)}, {"order": float64(2)}},
 				"total_pages": float64(2),
 			})
 		case "2":
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"data":        []map[string]interface{}{{"order": float64(3)}, {"order": float64(4)}},
 				"total_pages": float64(2),
 			})
@@ -1034,7 +1034,7 @@ func TestHTTPPolling_Fetch_LargeDataset(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(largeData)
+		_ = json.NewEncoder(w).Encode(largeData)
 	}))
 	defer server.Close()
 
@@ -1078,7 +1078,7 @@ func TestHTTPPolling_IntegrationWithExecutor(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(testData)
+		_ = json.NewEncoder(w).Encode(testData)
 	}))
 	defer server.Close()
 
@@ -1097,9 +1097,7 @@ func TestHTTPPolling_IntegrationWithExecutor(t *testing.T) {
 
 	// Verify it implements input.Module interface
 	var module Module = polling
-	if module == nil {
-		t.Fatal("HTTPPolling should implement input.Module")
-	}
+	_ = module // module cannot be nil if NewHTTPPollingFromConfig succeeded
 
 	// Execute Fetch (simulating what Executor would do)
 	records, err := module.Fetch()
@@ -1132,7 +1130,7 @@ func TestHTTPPolling_IntegrationWithPaginatedData(t *testing.T) {
 
 		switch page {
 		case "", "1":
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"users": []map[string]interface{}{
 					{"id": float64(1), "email": "user1@example.com"},
 					{"id": float64(2), "email": "user2@example.com"},
@@ -1141,7 +1139,7 @@ func TestHTTPPolling_IntegrationWithPaginatedData(t *testing.T) {
 				"total_pages": float64(3),
 			})
 		case "2":
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"users": []map[string]interface{}{
 					{"id": float64(3), "email": "user3@example.com"},
 					{"id": float64(4), "email": "user4@example.com"},
@@ -1150,7 +1148,7 @@ func TestHTTPPolling_IntegrationWithPaginatedData(t *testing.T) {
 				"total_pages": float64(3),
 			})
 		case "3":
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"users": []map[string]interface{}{
 					{"id": float64(5), "email": "user5@example.com"},
 				},
@@ -1159,7 +1157,7 @@ func TestHTTPPolling_IntegrationWithPaginatedData(t *testing.T) {
 			})
 		default:
 			// Handle unexpected pages
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"users":       []map[string]interface{}{},
 				"page":        float64(4),
 				"total_pages": float64(3),
@@ -1215,13 +1213,13 @@ func TestHTTPPolling_IntegrationWithAuthentication(t *testing.T) {
 		auth := r.Header.Get("Authorization")
 		if auth != "Bearer "+expectedToken {
 			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized"})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized"})
 			return
 		}
 
 		// Return data only if authenticated
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]map[string]interface{}{
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 			{"secret": "data1"},
 			{"secret": "data2"},
 		})

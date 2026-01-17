@@ -222,7 +222,7 @@ func (h *HTTPPolling) doRequest(ctx context.Context, endpoint string) ([]byte, e
 		req.Header.Set(key, value)
 	}
 
-	if err := h.applyAuthentication(ctx, req); err != nil {
+	if err = h.applyAuthentication(ctx, req); err != nil {
 		return nil, fmt.Errorf("applying authentication: %w", err)
 	}
 
@@ -234,7 +234,11 @@ func (h *HTTPPolling) doRequest(ctx context.Context, endpoint string) ([]byte, e
 		)
 		return nil, fmt.Errorf("%w: %w", ErrHTTPRequest, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			logger.Error("failed to close response body", "error", closeErr.Error())
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -428,7 +432,11 @@ func (h *HTTPPolling) obtainOAuth2Token(ctx context.Context) (string, time.Time,
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("%w: executing token request: %v", ErrOAuth2TokenFailed, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			logger.Error("failed to close token response body", "error", closeErr.Error())
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", time.Time{}, fmt.Errorf("%w: token endpoint returned %d", ErrOAuth2TokenFailed, resp.StatusCode)

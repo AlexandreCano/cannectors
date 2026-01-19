@@ -796,3 +796,9 @@ func (h *HTTPPolling) buildPaginatedURLMulti(params map[string]string) (string, 
 
 	return parsedURL.String(), nil
 }
+
+// Close releases any resources held by the HTTP polling module.
+// For HTTP polling, this is a no-op since connections are not persistent.
+func (h *HTTPPolling) Close() error {
+	return nil
+}

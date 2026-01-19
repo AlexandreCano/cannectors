@@ -14,4 +14,6 @@ type Module interface {
 	// Fetch retrieves data from the source system.
 	// Returns the fetched data as a slice of records.
 	Fetch() ([]map[string]interface{}, error)
+	// Close releases any resources held by the module.
+	Close() error
 }

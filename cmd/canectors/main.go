@@ -224,10 +224,13 @@ func runPipeline(_ *cobra.Command, args []string) {
 	}
 
 	// Create module instances
-	// Note: Real module implementations will be added in Epic 3
-	// For now, we create stub modules that demonstrate the pipeline flow
+	// Note: Mapping filter uses real implementation; other modules are stubbed for now.
 	inputModule := createInputModule(pipeline.Input)
-	filterModules := createFilterModules(pipeline.Filters)
+	filterModules, err := createFilterModules(pipeline.Filters)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Failed to create filter modules: %v\n", err)
+		os.Exit(ExitRuntimeError)
+	}
 	outputModule := createOutputModule(pipeline.Output)
 
 	// Create executor and run pipeline
@@ -282,19 +285,33 @@ func createInputModule(cfg *connector.ModuleConfig) input.Module {
 }
 
 // createFilterModules creates filter module instances from configuration.
-// Note: This returns stub modules until Epic 3 implements real modules.
-func createFilterModules(cfgs []connector.ModuleConfig) []filter.Module {
+// Note: Non-mapping filters are stubbed until Epic 3 implements real modules.
+func createFilterModules(cfgs []connector.ModuleConfig) ([]filter.Module, error) {
 	if len(cfgs) == 0 {
-		return nil
+		return nil, nil
 	}
-	modules := make([]filter.Module, len(cfgs))
+	modules := make([]filter.Module, 0, len(cfgs))
 	for i, cfg := range cfgs {
-		modules[i] = &StubFilterModule{
-			moduleType: cfg.Type,
-			index:      i,
+		switch cfg.Type {
+		case "mapping":
+			mappings, err := filter.ParseFieldMappings(cfg.Config["mappings"])
+			if err != nil {
+				return nil, fmt.Errorf("invalid mapping config at index %d: %w", i, err)
+			}
+			onError, _ := cfg.Config["onError"].(string)
+			module, err := filter.NewMappingFromConfig(mappings, onError)
+			if err != nil {
+				return nil, fmt.Errorf("invalid mapping config at index %d: %w", i, err)
+			}
+			modules = append(modules, module)
+		default:
+			modules = append(modules, &StubFilterModule{
+				moduleType: cfg.Type,
+				index:      i,
+			})
 		}
 	}
-	return modules
+	return modules, nil
 }
 
 // createOutputModule creates an output module instance from configuration.

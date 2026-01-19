@@ -434,36 +434,16 @@
 
     "fieldMapping": {
       "type": "object",
-      "description": "Field mapping. Use either {source, target} or {from, to}, not both.",
-      "oneOf": [
-        {
-          "required": ["source", "target"],
-          "not": { "anyOf": [{ "required": ["from"] }, { "required": ["to"] }] },
-          "properties": {
-            "source": { "type": "string", "description": "Source field path." },
-            "target": { "type": "string", "description": "Target field path." }
-          }
-        },
-        {
-          "required": ["from", "to"],
-          "not": { "anyOf": [{ "required": ["source"] }, { "required": ["target"] }] },
-          "properties": {
-            "from": { "type": "string", "description": "Source field path (alias)." },
-            "to": { "type": "string", "description": "Target field path (alias)." }
-          }
-        }
-      ],
+      "description": "Field mapping. Requires {source, target}.",
+      "required": ["source", "target"],
       "properties": {
-        "source": { "type": "string" },
-        "target": { "type": "string" },
-        "from": { "type": "string" },
-        "to": { "type": "string" },
+        "source": { "type": "string", "description": "Source field path." },
+        "target": { "type": "string", "description": "Target field path." },
         "confidence": {
           "type": "number",
           "minimum": 0,
           "maximum": 1
         },
-        "transform": { "$ref": "#/$defs/transform" },
         "transforms": {
           "type": "array",
           "items": { "$ref": "#/$defs/transformOp" }
@@ -478,14 +458,6 @@
       "additionalProperties": true
     },
 
-    "transform": {
-      "description": "Single transform: string shorthand or object.",
-      "oneOf": [
-        { "type": "string" },
-        { "$ref": "#/$defs/transformOp" }
-      ]
-    },
-
     "transformOp": {
       "type": "object",
       "required": ["op"],
@@ -493,13 +465,12 @@
         "op": {
           "type": "string",
           "description": "Operation name.",
-          "examples": ["trim", "lowercase", "uppercase", "dateFormat", "replace", "split", "join"]
+          "examples": ["trim", "lowercase", "uppercase", "dateFormat", "replace", "split", "join", "toString", "toInt", "toFloat", "toBool", "toArray", "toObject"]
         },
         "format": { "type": "string" },
         "pattern": { "type": "string" },
         "replacement": { "type": "string" },
-        "separator": { "type": "string" },
-        "locale": { "type": "string" }
+        "separator": { "type": "string" }
       },
       "additionalProperties": true
     },

@@ -464,6 +464,12 @@ func (w *Webhook) Start(ctx context.Context, handler WebhookHandler) error {
 
 // Stop gracefully stops the webhook server.
 // It waits for in-flight requests to complete before returning.
+// Close stops the webhook server and releases resources.
+// This is an alias for Stop() to satisfy the input.Module interface.
+func (w *Webhook) Close() error {
+	return w.Stop()
+}
+
 func (w *Webhook) Stop() error {
 	return w.shutdown()
 }

@@ -35,6 +35,10 @@ func (m *MockInputModule) Fetch() ([]map[string]interface{}, error) {
 	return m.data, nil
 }
 
+func (m *MockInputModule) Close() error {
+	return nil
+}
+
 // Verify MockInputModule implements input.Module
 var _ input.Module = (*MockInputModule)(nil)
 
@@ -159,6 +163,69 @@ func TestExecutor_Execute_Success(t *testing.T) {
 	// Verify data was sent to output
 	if len(mockOutput.sentRecords) != 2 {
 		t.Errorf("Expected 2 records sent to output, got %d", len(mockOutput.sentRecords))
+	}
+}
+
+func TestExecutor_Execute_MappingFilterIntegration(t *testing.T) {
+	inputData := []map[string]interface{}{
+		{
+			"id": "12",
+			"user": map[string]interface{}{
+				"name": "  Alice  ",
+			},
+		},
+	}
+	mockInput := NewMockInputModule(inputData, nil)
+	mockOutput := NewMockOutputModule(nil)
+
+	mappings := []filter.FieldMapping{
+		{
+			Source: "user.name",
+			Target: "contact.name",
+			Transforms: []filter.TransformOp{
+				{Op: "trim"},
+				{Op: "lowercase"},
+			},
+		},
+		{
+			Source:     "id",
+			Target:     "contact.id",
+			Transforms: []filter.TransformOp{{Op: "toInt"}},
+		},
+	}
+	mapper, err := filter.NewMappingFromConfig(mappings, "fail")
+	if err != nil {
+		t.Fatalf("NewMappingFromConfig() error = %v", err)
+	}
+
+	pipeline := &connector.Pipeline{
+		ID:      "test-pipeline-mapping",
+		Name:    "Test Mapping Pipeline",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, []filter.Module{mapper}, mockOutput, false)
+	result, err := executor.Execute(pipeline)
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+	if result.Status != StatusSuccess {
+		t.Fatalf("expected success status, got %s", result.Status)
+	}
+	if len(mockOutput.sentRecords) != 1 {
+		t.Fatalf("expected 1 record sent, got %d", len(mockOutput.sentRecords))
+	}
+
+	contact, ok := mockOutput.sentRecords[0]["contact"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected contact map, got %T", mockOutput.sentRecords[0]["contact"])
+	}
+	if contact["name"] != "alice" {
+		t.Fatalf("expected contact.name=alice, got %v", contact["name"])
+	}
+	if contact["id"] != 12 {
+		t.Fatalf("expected contact.id=12, got %v", contact["id"])
 	}
 }
 

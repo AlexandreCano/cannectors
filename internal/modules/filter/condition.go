@@ -414,7 +414,7 @@ func toBool(value interface{}) bool {
 	case float64:
 		return v != 0
 	case string:
-		return v != "" && v != "nil" && v != "null" && v != "undefined" && v != "NaN" && v != "false" && v != "False"
+		return v != ""
 	default:
 		return true
 	}

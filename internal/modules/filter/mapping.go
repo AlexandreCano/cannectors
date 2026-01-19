@@ -800,6 +800,7 @@ func applySplit(value interface{}, separator string) (interface{}, error) {
 		parts := strings.Split(s, separator)
 		result := make([]interface{}, len(parts))
 		for i, p := range parts {
+			// Note: each split part is trimmed of surrounding whitespace.
 			result[i] = strings.TrimSpace(p)
 		}
 		return result, nil

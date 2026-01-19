@@ -758,9 +758,9 @@ func applyDateFormat(value interface{}, format string) (interface{}, error) {
 }
 
 // convertDateFormat converts common date format strings to Go layout.
-// Uses ordered replacement to avoid shorter patterns matching inside longer ones.
+// The current patterns are designed not to overlap, so replacement order does not affect behavior.
+// If overlapping patterns are added in the future (e.g., "M" and "MM"), ensure longer patterns are replaced first.
 func convertDateFormat(format string) string {
-	// Order matters! Longer patterns must be replaced first.
 	replacements := []struct {
 		pattern     string
 		replacement string

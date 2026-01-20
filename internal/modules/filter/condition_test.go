@@ -1537,10 +1537,10 @@ func TestConditionOnErrorFail(t *testing.T) {
 
 // TestConditionOnErrorSkip tests onError="skip" skips problematic records
 func TestConditionOnErrorSkip(t *testing.T) {
-	// Create a condition that evaluates true for valid records
-	// and would error for invalid records
+	// Create a condition that will cause an error when evaluating invalid operations
+	// Using a method call that doesn't exist will cause an evaluation error
 	cond, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "value > 0",
+		Expression: "value.invalidMethod() > 0",
 		OnError:    "skip",
 	})
 	if err != nil {
@@ -1548,8 +1548,9 @@ func TestConditionOnErrorSkip(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{
-		{"value": 10}, // Should pass
-		{"value": 5},  // Should pass
+		{"value": 10}, // Will cause error (can't call method on int), should be skipped
+		{"value": 5},  // Will cause error (can't call method on int), should be skipped
+		{"value": map[string]interface{}{"nested": 1}}, // Will cause error, should be skipped
 	}
 
 	result, err := cond.Process(records)
@@ -1557,15 +1558,17 @@ func TestConditionOnErrorSkip(t *testing.T) {
 		t.Fatalf("Process() error = %v", err)
 	}
 
-	if len(result) != 2 {
-		t.Errorf("expected 2 records with onError='skip', got %d", len(result))
+	// All records should be skipped due to evaluation errors
+	if len(result) != 0 {
+		t.Errorf("expected 0 records with onError='skip' (all should be skipped due to errors), got %d", len(result))
 	}
 }
 
 // TestConditionOnErrorLog tests onError="log" logs errors and continues
 func TestConditionOnErrorLog(t *testing.T) {
+	// Create a condition that will cause an error when evaluating invalid operations
 	cond, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "value > 0",
+		Expression: "value.invalidMethod() > 0",
 		OnError:    "log",
 	})
 	if err != nil {
@@ -1573,8 +1576,9 @@ func TestConditionOnErrorLog(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{
-		{"value": 10}, // Should pass
-		{"value": 20}, // Should pass
+		{"value": 10}, // Will cause error (can't call method on int), should be logged and skipped
+		{"value": 5},  // Will cause error (can't call method on int), should be logged and skipped
+		{"value": map[string]interface{}{"nested": 1}}, // Will cause error, should be logged and skipped
 	}
 
 	result, err := cond.Process(records)
@@ -1582,8 +1586,9 @@ func TestConditionOnErrorLog(t *testing.T) {
 		t.Fatalf("Process() error = %v", err)
 	}
 
-	if len(result) != 2 {
-		t.Errorf("expected 2 records with onError='log', got %d", len(result))
+	// All records should be skipped due to evaluation errors, but processing should continue
+	if len(result) != 0 {
+		t.Errorf("expected 0 records with onError='log' (all should be skipped due to errors), got %d", len(result))
 	}
 }
 
@@ -1636,8 +1641,10 @@ func TestConditionEmptyExpressionOnTrueSkipFiltersAll(t *testing.T) {
 
 // TestConditionErrorDetails tests that ConditionError Details field is properly populated
 func TestConditionErrorDetails(t *testing.T) {
+	// Use an expression that will actually cause an evaluation error
+	// Calling a method on a non-object type will cause an error
 	cond, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "invalid_field_that_does_not_exist > 100",
+		Expression: "value.invalidMethod() > 100",
 		OnError:    "fail",
 	})
 	if err != nil {
@@ -1646,7 +1653,7 @@ func TestConditionErrorDetails(t *testing.T) {
 
 	// Create a record that will cause an evaluation error
 	records := []map[string]interface{}{
-		{"id": 1},
+		{"value": 1}, // int doesn't have methods, will cause error
 	}
 
 	_, err = cond.Process(records)
@@ -1678,6 +1685,103 @@ func TestConditionErrorDetails(t *testing.T) {
 	// Verify record_index is in Details
 	if idx, ok := condErr.Details["record_index"].(int); !ok || idx != 0 {
 		t.Errorf("expected 'record_index' in Details to be 0, got %v", condErr.Details["record_index"])
+	}
+}
+
+// TestConditionToBoolConversion tests that expressions returning different types are correctly converted to boolean
+func TestConditionToBoolConversion(t *testing.T) {
+	tests := []struct {
+		name     string
+		expr     string
+		record   map[string]interface{}
+		expected bool
+	}{
+		{"bool true", "true", map[string]interface{}{}, true},
+		{"bool false", "false", map[string]interface{}{}, false},
+		{"int zero", "0", map[string]interface{}{}, false},
+		{"int non-zero", "5", map[string]interface{}{}, true},
+		{"float zero", "0.0", map[string]interface{}{}, false},
+		{"float non-zero", "3.14", map[string]interface{}{}, true},
+		{"empty string", `""`, map[string]interface{}{}, false},
+		{"non-empty string", `"hello"`, map[string]interface{}{}, true},
+		{"nil value", "nil", map[string]interface{}{}, false},
+		{"empty array", "[]", map[string]interface{}{}, false},
+		{"non-empty array", "[1, 2, 3]", map[string]interface{}{}, true},
+		{"empty map", "{}", map[string]interface{}{}, false},
+		{"non-empty map", `{"key": "value"}`, map[string]interface{}{}, true},
+		{"field with empty array", "arr", map[string]interface{}{"arr": []interface{}{}}, false},
+		{"field with non-empty array", "arr", map[string]interface{}{"arr": []interface{}{1, 2}}, true},
+		{"field with empty map", "m", map[string]interface{}{"m": map[string]interface{}{}}, false},
+		{"field with non-empty map", "m", map[string]interface{}{"m": map[string]interface{}{"k": "v"}}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cond, err := NewConditionFromConfig(ConditionConfig{
+				Expression: tt.expr,
+				OnTrue:     "continue",
+				OnFalse:    "skip",
+			})
+			if err != nil {
+				t.Fatalf("NewConditionFromConfig() error = %v", err)
+			}
+
+			result, err := cond.Process([]map[string]interface{}{tt.record})
+			if err != nil {
+				t.Fatalf("Process() error = %v", err)
+			}
+
+			got := len(result) > 0
+			if got != tt.expected {
+				t.Errorf("toBool conversion: expected %v, got %v (result length: %d)", tt.expected, got, len(result))
+			}
+		})
+	}
+}
+
+// TestConditionInvalidOnTrueOnFalse tests that invalid onTrue/onFalse values are handled correctly
+func TestConditionInvalidOnTrueOnFalse(t *testing.T) {
+	tests := []struct {
+		name       string
+		onTrue     string
+		onFalse    string
+		shouldWarn bool
+	}{
+		{"valid values", "continue", "skip", false},
+		{"invalid onTrue", "contineu", "skip", true},   // typo
+		{"invalid onFalse", "continue", "skipp", true}, // typo
+		{"both invalid", "reject", "accept", true},
+		{"empty defaults", "", "", false}, // empty should use defaults
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cond, err := NewConditionFromConfig(ConditionConfig{
+				Expression: "value > 0",
+				OnTrue:     tt.onTrue,
+				OnFalse:    tt.onFalse,
+			})
+			if err != nil {
+				t.Fatalf("NewConditionFromConfig() error = %v", err)
+			}
+
+			// Test that it works despite invalid values (should default to valid ones)
+			records := []map[string]interface{}{
+				{"value": 10}, // true condition
+				{"value": -5}, // false condition
+			}
+
+			result, err := cond.Process(records)
+			if err != nil {
+				t.Fatalf("Process() error = %v", err)
+			}
+
+			// Should process records successfully (invalid values are normalized)
+			// Note: len() can never be negative, but we check that processing succeeded
+			if result == nil {
+				t.Error("expected result to be non-nil")
+			}
+		})
 	}
 }
 

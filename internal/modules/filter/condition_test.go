@@ -1607,7 +1607,7 @@ func TestConditionInvalidOnErrorDefaultsToFail(t *testing.T) {
 	}
 }
 
-// TestConditionErrorContext tests that errors contain proper context
+// TestConditionEmptyExpressionDefaultsToOnTrue ensures empty expressions return ErrEmptyExpression even when OnTrue is set.
 func TestConditionEmptyExpressionDefaultsToOnTrue(t *testing.T) {
 	_, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "",

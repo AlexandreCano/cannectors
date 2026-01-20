@@ -229,6 +229,95 @@ func TestExecutor_Execute_MappingFilterIntegration(t *testing.T) {
 	}
 }
 
+func TestExecutor_Execute_ConditionFilterIntegration(t *testing.T) {
+	inputData := []map[string]interface{}{
+		{"id": "1", "value": 5},
+		{"id": "2", "value": 20},
+		{"id": "3", "value": 10},
+	}
+	mockInput := NewMockInputModule(inputData, nil)
+	mockOutput := NewMockOutputModule(nil)
+
+	cond, err := filter.NewConditionFromConfig(filter.ConditionConfig{
+		Expression: "value > 10",
+		OnTrue:     "continue",
+		OnFalse:    "skip",
+	})
+	if err != nil {
+		t.Fatalf("NewConditionFromConfig() error = %v", err)
+	}
+
+	pipeline := &connector.Pipeline{
+		ID:      "test-pipeline-condition",
+		Name:    "Test Condition Pipeline",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, []filter.Module{cond}, mockOutput, false)
+	result, err := executor.Execute(pipeline)
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+	if result.Status != StatusSuccess {
+		t.Fatalf("expected success status, got %s", result.Status)
+	}
+	if len(mockOutput.sentRecords) != 1 {
+		t.Fatalf("expected 1 record sent, got %d", len(mockOutput.sentRecords))
+	}
+	if mockOutput.sentRecords[0]["value"] != 20 {
+		t.Fatalf("expected value=20, got %v", mockOutput.sentRecords[0]["value"])
+	}
+}
+
+func TestExecutor_Execute_MappingThenConditionIntegration(t *testing.T) {
+	inputData := []map[string]interface{}{
+		{"id": "1", "amount": 150},
+		{"id": "2", "amount": 50},
+	}
+	mockInput := NewMockInputModule(inputData, nil)
+	mockOutput := NewMockOutputModule(nil)
+
+	mapper, err := filter.NewMappingFromConfig([]filter.FieldMapping{
+		{Source: "id", Target: "id"},
+		{Source: "amount", Target: "value"},
+	}, "fail")
+	if err != nil {
+		t.Fatalf("NewMappingFromConfig() error = %v", err)
+	}
+
+	cond, err := filter.NewConditionFromConfig(filter.ConditionConfig{
+		Expression: "value > 100",
+		OnTrue:     "continue",
+		OnFalse:    "skip",
+	})
+	if err != nil {
+		t.Fatalf("NewConditionFromConfig() error = %v", err)
+	}
+
+	pipeline := &connector.Pipeline{
+		ID:      "test-pipeline-mapping-condition",
+		Name:    "Test Mapping then Condition Pipeline",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, []filter.Module{mapper, cond}, mockOutput, false)
+	result, err := executor.Execute(pipeline)
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+	if result.Status != StatusSuccess {
+		t.Fatalf("expected success status, got %s", result.Status)
+	}
+	if len(mockOutput.sentRecords) != 1 {
+		t.Fatalf("expected 1 record sent, got %d", len(mockOutput.sentRecords))
+	}
+	if mockOutput.sentRecords[0]["value"] != 150 {
+		t.Fatalf("expected value=150, got %v", mockOutput.sentRecords[0]["value"])
+	}
+}
+
 func TestExecutor_ExecuteWithRecords_Success(t *testing.T) {
 	records := []map[string]interface{}{
 		{"id": "1", "name": "Record 1"},

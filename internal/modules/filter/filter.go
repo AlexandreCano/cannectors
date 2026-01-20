@@ -14,21 +14,4 @@ type Module interface {
 	Process(records []map[string]interface{}) ([]map[string]interface{}, error)
 }
 
-// Condition implements conditional filtering.
-// Will be implemented in Story 3.4.
-type Condition struct {
-	expression string
-}
-
-// NewCondition creates a new condition filter module.
-func NewCondition(expression string) *Condition {
-	return &Condition{
-		expression: expression,
-	}
-}
-
-// Process filters records based on conditions.
-// TODO: Implement in Story 3.4
-func (c *Condition) Process(_ []map[string]interface{}) ([]map[string]interface{}, error) {
-	return nil, ErrNotImplemented
-}
+// Note: Condition module is now implemented in condition.go (Story 3.4)

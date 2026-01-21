@@ -1,0 +1,34 @@
+id: filters-mapping-example
+name: Mapping Filter Example
+description: Example with field mapping filter
+version: "1.0.0"
+enabled: true
+input:
+  type: http-polling
+  config:
+    endpoint: https://api.source.com/customers
+    timeout: 30
+filters:
+  - type: mapping
+    config:
+      mappings:
+        - source: id
+          target: customerId
+          onMissing: fail
+        - source: full_name
+          target: name
+          defaultValue: Unknown
+          onMissing: useDefault
+        - source: email_address
+          target: email
+        - source: created_at
+          target: registrationDate
+          transforms:
+            - op: formatDate
+              format: "2006-01-02"
+      onError: skip
+output:
+  type: http-request
+  config:
+    endpoint: https://api.destination.com/customers
+    method: POST

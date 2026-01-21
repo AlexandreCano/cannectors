@@ -1,0 +1,28 @@
+id: pagination-offset-example
+name: Offset Pagination Example
+description: Example with offset-based pagination
+version: "1.0.0"
+enabled: true
+input:
+  type: http-polling
+  config:
+    endpoint: https://api.example.com/products
+    timeout: 30
+    dataField: items
+    pagination:
+      type: offset
+      offsetParam: offset
+      limitParam: limit
+      limit: 100
+      totalField: total
+  authentication:
+    type: api-key
+    credentials:
+      key: ${API_KEY}
+      location: query
+      paramName: api_key
+output:
+  type: http-request
+  config:
+    endpoint: https://api.destination.com/products
+    method: POST

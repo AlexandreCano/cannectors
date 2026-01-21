@@ -1,0 +1,24 @@
+id: pagination-cursor-example
+name: Cursor Pagination Example
+description: Example with cursor-based pagination
+version: "1.0.0"
+enabled: true
+input:
+  type: http-polling
+  config:
+    endpoint: https://api.example.com/events
+    timeout: 30
+    dataField: events
+    pagination:
+      type: cursor
+      cursorParam: after
+      nextCursorField: pagination.next_cursor
+  authentication:
+    type: bearer
+    credentials:
+      token: ${API_TOKEN}
+output:
+  type: http-request
+  config:
+    endpoint: https://api.destination.com/events
+    method: POST

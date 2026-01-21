@@ -1,0 +1,21 @@
+{
+  "id": "simple-pipeline",
+  "name": "Simple Pipeline",
+  "description": "Simple pipeline without authentication",
+  "version": "1.0.0",
+  "enabled": true,
+  "input": {
+    "type": "http-polling",
+    "config": {
+      "endpoint": "https://api.example.com/data",
+      "timeout": 30
+    }
+  },
+  "output": {
+    "type": "http-request",
+    "config": {
+      "endpoint": "https://api.destination.com/import",
+      "method": "POST"
+    }
+  }
+}

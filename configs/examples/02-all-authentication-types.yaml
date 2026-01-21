@@ -1,0 +1,26 @@
+id: all-auth-types
+name: All Authentication Types Example
+description: "Example covering all authentication types: API key, Bearer, Basic, OAuth2"
+version: "1.0.0"
+enabled: true
+input:
+  type: http-polling
+  config:
+    endpoint: https://api.source.com/data
+    timeout: 30
+  authentication:
+    type: api-key
+    credentials:
+      key: ${SOURCE_API_KEY}
+      location: header
+      headerName: X-API-Key
+filters: []
+output:
+  type: http-request
+  config:
+    endpoint: https://api.destination.com/data
+    method: POST
+  authentication:
+    type: bearer
+    credentials:
+      token: ${DEST_BEARER_TOKEN}

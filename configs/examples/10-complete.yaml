@@ -1,0 +1,90 @@
+id: complete-pipeline-example
+name: Complete Pipeline Example
+description: Complete example with authentication, pagination, filters, retry, and advanced configurations
+version: "1.0.0"
+enabled: true
+input:
+  type: http-polling
+  config:
+    endpoint: https://api.source.com/orders
+    timeout: 60
+    headers:
+      Accept: application/json
+      User-Agent: Canectors-Runtime/1.0
+    dataField: orders
+    pagination:
+      type: page
+      pageParam: page
+      totalPagesField: meta.total_pages
+  authentication:
+    type: oauth2
+    credentials:
+      tokenUrl: https://auth.source.com/oauth/token
+      clientId: ${SOURCE_CLIENT_ID}
+      clientSecret: ${SOURCE_CLIENT_SECRET}
+      scopes: orders:read
+filters:
+  - type: condition
+    config:
+      expression: status == 'completed' && total > 0
+      lang: simple
+      onTrue: continue
+      onFalse: skip
+      onError: log
+  - type: mapping
+    config:
+      mappings:
+        - source: id
+          target: orderId
+          onMissing: fail
+        - source: customer.id
+          target: customerId
+        - source: customer.name
+          target: customerName
+          defaultValue: Anonymous
+          onMissing: useDefault
+        - source: total
+          target: amount
+          transforms:
+            - op: toFloat
+        - source: created_at
+          target: orderDate
+          transforms:
+            - op: formatDate
+              format: "2006-01-02T15:04:05Z07:00"
+      onError: skip
+output:
+  type: http-request
+  config:
+    endpoint: https://api.destination.com/v1/orders/{orderId}
+    method: PUT
+    timeoutMs: 45000
+    headers:
+      Content-Type: application/json
+      X-Source: canectors
+    request:
+      bodyFrom: record
+      pathParams:
+        orderId: orderId
+      queryParams:
+        sync: "true"
+      queryFromRecord:
+        version: orderId
+      headersFromRecord:
+        X-Customer-ID: customerId
+    retry:
+      maxRetries: 3
+      backoffMs: 1000
+      backoffMultiplier: 2.0
+    success:
+      statusCodes: [200, 201, 204]
+    onError: skip
+  authentication:
+    type: bearer
+    credentials:
+      token: ${DEST_API_TOKEN}
+schedule: "0 */6 * * *"
+errorHandling:
+  retryCount: 2
+  retryDelay: 5000
+  onError: continue

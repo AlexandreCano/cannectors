@@ -1,0 +1,29 @@
+id: oauth2-example
+name: OAuth2 Client Credentials Example
+description: Example with OAuth2 authentication (client credentials flow)
+version: "1.0.0"
+enabled: true
+input:
+  type: http-polling
+  config:
+    endpoint: https://api.oauth.example.com/data
+    timeout: 30
+  authentication:
+    type: oauth2
+    credentials:
+      tokenUrl: https://auth.example.com/oauth/token
+      clientId: ${OAUTH_CLIENT_ID}
+      clientSecret: ${OAUTH_CLIENT_SECRET}
+      scopes: read,write
+output:
+  type: http-request
+  config:
+    endpoint: https://api.destination.com/import
+    method: POST
+  authentication:
+    type: oauth2
+    credentials:
+      tokenUrl: https://auth.destination.com/oauth/token
+      clientId: ${DEST_CLIENT_ID}
+      clientSecret: ${DEST_CLIENT_SECRET}
+      scopes: write

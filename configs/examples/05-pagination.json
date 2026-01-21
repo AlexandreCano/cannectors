@@ -1,0 +1,33 @@
+{
+  "id": "pagination-example",
+  "name": "Pagination Examples",
+  "description": "Pagination examples: page-based, offset-based, and cursor-based",
+  "version": "1.0.0",
+  "enabled": true,
+  "input": {
+    "type": "http-polling",
+    "config": {
+      "endpoint": "https://api.example.com/users",
+      "timeout": 30,
+      "dataField": "users",
+      "pagination": {
+        "type": "page",
+        "pageParam": "page",
+        "totalPagesField": "total_pages"
+      }
+    },
+    "authentication": {
+      "type": "bearer",
+      "credentials": {
+        "token": "${API_TOKEN}"
+      }
+    }
+  },
+  "output": {
+    "type": "http-request",
+    "config": {
+      "endpoint": "https://api.destination.com/users",
+      "method": "POST"
+    }
+  }
+}

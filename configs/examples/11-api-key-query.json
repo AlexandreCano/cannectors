@@ -1,0 +1,29 @@
+{
+  "id": "api-key-query-example",
+  "name": "API Key in Query Parameter Example",
+  "description": "Example with API key in query parameter",
+  "version": "1.0.0",
+  "enabled": true,
+  "input": {
+    "type": "http-polling",
+    "config": {
+      "endpoint": "https://api.example.com/data",
+      "timeout": 30
+    },
+    "authentication": {
+      "type": "api-key",
+      "credentials": {
+        "key": "${API_KEY}",
+        "location": "query",
+        "paramName": "apikey"
+      }
+    }
+  },
+  "output": {
+    "type": "http-request",
+    "config": {
+      "endpoint": "https://api.destination.com/data",
+      "method": "POST"
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "id": "basic-auth-example",
+  "name": "Basic Authentication Example",
+  "description": "Example with Basic authentication (username/password)",
+  "version": "1.0.0",
+  "enabled": true,
+  "input": {
+    "type": "http-polling",
+    "config": {
+      "endpoint": "https://api.example.com/protected/data",
+      "timeout": 30
+    },
+    "authentication": {
+      "type": "basic",
+      "credentials": {
+        "username": "${API_USERNAME}",
+        "password": "${API_PASSWORD}"
+      }
+    }
+  },
+  "output": {
+    "type": "http-request",
+    "config": {
+      "endpoint": "https://api.destination.com/import",
+      "method": "POST"
+    },
+    "authentication": {
+      "type": "basic",
+      "credentials": {
+        "username": "${DEST_USERNAME}",
+        "password": "${DEST_PASSWORD}"
+      }
+    }
+  }
+}

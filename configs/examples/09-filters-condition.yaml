@@ -1,0 +1,23 @@
+id: filters-condition-example
+name: Condition Filter Example
+description: Example with conditional filter to filter data
+version: "1.0.0"
+enabled: true
+input:
+  type: http-polling
+  config:
+    endpoint: https://api.example.com/products
+    timeout: 30
+filters:
+  - type: condition
+    config:
+      expression: status == 'active' && price > 0
+      lang: simple
+      onTrue: continue
+      onFalse: skip
+      onError: fail
+output:
+  type: http-request
+  config:
+    endpoint: https://api.destination.com/products
+    method: POST

@@ -20,7 +20,16 @@ Portable runtime CLI for executing connector pipelines. Canectors is a cross-pla
 - ✅ **Story 2.2**: Configuration parser with JSON/YAML support
 - ✅ **Story 2.3**: Pipeline orchestration engine (Input → Filter → Output)
 
-**Next**: Epic 3 - Module Execution (Input, Filter, Output implementations)
+**Epic 3: Module Execution** ✅ **COMPLETE**
+
+- ✅ **Story 3.1**: HTTP polling input module with pagination support
+- ✅ **Story 3.2**: Webhook input module
+- ✅ **Story 3.3**: Mapping filter module with transformations
+- ✅ **Story 3.4**: Condition filter module with expression evaluation
+- ✅ **Story 3.5**: HTTP request output module with retry logic
+- ✅ **Story 3.6**: Authentication handling (API key, Bearer, Basic, OAuth2)
+
+**Next**: Epic 4 - Advanced Runtime Features (CRON scheduler, enhanced dry-run, etc.)
 
 ## Project Structure
 
@@ -37,10 +46,10 @@ canectors-runtime/
 │   │   ├── converter.go    # Config to Pipeline type conversion
 │   │   └── types.go        # ConfigResult, ParseError, ValidationError
 │   ├── logger/             # Structured JSON logging (slog)
-│   ├── modules/            # Module interfaces (implementations in Epic 3)
-│   │   ├── input/          # Input module interface
-│   │   ├── filter/         # Filter module interface
-│   │   └── output/         # Output module interface
+│   ├── modules/            # Module implementations
+│   │   ├── input/          # Input modules (HTTP Polling, Webhook)
+│   │   ├── filter/         # Filter modules (Mapping, Condition)
+│   │   └── output/         # Output modules (HTTP Request)
 │   ├── runtime/            # Pipeline execution engine
 │   │   ├── pipeline.go     # Executor with Input → Filter → Output orchestration
 │   │   └── pipeline_test.go # Executor tests (12 tests)
@@ -119,30 +128,31 @@ canectors validate --quiet ./configs/example-connector.json
 
 ### Pipeline Configuration Format
 
-The configuration file must follow this JSON Schema structure:
+The configuration file uses a simple structure with Input, Filters (optional), and Output modules:
 
 ```json
 {
-  "schemaVersion": "1.1.0",
-  "connector": {
-    "name": "example-pipeline",
-    "version": "1.0.0",
-    "description": "An example connector pipeline",
-    "input": {
-      "type": "httpPolling",
+  "id": "example-pipeline",
+  "name": "Example Pipeline",
+  "version": "1.0.0",
+  "enabled": true,
+  "input": {
+    "type": "http-polling",
+    "config": {
       "endpoint": "https://api.example.com/data",
-      "schedule": "*/5 * * * *",
-      "method": "GET",
-      "authentication": {
-        "type": "bearer",
-        "credentials": {
-          "token": "${API_TOKEN}"
-        }
-      }
+      "timeout": 30
     },
-    "filters": [
-      {
-        "type": "mapping",
+    "authentication": {
+      "type": "bearer",
+      "credentials": {
+        "token": "${API_TOKEN}"
+      }
+    }
+  },
+  "filters": [
+    {
+      "type": "mapping",
+      "config": {
         "mappings": [
           {
             "source": "id",
@@ -150,31 +160,97 @@ The configuration file must follow this JSON Schema structure:
           }
         ]
       }
-    ],
-    "output": {
-      "type": "httpRequest",
-      "endpoint": "https://api.destination.com/import",
-      "method": "POST",
-      "authentication": {
-        "type": "apiKey",
-        "credentials": {
-          "key": "${DEST_API_KEY}",
-          "header": "X-API-Key"
-        }
-      }
-    },
-    "errorHandling": {
-      "retryCount": 3,
-      "retryDelay": 5000,
-      "onError": "stop"
     }
+  ],
+  "output": {
+    "type": "http-request",
+    "config": {
+      "endpoint": "https://api.destination.com/import",
+      "method": "POST"
+    },
+    "authentication": {
+      "type": "api-key",
+      "credentials": {
+        "key": "${DEST_API_KEY}",
+        "location": "header",
+        "headerName": "X-API-Key"
+      }
+    }
+  },
+  "schedule": "*/5 * * * *",
+  "errorHandling": {
+    "retryCount": 3,
+    "retryDelay": 5000,
+    "onError": "stop"
   }
 }
 ```
 
+#### Supported Authentication Types
+
+- **API Key**: Header or query parameter location
+- **Bearer Token**: Authorization header with Bearer token
+- **Basic Auth**: HTTP Basic Authentication (username:password)
+- **OAuth2**: Client credentials flow with automatic token caching and refresh
+
+#### Supported Pagination Types
+
+- **Page-based**: `pageParam` with `totalPagesField`
+- **Offset-based**: `offsetParam` / `limitParam` with `totalField`
+- **Cursor-based**: `cursorParam` with `nextCursorField`
+
+#### Supported Filter Modules
+
+- **Mapping**: Field-to-field mapping with transformations (formatDate, toFloat, etc.)
+- **Condition**: Filter records based on expressions (`status == 'active' && price > 0`)
+
+#### Supported Output Modes
+
+- **Batch mode** (default): Sends all records in a single request as JSON array
+- **Single record mode**: Sends one request per record with path/query parameters from record data
+
 **Note**: Both JSON and YAML formats are supported. The format is auto-detected based on file extension (`.json`, `.yaml`, `.yml`) or content analysis.
 
-See [configs/example-connector.json](configs/example-connector.json) for a complete example.
+### Configuration Examples
+
+The `configs/examples/` directory contains comprehensive examples covering all use cases:
+
+#### Basic Examples
+- **01-simple.json / 01-simple.yaml** - Simple pipeline without authentication
+- **02-all-authentication-types.json / 02-all-authentication-types.yaml** - All authentication types (API key, Bearer, Basic, OAuth2)
+
+#### Authentication Examples
+- **03-basic-auth.json / 03-basic-auth.yaml** - Basic authentication (username/password)
+- **04-oauth2.json / 04-oauth2.yaml** - OAuth2 authentication (client credentials flow)
+- **11-api-key-query.json / 11-api-key-query.yaml** - API key in query parameter
+
+#### Pagination Examples
+- **05-pagination.json / 05-pagination.yaml** - Page-based pagination
+- **06-pagination-offset.json / 06-pagination-offset.yaml** - Offset-based pagination
+- **07-pagination-cursor.json / 07-pagination-cursor.yaml** - Cursor-based pagination
+
+#### Filter Examples
+- **08-filters-mapping.json / 08-filters-mapping.yaml** - Field mapping filter with transformations
+- **09-filters-condition.json / 09-filters-condition.yaml** - Conditional filter to filter data
+
+#### Advanced Examples
+- **10-complete.json / 10-complete.yaml** - Complete example with OAuth2 authentication, pagination, multiple filters, retry, and advanced configurations
+- **12-output-single-record.json / 12-output-single-record.yaml** - Single record mode with path parameters
+
+#### Using Examples
+
+```bash
+# Validate an example configuration
+canectors validate ./configs/examples/01-simple.json
+
+# Run an example pipeline (dry-run)
+canectors run --dry-run ./configs/examples/10-complete.yaml
+
+# Use YAML examples (same functionality)
+canectors validate ./configs/examples/05-pagination.yaml
+```
+
+See [configs/example-connector.json](configs/example-connector.json) for a basic example, or browse [configs/examples/](configs/examples/) for comprehensive use case examples.
 
 ## Development
 
@@ -336,12 +412,20 @@ For detailed architecture documentation, see the Architecture Document in the `c
 
 | Module Type | Status | Story |
 |-------------|--------|-------|
-| **Input Modules** | 🔜 Coming in Epic 3 | Story 3.1 (HTTP Polling), 3.2 (Webhook) |
-| **Filter Modules** | 🔜 Coming in Epic 3 | Story 3.3 (Mapping), 3.4 (Conditions) |
-| **Output Modules** | 🔜 Coming in Epic 3 | Story 3.5 (HTTP Request) |
+| **Input Modules** | ✅ **COMPLETE** | Story 3.1 (HTTP Polling), 3.2 (Webhook) |
+| **Filter Modules** | ✅ **COMPLETE** | Story 3.3 (Mapping), 3.4 (Conditions) |
+| **Output Modules** | ✅ **COMPLETE** | Story 3.5 (HTTP Request) |
+| **Authentication** | ✅ **COMPLETE** | Story 3.6 (Authentication Handling) |
 | **Scheduler** | 🔜 Coming in Epic 4 | Story 4.1 (CRON) |
 
-**Current Implementation**: Pipeline orchestration engine with stub modules for testing. Real module implementations will be added in Epic 3.
+**Current Implementation**: 
+- ✅ Pipeline orchestration engine (Epic 2)
+- ✅ HTTP Polling Input module with pagination support (Story 3.1)
+- ✅ Webhook Input module (Story 3.2)
+- ✅ Mapping Filter module with transformations (Story 3.3)
+- ✅ Condition Filter module with expression evaluation (Story 3.4)
+- ✅ HTTP Request Output module with retry logic (Story 3.5)
+- ✅ Authentication handling: API key, Bearer, Basic, OAuth2 (Story 3.6)
 
 ## Roadmap
 
@@ -351,14 +435,14 @@ For detailed architecture documentation, see the Architecture Document in the `c
 - [x] Configuration parser with JSON/YAML support (Story 2.2)
 - [x] Pipeline orchestration engine (Story 2.3)
 
-### Epic 3: Module Execution 🔜 **NEXT**
+### Epic 3: Module Execution ✅ **COMPLETE**
 
-- [ ] HTTP polling input module (Story 3.1)
-- [ ] Webhook input module (Story 3.2)
-- [ ] Mapping filter module (Story 3.3)
-- [ ] Condition filter module (Story 3.4)
-- [ ] HTTP request output module (Story 3.5)
-- [ ] Authentication handling (Story 3.6)
+- [x] HTTP polling input module with pagination (Story 3.1)
+- [x] Webhook input module (Story 3.2)
+- [x] Mapping filter module with transformations (Story 3.3)
+- [x] Condition filter module with expression evaluation (Story 3.4)
+- [x] HTTP request output module with retry logic (Story 3.5)
+- [x] Authentication handling: API key, Bearer, Basic, OAuth2 (Story 3.6)
 
 ### Epic 4: Advanced Runtime Features 📋 **PLANNED**
 

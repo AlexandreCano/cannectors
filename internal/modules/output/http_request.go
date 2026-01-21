@@ -11,7 +11,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/canectors/runtime/internal/logger"
@@ -24,6 +26,7 @@ const (
 	defaultUserAgent   = "Canectors-Runtime/1.0"
 	defaultContentType = "application/json"
 	defaultBodyFrom    = "records" // batch mode by default
+	bearerAuthPrefix   = "Bearer " // Authorization header prefix for Bearer tokens
 )
 
 // Supported HTTP methods for output module
@@ -94,7 +97,8 @@ type HTTPRequestModule struct {
 	onError      string // "fail", "skip", "log"
 	successCodes []int  // HTTP status codes considered success
 
-	// OAuth2 token caching
+	// OAuth2 token caching (protected by mutex for concurrent access)
+	oauth2Mu     sync.RWMutex
 	oauth2Token  string
 	oauth2Expiry time.Time
 }
@@ -119,119 +123,17 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 		return nil, ErrNilConfig
 	}
 
-	// Extract endpoint (required)
-	endpoint, ok := config.Config["endpoint"].(string)
-	if !ok || endpoint == "" {
-		return nil, ErrMissingEndpoint
+	endpoint, method, timeout, err := extractBasicConfig(config.Config)
+	if err != nil {
+		return nil, err
 	}
 
-	// Extract method (required)
-	method, ok := config.Config["method"].(string)
-	if !ok || method == "" {
-		return nil, ErrMissingMethod
-	}
-
-	// Normalize method to uppercase
-	method = strings.ToUpper(method)
-	if !supportedMethods[method] {
-		return nil, fmt.Errorf("%w: %s", ErrInvalidMethod, method)
-	}
-
-	// Extract timeout (optional, default 30s)
-	timeout := defaultHTTPTimeout
-	if timeoutMs, ok := config.Config["timeoutMs"].(float64); ok && timeoutMs > 0 {
-		timeout = time.Duration(timeoutMs) * time.Millisecond
-	}
-
-	// Extract headers (optional)
-	headers := make(map[string]string)
-	if headersVal, ok := config.Config["headers"].(map[string]interface{}); ok {
-		for k, v := range headersVal {
-			if strVal, ok := v.(string); ok {
-				headers[k] = strVal
-			}
-		}
-	}
-
-	// Extract request config (optional)
-	reqConfig := RequestConfig{
-		BodyFrom: defaultBodyFrom,
-	}
-	if requestVal, ok := config.Config["request"].(map[string]interface{}); ok {
-		if bodyFrom, ok := requestVal["bodyFrom"].(string); ok {
-			reqConfig.BodyFrom = bodyFrom
-		}
-		if pathParams, ok := requestVal["pathParams"].(map[string]interface{}); ok {
-			reqConfig.PathParams = make(map[string]string)
-			for k, v := range pathParams {
-				if strVal, ok := v.(string); ok {
-					reqConfig.PathParams[k] = strVal
-				}
-			}
-		}
-		if queryParams, ok := requestVal["query"].(map[string]interface{}); ok {
-			reqConfig.QueryParams = make(map[string]string)
-			for k, v := range queryParams {
-				if strVal, ok := v.(string); ok {
-					reqConfig.QueryParams[k] = strVal
-				}
-			}
-		}
-		if queryFromRecord, ok := requestVal["queryFromRecord"].(map[string]interface{}); ok {
-			reqConfig.QueryFromRecord = make(map[string]string)
-			for k, v := range queryFromRecord {
-				if strVal, ok := v.(string); ok {
-					reqConfig.QueryFromRecord[k] = strVal
-				}
-			}
-		}
-		if headersFromRecord, ok := requestVal["headersFromRecord"].(map[string]interface{}); ok {
-			reqConfig.HeadersFromRecord = make(map[string]string)
-			for k, v := range headersFromRecord {
-				if strVal, ok := v.(string); ok {
-					reqConfig.HeadersFromRecord[k] = strVal
-				}
-			}
-		}
-	}
-
-	// Extract onError mode (optional, default "fail")
-	onError := "fail"
-	if onErrorVal, ok := config.Config["onError"].(string); ok {
-		onError = onErrorVal
-	}
-
-	// Extract success status codes (optional, default [200, 201, 202, 204])
-	successCodes := defaultSuccessCodes
-	if successConfig, ok := config.Config["success"].(map[string]interface{}); ok {
-		if statusCodes, ok := successConfig["statusCodes"].([]interface{}); ok && len(statusCodes) > 0 {
-			successCodes = make([]int, 0, len(statusCodes))
-			for _, code := range statusCodes {
-				if codeFloat, ok := code.(float64); ok {
-					successCodes = append(successCodes, int(codeFloat))
-				}
-			}
-		}
-	}
-
-	// Extract retry configuration (optional, uses defaults)
-	retryConfig := defaultRetryConfig
-	if retryVal, ok := config.Config["retry"].(map[string]interface{}); ok {
-		if maxRetries, ok := retryVal["maxRetries"].(float64); ok {
-			retryConfig.MaxRetries = int(maxRetries)
-		}
-		if backoffMs, ok := retryVal["backoffMs"].(float64); ok {
-			retryConfig.BackoffMs = int(backoffMs)
-		}
-		if backoffMult, ok := retryVal["backoffMultiplier"].(float64); ok {
-			retryConfig.BackoffMultiplier = backoffMult
-		}
-	}
-
-	// Create HTTP client with configured timeout
-	client := &http.Client{
-		Timeout: timeout,
-	}
+	headers := extractHeaders(config.Config)
+	reqConfig := extractRequestConfig(config.Config)
+	onError := extractErrorHandling(config.Config)
+	successCodes := extractSuccessCodes(config.Config)
+	retryConfig := extractRetryConfig(config.Config)
+	client := createHTTPClient(timeout)
 
 	module := &HTTPRequestModule{
 		endpoint:     endpoint,
@@ -255,6 +157,160 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 	)
 
 	return module, nil
+}
+
+// extractBasicConfig extracts required configuration: endpoint, method, and timeout
+func extractBasicConfig(config map[string]interface{}) (endpoint, method string, timeout time.Duration, err error) {
+	endpoint, ok := config["endpoint"].(string)
+	if !ok || endpoint == "" {
+		return "", "", 0, ErrMissingEndpoint
+	}
+
+	method, ok = config["method"].(string)
+	if !ok || method == "" {
+		return "", "", 0, ErrMissingMethod
+	}
+
+	method = strings.ToUpper(method)
+	if !supportedMethods[method] {
+		return "", "", 0, fmt.Errorf("%w: %s", ErrInvalidMethod, method)
+	}
+
+	timeout = defaultHTTPTimeout
+	if timeoutMs, ok := config["timeoutMs"].(float64); ok && timeoutMs > 0 {
+		timeout = time.Duration(timeoutMs) * time.Millisecond
+	}
+
+	return endpoint, method, timeout, nil
+}
+
+// extractHeaders extracts custom HTTP headers from configuration
+func extractHeaders(config map[string]interface{}) map[string]string {
+	headers := make(map[string]string)
+	if headersVal, ok := config["headers"].(map[string]interface{}); ok {
+		for k, v := range headersVal {
+			if strVal, ok := v.(string); ok {
+				headers[k] = strVal
+			}
+		}
+	}
+	return headers
+}
+
+// extractRequestConfig extracts request-specific configuration
+func extractRequestConfig(config map[string]interface{}) RequestConfig {
+	reqConfig := RequestConfig{
+		BodyFrom: defaultBodyFrom,
+	}
+
+	requestVal, ok := config["request"].(map[string]interface{})
+	if !ok {
+		return reqConfig
+	}
+
+	if bodyFrom, ok := requestVal["bodyFrom"].(string); ok {
+		reqConfig.BodyFrom = bodyFrom
+	}
+
+	if pathParams, ok := requestVal["pathParams"].(map[string]interface{}); ok {
+		reqConfig.PathParams = extractStringMap(pathParams)
+	}
+
+	if queryParams, ok := requestVal["query"].(map[string]interface{}); ok {
+		reqConfig.QueryParams = extractStringMap(queryParams)
+	}
+
+	if queryFromRecord, ok := requestVal["queryFromRecord"].(map[string]interface{}); ok {
+		reqConfig.QueryFromRecord = extractStringMap(queryFromRecord)
+	}
+
+	if headersFromRecord, ok := requestVal["headersFromRecord"].(map[string]interface{}); ok {
+		reqConfig.HeadersFromRecord = extractStringMap(headersFromRecord)
+	}
+
+	return reqConfig
+}
+
+// extractStringMap converts map[string]interface{} to map[string]string
+func extractStringMap(m map[string]interface{}) map[string]string {
+	result := make(map[string]string)
+	for k, v := range m {
+		if strVal, ok := v.(string); ok {
+			result[k] = strVal
+		}
+	}
+	return result
+}
+
+// extractErrorHandling extracts error handling mode from configuration
+func extractErrorHandling(config map[string]interface{}) string {
+	if onErrorVal, ok := config["onError"].(string); ok {
+		return onErrorVal
+	}
+	return "fail" // default
+}
+
+// extractSuccessCodes extracts custom success status codes from configuration
+func extractSuccessCodes(config map[string]interface{}) []int {
+	successConfig, ok := config["success"].(map[string]interface{})
+	if !ok {
+		return defaultSuccessCodes
+	}
+
+	statusCodes, ok := successConfig["statusCodes"].([]interface{})
+	if !ok || len(statusCodes) == 0 {
+		return defaultSuccessCodes
+	}
+
+	successCodes := make([]int, 0, len(statusCodes))
+	for _, code := range statusCodes {
+		if codeFloat, ok := code.(float64); ok {
+			successCodes = append(successCodes, int(codeFloat))
+		}
+	}
+
+	if len(successCodes) == 0 {
+		return defaultSuccessCodes
+	}
+
+	return successCodes
+}
+
+// extractRetryConfig extracts retry configuration from config
+func extractRetryConfig(config map[string]interface{}) RetryConfig {
+	retryConfig := defaultRetryConfig
+
+	retryVal, ok := config["retry"].(map[string]interface{})
+	if !ok {
+		return retryConfig
+	}
+
+	if maxRetries, ok := retryVal["maxRetries"].(float64); ok {
+		retryConfig.MaxRetries = int(maxRetries)
+	}
+
+	if backoffMs, ok := retryVal["backoffMs"].(float64); ok {
+		retryConfig.BackoffMs = int(backoffMs)
+	}
+
+	if backoffMult, ok := retryVal["backoffMultiplier"].(float64); ok {
+		retryConfig.BackoffMultiplier = backoffMult
+	}
+
+	return retryConfig
+}
+
+// createHTTPClient creates an HTTP client with configured timeout and transport settings
+func createHTTPClient(timeout time.Duration) *http.Client {
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
+	}
 }
 
 // Send transmits records to the destination via HTTP.
@@ -451,8 +507,10 @@ func (h *HTTPRequestModule) executeHTTPRequest(ctx context.Context, endpoint str
 		}
 	}()
 
-	// Read response body for error messages
-	respBody, _ := io.ReadAll(resp.Body)
+	// Read response body for error messages (with size limit to prevent memory exhaustion)
+	const maxResponseBodySize = 1 * 1024 * 1024 // 1MB limit
+	limitedReader := io.LimitReader(resp.Body, maxResponseBodySize)
+	respBody, _ := io.ReadAll(limitedReader)
 
 	// Check if status code is in success codes
 	if !h.isSuccessStatusCode(resp.StatusCode) {
@@ -475,13 +533,28 @@ func (h *HTTPRequestModule) executeHTTPRequest(ctx context.Context, endpoint str
 	return nil
 }
 
+// Default maximum backoff duration (5 minutes)
+const maxBackoffDuration = 5 * time.Minute
+
 // calculateBackoff calculates the backoff duration for a retry attempt
+// Protects against integer overflow and caps the maximum backoff duration
 func (h *HTTPRequestModule) calculateBackoff(attempt int) time.Duration {
 	backoffMs := float64(h.retry.BackoffMs)
 	for i := 1; i < attempt; i++ {
 		backoffMs *= h.retry.BackoffMultiplier
+		// Prevent overflow - cap at reasonable maximum
+		if backoffMs > float64(maxBackoffDuration.Milliseconds()) {
+			backoffMs = float64(maxBackoffDuration.Milliseconds())
+			break
+		}
 	}
-	return time.Duration(backoffMs) * time.Millisecond
+
+	// Cap final result to maxBackoffDuration
+	result := time.Duration(backoffMs) * time.Millisecond
+	if result > maxBackoffDuration {
+		return maxBackoffDuration
+	}
+	return result
 }
 
 // isTransientError determines if an error is transient and should be retried
@@ -517,54 +590,69 @@ func (h *HTTPRequestModule) resolveEndpointWithStaticQuery(endpoint string) stri
 		return endpoint
 	}
 
-	// Add static query parameters
-	separator := "?"
-	if strings.Contains(endpoint, "?") {
-		separator = "&"
+	// Parse URL to properly encode query parameters
+	parsedURL, err := url.Parse(endpoint)
+	if err != nil {
+		// If parsing fails, return original endpoint (shouldn't happen with valid config)
+		logger.Warn("failed to parse endpoint URL for query params",
+			slog.String("endpoint", endpoint),
+			slog.String("error", err.Error()),
+		)
+		return endpoint
 	}
 
+	// Add static query parameters using url.Values for proper encoding
+	q := parsedURL.Query()
 	for param, value := range h.request.QueryParams {
-		endpoint += separator + param + "=" + value
-		separator = "&"
+		q.Set(param, value)
 	}
+	parsedURL.RawQuery = q.Encode()
 
-	return endpoint
+	return parsedURL.String()
 }
 
 // resolveEndpointForRecord resolves path parameters and query params for a single record
 func (h *HTTPRequestModule) resolveEndpointForRecord(record map[string]interface{}) string {
 	endpoint := h.endpoint
 
-	// Substitute path parameters
+	// Substitute path parameters (properly URL-encoded)
 	for param, fieldPath := range h.request.PathParams {
 		value := getFieldValue(record, fieldPath)
 		if value != "" {
+			// URL-encode path parameter values
+			encodedValue := url.PathEscape(value)
 			placeholder := "{" + param + "}"
-			endpoint = strings.ReplaceAll(endpoint, placeholder, value)
+			endpoint = strings.ReplaceAll(endpoint, placeholder, encodedValue)
 		}
 	}
 
-	// Add static query parameters
-	separator := "?"
-	if strings.Contains(endpoint, "?") {
-		separator = "&"
+	// Parse URL to properly encode query parameters
+	parsedURL, err := url.Parse(endpoint)
+	if err != nil {
+		// If parsing fails, return endpoint as-is (shouldn't happen with valid config)
+		logger.Warn("failed to parse endpoint URL for record",
+			slog.String("endpoint", endpoint),
+			slog.String("error", err.Error()),
+		)
+		return endpoint
 	}
 
+	// Add static query parameters using url.Values for proper encoding
+	q := parsedURL.Query()
 	for param, value := range h.request.QueryParams {
-		endpoint += separator + param + "=" + value
-		separator = "&"
+		q.Set(param, value)
 	}
 
 	// Add query parameters from record data
 	for param, fieldPath := range h.request.QueryFromRecord {
 		value := getFieldValue(record, fieldPath)
 		if value != "" {
-			endpoint += separator + param + "=" + value
-			separator = "&"
+			q.Set(param, value)
 		}
 	}
 
-	return endpoint
+	parsedURL.RawQuery = q.Encode()
+	return parsedURL.String()
 }
 
 // extractHeadersFromRecord extracts header values from record data
@@ -592,6 +680,10 @@ func getFieldValue(record map[string]interface{}, path string) string {
 	for _, part := range parts {
 		switch v := current.(type) {
 		case map[string]interface{}:
+			// Protect against nil maps
+			if v == nil {
+				return ""
+			}
 			val, ok := v[part]
 			if !ok {
 				return ""
@@ -660,6 +752,7 @@ func (h *HTTPRequestModule) applyAPIKeyAuth(req *http.Request) error {
 		q := req.URL.Query()
 		q.Set(paramName, key)
 		req.URL.RawQuery = q.Encode()
+		// Note: url.Values.Set() and Encode() already handle proper URL encoding
 	case "header", "":
 		headerName := h.auth.Credentials["headerName"]
 		if headerName == "" {
@@ -677,7 +770,7 @@ func (h *HTTPRequestModule) applyBearerAuth(req *http.Request) error {
 	if token == "" {
 		return errors.New("token is required for bearer authentication")
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", bearerAuthPrefix+token)
 	return nil
 }
 
@@ -694,11 +787,15 @@ func (h *HTTPRequestModule) applyBasicAuth(req *http.Request) error {
 
 // applyOAuth2Auth applies OAuth2 client credentials authentication
 func (h *HTTPRequestModule) applyOAuth2Auth(ctx context.Context, req *http.Request) error {
-	// Check if we have a valid cached token
+	// Check if we have a valid cached token (read lock)
+	h.oauth2Mu.RLock()
 	if h.oauth2Token != "" && time.Now().Before(h.oauth2Expiry) {
-		req.Header.Set("Authorization", "Bearer "+h.oauth2Token)
+		token := h.oauth2Token
+		h.oauth2Mu.RUnlock()
+		req.Header.Set("Authorization", bearerAuthPrefix+token)
 		return nil
 	}
+	h.oauth2Mu.RUnlock()
 
 	// Obtain new token
 	token, expiry, err := h.obtainOAuth2Token(ctx)
@@ -706,10 +803,13 @@ func (h *HTTPRequestModule) applyOAuth2Auth(ctx context.Context, req *http.Reque
 		return err
 	}
 
+	// Update cached token (write lock)
+	h.oauth2Mu.Lock()
 	h.oauth2Token = token
 	h.oauth2Expiry = expiry
-	req.Header.Set("Authorization", "Bearer "+token)
+	h.oauth2Mu.Unlock()
 
+	req.Header.Set("Authorization", bearerAuthPrefix+token)
 	return nil
 }
 
@@ -723,11 +823,14 @@ func (h *HTTPRequestModule) obtainOAuth2Token(ctx context.Context) (string, time
 		return "", time.Time{}, errors.New("tokenUrl, clientId, and clientSecret are required for oauth2 authentication")
 	}
 
-	// Build form data
-	formData := "grant_type=client_credentials&client_id=" + clientID + "&client_secret=" + clientSecret
+	// Build form data using url.Values for proper encoding
+	formData := url.Values{}
+	formData.Set("grant_type", "client_credentials")
+	formData.Set("client_id", clientID)
+	formData.Set("client_secret", clientSecret)
 
 	// Create request
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(formData))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(formData.Encode()))
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("creating token request: %w", err)
 	}
@@ -739,11 +842,21 @@ func (h *HTTPRequestModule) obtainOAuth2Token(ctx context.Context) (string, time
 		return "", time.Time{}, fmt.Errorf("executing token request: %w", err)
 	}
 	defer func() {
-		_ = resp.Body.Close()
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			logger.Error("failed to close OAuth2 token response body", slog.String("error", closeErr.Error()))
+		}
 	}()
 
+	// Read response body (with size limit to prevent memory exhaustion)
+	const maxTokenResponseSize = 64 * 1024 // 64KB limit for token responses
+	limitedReader := io.LimitReader(resp.Body, maxTokenResponseSize)
+	respBody, err := io.ReadAll(limitedReader)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("reading token response body: %w", err)
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		return "", time.Time{}, fmt.Errorf("token endpoint returned %d", resp.StatusCode)
+		return "", time.Time{}, fmt.Errorf("token endpoint returned %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	// Parse response
@@ -752,8 +865,12 @@ func (h *HTTPRequestModule) obtainOAuth2Token(ctx context.Context) (string, time
 		TokenType   string `json:"token_type"`
 		ExpiresIn   int    `json:"expires_in"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return "", time.Time{}, fmt.Errorf("parsing token response: %w", err)
+	if err := json.Unmarshal(respBody, &tokenResp); err != nil {
+		return "", time.Time{}, fmt.Errorf("parsing token response: %w (body: %s)", err, string(respBody))
+	}
+	// Validate access token
+	if strings.TrimSpace(tokenResp.AccessToken) == "" {
+		return "", time.Time{}, fmt.Errorf("token endpoint returned empty access_token (body: %s)", string(respBody))
 	}
 
 	// Calculate expiry with buffer
@@ -782,8 +899,10 @@ func (h *HTTPRequestModule) isSuccessStatusCode(statusCode int) bool {
 
 // Close releases any resources held by the HTTP request module.
 func (h *HTTPRequestModule) Close() error {
-	// HTTP client connections are automatically managed by Go's http.Transport
-	// No explicit cleanup needed for the default transport
+	// Close idle connections in the transport to ensure timely cleanup
+	if transport, ok := h.client.Transport.(*http.Transport); ok {
+		transport.CloseIdleConnections()
+	}
 	logger.Debug("http request output module closed",
 		slog.String("endpoint", h.endpoint),
 	)

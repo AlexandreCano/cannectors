@@ -293,7 +293,7 @@ func (s *Scheduler) Stop(ctx context.Context) error {
 	if wasStarted {
 		// Wait for CRON to fully stop (with timeout to prevent indefinite blocking)
 		// Use a timeout context to ensure we don't block forever
-		timeoutCtx, timeoutCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 2*time.Second)
 		defer timeoutCancel()
 
 		select {

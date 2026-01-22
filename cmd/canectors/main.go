@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -748,20 +749,27 @@ func parseNestedThenElse(cfg map[string]interface{}, nestedConfig *filter.Nested
 }
 
 // createOutputModule creates an output module instance from configuration.
-// Note: This returns a stub module until Epic 3 implements real modules.
+// Uses real HTTPRequestModule for httpRequest type, stub for others.
 func createOutputModule(cfg *connector.ModuleConfig) output.Module {
 	if cfg == nil {
 		return nil
 	}
 	switch cfg.Type {
 	case "httpRequest":
-		endpoint, _ := cfg.Config["endpoint"].(string)
-		method, _ := cfg.Config["method"].(string)
-		return &StubOutputModule{
-			moduleType: cfg.Type,
-			endpoint:   endpoint,
-			method:     method,
+		// Use real HTTPRequestModule which implements PreviewableModule
+		module, err := output.NewHTTPRequestFromConfig(cfg)
+		if err != nil {
+			logger.Warn("failed to create HTTP request module, using stub",
+				slog.String("error", err.Error()))
+			endpoint, _ := cfg.Config["endpoint"].(string)
+			method, _ := cfg.Config["method"].(string)
+			return &StubOutputModule{
+				moduleType: cfg.Type,
+				endpoint:   endpoint,
+				method:     method,
+			}
 		}
+		return module
 	default:
 		return &StubOutputModule{
 			moduleType: cfg.Type,
@@ -795,7 +803,107 @@ func printExecutionResult(result *connector.ExecutionResult, err error) {
 		if verbose {
 			fmt.Printf("  Duration: %v\n", result.CompletedAt.Sub(result.StartedAt))
 		}
+
+		// Display dry-run preview if available
+		if dryRun && len(result.DryRunPreview) > 0 {
+			printDryRunPreview(result.DryRunPreview)
+		}
 	}
+}
+
+// printDryRunPreview displays the request preview for dry-run mode.
+func printDryRunPreview(previews []connector.RequestPreview) {
+	fmt.Println()
+	fmt.Println("📋 Dry-Run Preview (what would have been sent):")
+	fmt.Println()
+
+	for i, preview := range previews {
+		if len(previews) > 1 {
+			fmt.Printf("─── Request %d of %d ───\n", i+1, len(previews))
+		}
+
+		// Endpoint and method
+		fmt.Printf("  Endpoint: %s %s\n", preview.Method, preview.Endpoint)
+		fmt.Printf("  Records: %d\n", preview.RecordCount)
+
+		// Headers (always show all headers in dry-run mode)
+		if len(preview.Headers) > 0 {
+			fmt.Println("  Headers:")
+			for name, value := range preview.Headers {
+				fmt.Printf("    %s: %s\n", name, value)
+			}
+		}
+
+		// Body preview
+		if preview.BodyPreview != "" {
+			printBodyPreview(preview.BodyPreview)
+		}
+
+		if i < len(previews)-1 {
+			fmt.Println()
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("ℹ️  No data was sent to the target system (dry-run mode)")
+}
+
+// printBodyPreview displays the formatted JSON body preview.
+// In verbose mode or for small payloads (<=10 lines), shows full body.
+// For large payloads in non-verbose mode, truncates to 10 lines.
+func printBodyPreview(bodyPreview string) {
+	const maxLinesCompact = 10
+	lineCount := countLines(bodyPreview)
+
+	// Show full body in verbose mode or for small payloads
+	if verbose || lineCount <= maxLinesCompact {
+		fmt.Println("  Body:")
+		printIndentedBody(bodyPreview, "    ")
+		return
+	}
+
+	// Truncate large payloads in non-verbose mode
+	fmt.Println("  Body (truncated, use --verbose for full):")
+	printTruncatedBody(bodyPreview, "    ", maxLinesCompact)
+}
+
+// printIndentedBody prints the body with indentation.
+func printIndentedBody(body string, indent string) {
+	lines := splitLines(body)
+	for _, line := range lines {
+		fmt.Printf("%s%s\n", indent, line)
+	}
+}
+
+// printTruncatedBody prints the first N lines of the body.
+func printTruncatedBody(body string, indent string, maxLines int) {
+	lines := splitLines(body)
+	for i := 0; i < maxLines && i < len(lines); i++ {
+		fmt.Printf("%s%s\n", indent, lines[i])
+	}
+	if len(lines) > maxLines {
+		fmt.Printf("%s... (%d more lines)\n", indent, len(lines)-maxLines)
+	}
+}
+
+// countLines counts the number of lines in a string.
+// Optimized using strings.Count for better performance.
+func countLines(s string) int {
+	return strings.Count(s, "\n") + 1
+}
+
+// splitLines splits a string into lines.
+// Uses strings.Split for simplicity and performance.
+func splitLines(s string) []string {
+	if s == "" {
+		return nil
+	}
+	lines := strings.Split(s, "\n")
+	// Remove trailing empty line if string ends with newline
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
 }
 
 // =============================================================================

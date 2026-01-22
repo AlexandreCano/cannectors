@@ -3,6 +3,7 @@ package runtime
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -1001,5 +1002,1034 @@ func TestExecutor_Execute_ClosesOutputModuleOnOutputError(t *testing.T) {
 
 	if !mockOutput.closed {
 		t.Error("Output module Close() was NOT called after output error")
+	}
+}
+
+// =============================================================================
+// Story 4.2: Dry-Run Mode - Task 2: Executor Dry-Run Preview Tests
+// =============================================================================
+
+// MockPreviewableOutputModule is a mock for output.PreviewableModule
+type MockPreviewableOutputModule struct {
+	sentRecords      []map[string]interface{}
+	err              error
+	sendCalled       bool
+	previewCalled    bool
+	closed           bool
+	previewErr       error
+	previewRecords   []map[string]interface{}
+	previewResponses []output.RequestPreview
+}
+
+func NewMockPreviewableOutputModule(previewResponses []output.RequestPreview) *MockPreviewableOutputModule {
+	return &MockPreviewableOutputModule{
+		previewResponses: previewResponses,
+	}
+}
+
+func (m *MockPreviewableOutputModule) Send(records []map[string]interface{}) (int, error) {
+	m.sendCalled = true
+	if m.err != nil {
+		return 0, m.err
+	}
+	m.sentRecords = records
+	return len(records), nil
+}
+
+func (m *MockPreviewableOutputModule) Close() error {
+	m.closed = true
+	return nil
+}
+
+func (m *MockPreviewableOutputModule) PreviewRequest(records []map[string]interface{}, _ output.PreviewOptions) ([]output.RequestPreview, error) {
+	m.previewCalled = true
+	m.previewRecords = records
+	if m.previewErr != nil {
+		return nil, m.previewErr
+	}
+	return m.previewResponses, nil
+}
+
+// Verify MockPreviewableOutputModule implements output.PreviewableModule
+var _ output.PreviewableModule = (*MockPreviewableOutputModule)(nil)
+
+func TestExecutor_DryRun_CallsPreview(t *testing.T) {
+	// Arrange
+	inputData := []map[string]interface{}{
+		{"id": "1", "name": "Test 1"},
+		{"id": "2", "name": "Test 2"},
+	}
+	mockInput := NewMockInputModule(inputData, nil)
+
+	expectedPreviews := []output.RequestPreview{
+		{
+			Endpoint:    "https://api.example.com/data",
+			Method:      "POST",
+			Headers:     map[string]string{"Content-Type": "application/json"},
+			BodyPreview: `[{"id":"1","name":"Test 1"},{"id":"2","name":"Test 2"}]`,
+			RecordCount: 2,
+		},
+	}
+	mockOutput := NewMockPreviewableOutputModule(expectedPreviews)
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-preview-test",
+		Name:    "Dry Run Preview Test",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, nil, mockOutput, true) // dry-run = true
+
+	// Act
+	result, err := executor.Execute(pipeline)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+
+	if result.Status != "success" {
+		t.Errorf("Expected status 'success', got '%s'", result.Status)
+	}
+
+	// Preview should be called in dry-run mode
+	if !mockOutput.previewCalled {
+		t.Error("PreviewRequest() should be called in dry-run mode")
+	}
+
+	// Send should NOT be called in dry-run mode
+	if mockOutput.sendCalled {
+		t.Error("Send() should NOT be called in dry-run mode")
+	}
+
+	// Preview should receive the processed records
+	if len(mockOutput.previewRecords) != 2 {
+		t.Errorf("PreviewRequest() received %d records, expected 2", len(mockOutput.previewRecords))
+	}
+
+	// Result should contain preview information
+	if result.DryRunPreview == nil {
+		t.Fatal("DryRunPreview should be set in dry-run mode")
+	}
+
+	if len(result.DryRunPreview) != 1 {
+		t.Errorf("Expected 1 preview, got %d", len(result.DryRunPreview))
+	}
+
+	if result.DryRunPreview[0].Endpoint != "https://api.example.com/data" {
+		t.Errorf("Expected endpoint 'https://api.example.com/data', got '%s'", result.DryRunPreview[0].Endpoint)
+	}
+}
+
+func TestExecutor_DryRun_WithFilters_CallsPreview(t *testing.T) {
+	// Arrange
+	inputData := []map[string]interface{}{
+		{"id": "1", "value": 10},
+		{"id": "2", "value": 20},
+	}
+
+	// Filter that doubles the value
+	doubleFilter := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
+		result := make([]map[string]interface{}, len(records))
+		for i, r := range records {
+			newRecord := make(map[string]interface{})
+			for k, v := range r {
+				newRecord[k] = v
+			}
+			if val, ok := newRecord["value"].(int); ok {
+				newRecord["value"] = val * 2
+			}
+			result[i] = newRecord
+		}
+		return result, nil
+	})
+
+	mockInput := NewMockInputModule(inputData, nil)
+	mockOutput := NewMockPreviewableOutputModule([]output.RequestPreview{
+		{
+			Endpoint:    "https://api.example.com/data",
+			Method:      "POST",
+			Headers:     map[string]string{"Content-Type": "application/json"},
+			BodyPreview: `[{"id":"1","value":20},{"id":"2","value":40}]`,
+			RecordCount: 2,
+		},
+	})
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-filters-test",
+		Name:    "Dry Run with Filters Test",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, []filter.Module{doubleFilter}, mockOutput, true)
+
+	// Act
+	result, err := executor.Execute(pipeline)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+
+	// Filter should be called
+	if !doubleFilter.processCalled {
+		t.Error("Filter should be called in dry-run mode")
+	}
+
+	// Preview should receive FILTERED records (doubled values)
+	if len(mockOutput.previewRecords) != 2 {
+		t.Fatalf("PreviewRequest() received %d records, expected 2", len(mockOutput.previewRecords))
+	}
+
+	// Verify the first record has doubled value (10 * 2 = 20)
+	if val, ok := mockOutput.previewRecords[0]["value"].(int); !ok || val != 20 {
+		t.Errorf("Preview received value %v, expected 20 (doubled)", mockOutput.previewRecords[0]["value"])
+	}
+
+	// DryRunPreview should be set
+	if result.DryRunPreview == nil {
+		t.Fatal("DryRunPreview should be set in dry-run mode with filters")
+	}
+}
+
+func TestExecutor_DryRun_NonPreviewableModule_SkipsPreview(t *testing.T) {
+	// Test that dry-run works with output modules that don't implement PreviewableModule
+	inputData := []map[string]interface{}{
+		{"id": "1", "name": "Test"},
+	}
+	mockInput := NewMockInputModule(inputData, nil)
+	mockOutput := NewMockOutputModule(nil) // Non-previewable module
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-non-previewable",
+		Name:    "Dry Run Non-Previewable",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, nil, mockOutput, true) // dry-run = true
+
+	// Act
+	result, err := executor.Execute(pipeline)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+
+	if result.Status != "success" {
+		t.Errorf("Expected status 'success', got '%s'", result.Status)
+	}
+
+	// Send should NOT be called (dry-run mode)
+	if mockOutput.sendCalled {
+		t.Error("Send() should NOT be called in dry-run mode")
+	}
+
+	// DryRunPreview should be nil for non-previewable modules
+	if result.DryRunPreview != nil {
+		t.Error("DryRunPreview should be nil for non-previewable modules")
+	}
+}
+
+func TestExecutor_DryRun_PreviewError_ReportsError(t *testing.T) {
+	// Test that preview errors are reported correctly
+	inputData := []map[string]interface{}{
+		{"id": "1", "name": "Test"},
+	}
+	mockInput := NewMockInputModule(inputData, nil)
+
+	mockOutput := NewMockPreviewableOutputModule(nil)
+	mockOutput.previewErr = errors.New("failed to prepare preview")
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-preview-error",
+		Name:    "Dry Run Preview Error",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, nil, mockOutput, true)
+
+	// Act
+	result, err := executor.Execute(pipeline)
+
+	// Assert - preview error should still allow execution to succeed (preview is informational)
+	// but the error should be captured somewhere
+	if result == nil {
+		t.Fatal("Execute() should return result even with preview error")
+	}
+
+	// The execution should succeed but note the preview error
+	// Option 1: Still succeed but with nil preview
+	// Option 2: Include error in result
+	// For now, we expect success with nil preview and error captured
+	if result.Status != "success" {
+		// Preview error should not fail the execution - it's informational
+		t.Logf("Status is %s, which may be acceptable depending on implementation", result.Status)
+	}
+
+	// Preview should have been attempted
+	if !mockOutput.previewCalled {
+		t.Error("PreviewRequest() should be called even if it will fail")
+	}
+
+	// The error should be captured but not fail the execution
+	_ = err // May or may not be nil depending on implementation
+}
+
+func TestExecutor_DryRun_RecordsProcessedCount(t *testing.T) {
+	// Verify RecordsProcessed correctly reflects what WOULD have been sent
+	inputData := []map[string]interface{}{
+		{"id": "1"},
+		{"id": "2"},
+		{"id": "3"},
+	}
+	mockInput := NewMockInputModule(inputData, nil)
+	mockOutput := NewMockPreviewableOutputModule([]output.RequestPreview{
+		{
+			Endpoint:    "https://api.example.com/data",
+			Method:      "POST",
+			RecordCount: 3,
+		},
+	})
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-record-count",
+		Name:    "Dry Run Record Count",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, nil, mockOutput, true)
+
+	// Act
+	result, err := executor.Execute(pipeline)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+
+	// RecordsProcessed should reflect the count that would be sent
+	if result.RecordsProcessed != 3 {
+		t.Errorf("Expected RecordsProcessed 3, got %d", result.RecordsProcessed)
+	}
+
+	if result.RecordsFailed != 0 {
+		t.Errorf("Expected RecordsFailed 0 in dry-run, got %d", result.RecordsFailed)
+	}
+}
+
+func TestExecutor_DryRun_EmptyRecords(t *testing.T) {
+	// Test dry-run with empty input data
+	emptyData := []map[string]interface{}{}
+	mockInput := NewMockInputModule(emptyData, nil)
+	mockOutput := NewMockPreviewableOutputModule([]output.RequestPreview{})
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-empty",
+		Name:    "Dry Run Empty",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, nil, mockOutput, true)
+
+	// Act
+	result, err := executor.Execute(pipeline)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+
+	if result.Status != "success" {
+		t.Errorf("Expected status 'success', got '%s'", result.Status)
+	}
+
+	if result.RecordsProcessed != 0 {
+		t.Errorf("Expected RecordsProcessed 0 for empty input, got %d", result.RecordsProcessed)
+	}
+}
+
+func TestExecutor_ExecuteWithRecords_DryRun_CallsPreview(t *testing.T) {
+	// Test ExecuteWithRecords also supports dry-run preview
+	records := []map[string]interface{}{
+		{"id": "1", "name": "Record 1"},
+		{"id": "2", "name": "Record 2"},
+	}
+
+	mockOutput := NewMockPreviewableOutputModule([]output.RequestPreview{
+		{
+			Endpoint:    "https://api.example.com/data",
+			Method:      "POST",
+			RecordCount: 2,
+		},
+	})
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-with-records",
+		Name:    "Dry Run With Records",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(nil, nil, mockOutput, true) // dry-run = true
+
+	// Act
+	result, err := executor.ExecuteWithRecords(pipeline, records)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("ExecuteWithRecords() returned unexpected error: %v", err)
+	}
+
+	if result.Status != "success" {
+		t.Errorf("Expected status 'success', got '%s'", result.Status)
+	}
+
+	// Preview should be called
+	if !mockOutput.previewCalled {
+		t.Error("PreviewRequest() should be called in dry-run mode for ExecuteWithRecords")
+	}
+
+	// Send should NOT be called
+	if mockOutput.sendCalled {
+		t.Error("Send() should NOT be called in dry-run mode")
+	}
+
+	// DryRunPreview should be set
+	if result.DryRunPreview == nil {
+		t.Error("DryRunPreview should be set in dry-run mode for ExecuteWithRecords")
+	}
+}
+
+// =============================================================================
+// Story 4.2: Dry-Run Mode - Task 4: Complete Pipeline Validation Tests
+// =============================================================================
+
+func TestExecutor_DryRun_InputModuleExecutesNormally(t *testing.T) {
+	// Verify input module executes normally in dry-run mode (data is fetched)
+	inputData := []map[string]interface{}{
+		{"id": "1", "name": "Test 1"},
+		{"id": "2", "name": "Test 2"},
+		{"id": "3", "name": "Test 3"},
+	}
+	mockInput := NewMockInputModule(inputData, nil)
+	mockOutput := NewMockPreviewableOutputModule([]output.RequestPreview{
+		{Endpoint: "https://api.example.com", Method: "POST", RecordCount: 3},
+	})
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-input-test",
+		Name:    "Dry Run Input Test",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, nil, mockOutput, true)
+
+	// Act
+	result, err := executor.Execute(pipeline)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+
+	// Input module should be called normally
+	if !mockInput.fetchCalled {
+		t.Error("Input.Fetch() should be called in dry-run mode")
+	}
+
+	// All records should be processed
+	if result.RecordsProcessed != 3 {
+		t.Errorf("Expected RecordsProcessed 3, got %d", result.RecordsProcessed)
+	}
+}
+
+func TestExecutor_DryRun_FilterModulesExecuteNormally(t *testing.T) {
+	// Verify filter modules execute normally in dry-run mode (data is transformed)
+	inputData := []map[string]interface{}{
+		{"id": "1", "value": 10},
+		{"id": "2", "value": 20},
+	}
+
+	transformCalled := false
+	transformFilter := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
+		transformCalled = true
+		result := make([]map[string]interface{}, len(records))
+		for i, r := range records {
+			newRecord := make(map[string]interface{})
+			for k, v := range r {
+				newRecord[k] = v
+			}
+			// Transform: double the value
+			if val, ok := newRecord["value"].(int); ok {
+				newRecord["value"] = val * 2
+			}
+			result[i] = newRecord
+		}
+		return result, nil
+	})
+
+	mockInput := NewMockInputModule(inputData, nil)
+	mockOutput := NewMockPreviewableOutputModule([]output.RequestPreview{
+		{Endpoint: "https://api.example.com", Method: "POST", RecordCount: 2},
+	})
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-filter-test",
+		Name:    "Dry Run Filter Test",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, []filter.Module{transformFilter}, mockOutput, true)
+
+	// Act
+	result, err := executor.Execute(pipeline)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+
+	// Filter should be called
+	if !transformCalled {
+		t.Error("Filter transform should be called in dry-run mode")
+	}
+
+	// Preview should receive transformed data
+	if len(mockOutput.previewRecords) != 2 {
+		t.Fatalf("Preview received %d records, expected 2", len(mockOutput.previewRecords))
+	}
+
+	// Verify transformation was applied
+	if val, ok := mockOutput.previewRecords[0]["value"].(int); !ok || val != 20 {
+		t.Errorf("Expected transformed value 20, got %v", mockOutput.previewRecords[0]["value"])
+	}
+
+	if result.Status != "success" {
+		t.Errorf("Expected status success, got %s", result.Status)
+	}
+}
+
+func TestExecutor_DryRun_InputError_ReportedCorrectly(t *testing.T) {
+	// Verify input errors are reported the same in dry-run as normal mode
+	inputErr := errors.New("failed to fetch data from source")
+	mockInput := NewMockInputModule(nil, inputErr)
+	mockOutput := NewMockPreviewableOutputModule(nil)
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-input-error-test",
+		Name:    "Dry Run Input Error Test",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, nil, mockOutput, true)
+
+	// Act
+	result, err := executor.Execute(pipeline)
+
+	// Assert
+	if err == nil {
+		t.Fatal("Execute() should return error when input fails in dry-run mode")
+	}
+
+	if result == nil {
+		t.Fatal("Execute() should return result even on input error")
+	}
+
+	if result.Status != "error" {
+		t.Errorf("Expected status 'error', got '%s'", result.Status)
+	}
+
+	if result.Error == nil {
+		t.Error("Expected Error details in result")
+	} else if result.Error.Module != "input" {
+		t.Errorf("Expected error module 'input', got '%s'", result.Error.Module)
+	}
+
+	// Preview should NOT be called when input fails
+	if mockOutput.previewCalled {
+		t.Error("Preview should NOT be called when input fails")
+	}
+}
+
+func TestExecutor_DryRun_FilterError_ReportedCorrectly(t *testing.T) {
+	// Verify filter errors are reported the same in dry-run as normal mode
+	inputData := []map[string]interface{}{{"id": "1"}}
+	filterErr := errors.New("transformation failed")
+
+	mockInput := NewMockInputModule(inputData, nil)
+	mockFilter := NewMockFilterModuleWithError(filterErr)
+	mockOutput := NewMockPreviewableOutputModule(nil)
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-filter-error-test",
+		Name:    "Dry Run Filter Error Test",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, []filter.Module{mockFilter}, mockOutput, true)
+
+	// Act
+	result, err := executor.Execute(pipeline)
+
+	// Assert
+	if err == nil {
+		t.Fatal("Execute() should return error when filter fails in dry-run mode")
+	}
+
+	if result == nil {
+		t.Fatal("Execute() should return result even on filter error")
+	}
+
+	if result.Status != "error" {
+		t.Errorf("Expected status 'error', got '%s'", result.Status)
+	}
+
+	if result.Error == nil {
+		t.Error("Expected Error details in result")
+	} else if result.Error.Module != "filter" {
+		t.Errorf("Expected error module 'filter', got '%s'", result.Error.Module)
+	}
+
+	// Preview should NOT be called when filter fails
+	if mockOutput.previewCalled {
+		t.Error("Preview should NOT be called when filter fails")
+	}
+}
+
+func TestExecutor_DryRun_MultipleFiltersSequence(t *testing.T) {
+	// Test that multiple filters execute in correct order in dry-run mode
+	var executionOrder []int
+
+	filter1 := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
+		executionOrder = append(executionOrder, 1)
+		return records, nil
+	})
+
+	filter2 := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
+		executionOrder = append(executionOrder, 2)
+		return records, nil
+	})
+
+	filter3 := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
+		executionOrder = append(executionOrder, 3)
+		return records, nil
+	})
+
+	inputData := []map[string]interface{}{{"id": "1"}}
+	mockInput := NewMockInputModule(inputData, nil)
+	mockOutput := NewMockPreviewableOutputModule([]output.RequestPreview{
+		{Endpoint: "https://api.example.com", Method: "POST", RecordCount: 1},
+	})
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-sequence-test",
+		Name:    "Dry Run Sequence Test",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, []filter.Module{filter1, filter2, filter3}, mockOutput, true)
+
+	// Act
+	_, err := executor.Execute(pipeline)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+
+	// All filters should execute in order
+	if len(executionOrder) != 3 {
+		t.Fatalf("Expected 3 filters to execute, got %d", len(executionOrder))
+	}
+
+	for i, order := range executionOrder {
+		expected := i + 1
+		if order != expected {
+			t.Errorf("Filter at position %d executed with order %d, expected %d", i, order, expected)
+		}
+	}
+}
+
+func TestExecutor_DryRun_CompletePipelineFlow(t *testing.T) {
+	// Integration test: complete Input → Filter → Preview flow
+	inputData := []map[string]interface{}{
+		{"id": "1", "name": "Alice", "score": 85},
+		{"id": "2", "name": "Bob", "score": 92},
+		{"id": "3", "name": "Charlie", "score": 78},
+	}
+
+	// Filter: only keep scores > 80
+	filterAbove80 := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
+		var result []map[string]interface{}
+		for _, r := range records {
+			if score, ok := r["score"].(int); ok && score > 80 {
+				result = append(result, r)
+			}
+		}
+		return result, nil
+	})
+
+	mockInput := NewMockInputModule(inputData, nil)
+	mockOutput := NewMockPreviewableOutputModule([]output.RequestPreview{
+		{
+			Endpoint:    "https://api.example.com/scores",
+			Method:      "POST",
+			Headers:     map[string]string{"Content-Type": "application/json"},
+			RecordCount: 2,
+		},
+	})
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-complete-flow",
+		Name:    "Dry Run Complete Flow Test",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, []filter.Module{filterAbove80}, mockOutput, true)
+
+	// Act
+	result, err := executor.Execute(pipeline)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+
+	// Verify complete flow
+	if !mockInput.fetchCalled {
+		t.Error("Input should be called")
+	}
+
+	if !filterAbove80.processCalled {
+		t.Error("Filter should be called")
+	}
+
+	if !mockOutput.previewCalled {
+		t.Error("Preview should be called")
+	}
+
+	if mockOutput.sendCalled {
+		t.Error("Send should NOT be called in dry-run mode")
+	}
+
+	// Verify filtered data (only 2 records with score > 80)
+	if len(mockOutput.previewRecords) != 2 {
+		t.Errorf("Expected 2 filtered records, got %d", len(mockOutput.previewRecords))
+	}
+
+	// Verify result
+	if result.Status != "success" {
+		t.Errorf("Expected status success, got %s", result.Status)
+	}
+
+	if result.RecordsProcessed != 2 {
+		t.Errorf("Expected 2 records processed (filtered), got %d", result.RecordsProcessed)
+	}
+
+	// Verify dry-run preview is present
+	if result.DryRunPreview == nil {
+		t.Error("DryRunPreview should be set")
+	} else if len(result.DryRunPreview) != 1 {
+		t.Errorf("Expected 1 preview, got %d", len(result.DryRunPreview))
+	} else if result.DryRunPreview[0].RecordCount != 2 {
+		t.Errorf("Expected preview record count 2, got %d", result.DryRunPreview[0].RecordCount)
+	}
+}
+
+// =============================================================================
+// Story 4.2: Dry-Run Mode - Task 5: Error Reporting Tests
+// =============================================================================
+
+func TestExecutor_DryRun_InputErrorDetails(t *testing.T) {
+	// Test that input error details are comprehensive in dry-run mode
+	inputErr := errors.New("connection refused: unable to connect to source API")
+	mockInput := NewMockInputModule(nil, inputErr)
+	mockOutput := NewMockPreviewableOutputModule(nil)
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-input-error-detail",
+		Name:    "Dry Run Input Error Detail Test",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, nil, mockOutput, true)
+
+	// Act
+	result, err := executor.Execute(pipeline)
+
+	// Assert
+	if err == nil {
+		t.Fatal("Should return error on input failure")
+	}
+
+	// Error message should contain the original error
+	if result.Error == nil {
+		t.Fatal("Result should contain error details")
+	}
+
+	if result.Error.Code != "INPUT_FAILED" {
+		t.Errorf("Expected error code INPUT_FAILED, got %s", result.Error.Code)
+	}
+
+	if result.Error.Module != "input" {
+		t.Errorf("Expected module 'input', got %s", result.Error.Module)
+	}
+
+	// Error message should be descriptive
+	if result.Error.Message == "" {
+		t.Error("Error message should not be empty")
+	}
+}
+
+func TestExecutor_DryRun_FilterErrorDetails(t *testing.T) {
+	// Test that filter error details include filter index
+	inputData := []map[string]interface{}{{"id": "1"}}
+	filterErr := errors.New("invalid expression: missing operand")
+
+	mockInput := NewMockInputModule(inputData, nil)
+	mockFilter1 := NewMockFilterModule(nil)                // First filter succeeds
+	mockFilter2 := NewMockFilterModuleWithError(filterErr) // Second filter fails
+	mockOutput := NewMockPreviewableOutputModule(nil)
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-filter-error-detail",
+		Name:    "Dry Run Filter Error Detail Test",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, []filter.Module{mockFilter1, mockFilter2}, mockOutput, true)
+
+	// Act
+	result, err := executor.Execute(pipeline)
+
+	// Assert
+	if err == nil {
+		t.Fatal("Should return error on filter failure")
+	}
+
+	if result.Error == nil {
+		t.Fatal("Result should contain error details")
+	}
+
+	if result.Error.Code != "FILTER_FAILED" {
+		t.Errorf("Expected error code FILTER_FAILED, got %s", result.Error.Code)
+	}
+
+	if result.Error.Module != "filter" {
+		t.Errorf("Expected module 'filter', got %s", result.Error.Module)
+	}
+
+	// Error details should include filter index
+	if result.Error.Details == nil {
+		t.Error("Error details should not be nil")
+	} else if idx, ok := result.Error.Details["filterIndex"]; !ok || idx != 1 {
+		t.Errorf("Expected filterIndex 1 in details, got %v", idx)
+	}
+}
+
+func TestExecutor_DryRun_PreviewError_DoesNotFailExecution(t *testing.T) {
+	// Test that preview errors don't fail the execution (informational only)
+	inputData := []map[string]interface{}{{"id": "1"}}
+	mockInput := NewMockInputModule(inputData, nil)
+
+	mockOutput := NewMockPreviewableOutputModule(nil)
+	mockOutput.previewErr = errors.New("failed to marshal request body")
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-preview-error-no-fail",
+		Name:    "Dry Run Preview Error No Fail Test",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, nil, mockOutput, true)
+
+	// Act
+	result, err := executor.Execute(pipeline)
+
+	// Assert - execution should succeed even though preview failed
+	if err != nil {
+		t.Errorf("Preview error should not fail execution, got error: %v", err)
+	}
+
+	if result.Status != "success" {
+		t.Errorf("Status should be success despite preview error, got %s", result.Status)
+	}
+
+	// DryRunPreview should contain error preview (not nil) to inform user of the failure
+	if result.DryRunPreview == nil {
+		t.Error("DryRunPreview should contain error preview when preview generation fails")
+	} else if len(result.DryRunPreview) != 1 {
+		t.Errorf("Expected 1 error preview, got %d", len(result.DryRunPreview))
+	} else {
+		errorPreview := result.DryRunPreview[0]
+		if errorPreview.Endpoint != "[PREVIEW GENERATION FAILED]" {
+			t.Errorf("Expected error preview endpoint '[PREVIEW GENERATION FAILED]', got '%s'", errorPreview.Endpoint)
+		}
+		if errorPreview.Method != "[UNKNOWN]" {
+			t.Errorf("Expected error preview method '[UNKNOWN]', got '%s'", errorPreview.Method)
+		}
+		if !strings.Contains(errorPreview.BodyPreview, "Failed to generate preview") {
+			t.Errorf("Error preview body should contain error message, got: %s", errorPreview.BodyPreview)
+		}
+	}
+
+	// Records should still be counted
+	if result.RecordsProcessed != 1 {
+		t.Errorf("Expected 1 record processed, got %d", result.RecordsProcessed)
+	}
+}
+
+func TestExecutor_DryRun_NilPipeline_ErrorDetails(t *testing.T) {
+	// Test that nil pipeline error is reported clearly in dry-run mode
+	mockInput := NewMockInputModule(nil, nil)
+	mockOutput := NewMockPreviewableOutputModule(nil)
+
+	executor := NewExecutorWithModules(mockInput, nil, mockOutput, true)
+
+	// Act
+	result, err := executor.Execute(nil)
+
+	// Assert
+	if err == nil {
+		t.Fatal("Should return error for nil pipeline")
+	}
+
+	if result == nil {
+		t.Fatal("Should return result even for nil pipeline")
+	}
+
+	if result.Error == nil {
+		t.Fatal("Result should contain error details")
+	}
+
+	if result.Error.Code != "INVALID_INPUT" {
+		t.Errorf("Expected error code INVALID_INPUT, got %s", result.Error.Code)
+	}
+}
+
+func TestExecutor_DryRun_ShowCredentials_EndToEnd(t *testing.T) {
+	// Test that DryRunOptions.ShowCredentials from pipeline config is respected end-to-end
+	inputData := []map[string]interface{}{
+		{"id": "1", "name": "Test"},
+	}
+	mockInput := NewMockInputModule(inputData, nil)
+
+	// Create a mock that tracks the PreviewOptions passed to it
+	var receivedOpts output.PreviewOptions
+	mockOutput := &MockPreviewableOutputModuleWithOpts{
+		previewResponses: []output.RequestPreview{
+			{Endpoint: "https://api.example.com", Method: "POST", RecordCount: 1},
+		},
+		receivedOpts: &receivedOpts,
+	}
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-show-credentials-test",
+		Name:    "Dry Run Show Credentials Test",
+		Version: "1.0.0",
+		Enabled: true,
+		DryRunOptions: &connector.DryRunOptions{
+			ShowCredentials: true, // Enable credentials display
+		},
+	}
+
+	executor := NewExecutorWithModules(mockInput, nil, mockOutput, true) // dry-run = true
+
+	// Act
+	result, err := executor.Execute(pipeline)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+
+	if result.Status != "success" {
+		t.Errorf("Expected status 'success', got '%s'", result.Status)
+	}
+
+	// Verify that ShowCredentials was passed correctly
+	if !receivedOpts.ShowCredentials {
+		t.Error("DryRunOptions.ShowCredentials=true should be passed to PreviewRequest")
+	}
+
+	// Verify preview was generated
+	if len(result.DryRunPreview) == 0 {
+		t.Error("DryRunPreview should be set when ShowCredentials is enabled")
+	}
+}
+
+// MockPreviewableOutputModuleWithOpts tracks the PreviewOptions passed to PreviewRequest
+type MockPreviewableOutputModuleWithOpts struct {
+	previewResponses []output.RequestPreview
+	receivedOpts     *output.PreviewOptions
+}
+
+func (m *MockPreviewableOutputModuleWithOpts) Send(records []map[string]interface{}) (int, error) {
+	return len(records), nil
+}
+
+func (m *MockPreviewableOutputModuleWithOpts) Close() error {
+	return nil
+}
+
+func (m *MockPreviewableOutputModuleWithOpts) PreviewRequest(records []map[string]interface{}, opts output.PreviewOptions) ([]output.RequestPreview, error) {
+	*m.receivedOpts = opts // Capture the options
+	return m.previewResponses, nil
+}
+
+// Verify MockPreviewableOutputModuleWithOpts implements output.PreviewableModule
+var _ output.PreviewableModule = (*MockPreviewableOutputModuleWithOpts)(nil)
+
+func TestExecutor_DryRun_NilInputModule_ErrorDetails(t *testing.T) {
+	// Test that nil input module error is reported clearly
+	mockOutput := NewMockPreviewableOutputModule(nil)
+
+	pipeline := &connector.Pipeline{
+		ID:      "dry-run-nil-input",
+		Name:    "Dry Run Nil Input Test",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(nil, nil, mockOutput, true)
+
+	// Act
+	result, err := executor.Execute(pipeline)
+
+	// Assert
+	if err == nil {
+		t.Fatal("Should return error for nil input module")
+	}
+
+	if result == nil {
+		t.Fatal("Should return result even for nil input")
+	}
+
+	if result.Error == nil {
+		t.Fatal("Result should contain error details")
+	}
+
+	if result.Error.Code != "INVALID_INPUT" {
+		t.Errorf("Expected error code INVALID_INPUT, got %s", result.Error.Code)
+	}
+
+	if result.Error.Module != "input" {
+		t.Errorf("Expected module 'input', got %s", result.Error.Module)
 	}
 }

@@ -781,3 +781,235 @@ func (h *HTTPRequestModule) Close() error {
 	)
 	return nil
 }
+
+// PreviewRequest prepares request previews without actually sending HTTP requests.
+// This is used in dry-run mode to show what would be sent to the target system.
+//
+// Returns one preview per request that would be made:
+//   - Batch mode (bodyFrom="records"): returns 1 preview for all records
+//   - Single record mode (bodyFrom="record"): returns N previews (one per record)
+//
+// By default, authentication headers are masked for security.
+// Set opts.ShowCredentials to true to display actual credential values (for debugging).
+func (h *HTTPRequestModule) PreviewRequest(records []map[string]interface{}, opts PreviewOptions) ([]RequestPreview, error) {
+	// Handle empty/nil records gracefully
+	if len(records) == 0 {
+		return []RequestPreview{}, nil
+	}
+
+	// Choose preview mode based on configuration
+	if h.request.BodyFrom == "record" {
+		return h.previewSingleRecordMode(records, opts)
+	}
+
+	return h.previewBatchMode(records, opts)
+}
+
+// previewBatchMode creates a single preview for all records (batch mode)
+func (h *HTTPRequestModule) previewBatchMode(records []map[string]interface{}, opts PreviewOptions) ([]RequestPreview, error) {
+	// Resolve endpoint with static query parameters
+	endpoint := h.resolveEndpointWithStaticQuery(h.endpoint)
+
+	// Marshal records to formatted JSON
+	bodyPreview, err := formatJSONPreview(records)
+	if err != nil {
+		return nil, fmt.Errorf("formatting body preview: %w", err)
+	}
+
+	// Build headers (masked or unmasked based on options)
+	headers := h.buildPreviewHeaders(nil, opts)
+
+	preview := RequestPreview{
+		Endpoint:    endpoint,
+		Method:      h.method,
+		Headers:     headers,
+		BodyPreview: bodyPreview,
+		RecordCount: len(records),
+	}
+
+	return []RequestPreview{preview}, nil
+}
+
+// previewSingleRecordMode creates one preview per record
+func (h *HTTPRequestModule) previewSingleRecordMode(records []map[string]interface{}, opts PreviewOptions) ([]RequestPreview, error) {
+	previews := make([]RequestPreview, 0, len(records))
+
+	for _, record := range records {
+		// Resolve endpoint with path parameters and query params from record
+		endpoint := h.resolveEndpointForRecord(record)
+
+		// Marshal single record to formatted JSON
+		bodyPreview, err := formatJSONPreview(record)
+		if err != nil {
+			return nil, fmt.Errorf("formatting body preview: %w", err)
+		}
+
+		// Extract headers from record data
+		recordHeaders := h.extractHeadersFromRecord(record)
+
+		// Build headers (masked or unmasked based on options)
+		headers := h.buildPreviewHeaders(recordHeaders, opts)
+
+		preview := RequestPreview{
+			Endpoint:    endpoint,
+			Method:      h.method,
+			Headers:     headers,
+			BodyPreview: bodyPreview,
+			RecordCount: 1,
+		}
+
+		previews = append(previews, preview)
+	}
+
+	return previews, nil
+}
+
+// buildPreviewHeaders constructs the headers map for preview
+// If opts.ShowCredentials is false, sensitive auth headers are masked
+func (h *HTTPRequestModule) buildPreviewHeaders(recordHeaders map[string]string, opts PreviewOptions) map[string]string {
+	headers := make(map[string]string)
+
+	// Set default headers
+	headers["User-Agent"] = defaultUserAgent
+	headers["Content-Type"] = defaultContentType
+
+	// Set custom headers from config (may override defaults)
+	for key, value := range h.headers {
+		headers[key] = value
+	}
+
+	// Set headers from record data (may override config headers)
+	for key, value := range recordHeaders {
+		headers[key] = value
+	}
+
+	// Add authentication headers LAST (masked unless showCredentials is enabled)
+	// This ensures auth headers are always present and masked, even if custom/record headers tried to override
+	if opts.ShowCredentials {
+		h.addUnmaskedAuthHeaders(headers)
+	} else {
+		h.addMaskedAuthHeaders(headers)
+	}
+
+	return headers
+}
+
+// addMaskedAuthHeaders adds authentication headers to the map with sensitive values masked
+func (h *HTTPRequestModule) addMaskedAuthHeaders(headers map[string]string) {
+	if h.authHandler == nil {
+		return
+	}
+
+	authType := h.authHandler.Type()
+	switch authType {
+	case "api-key":
+		headerName := h.detectAPIKeyHeaderName()
+		headers[headerName] = maskValue("api-key")
+	case "bearer":
+		headers["Authorization"] = "Bearer " + maskValue("token")
+	case "basic":
+		headers["Authorization"] = "Basic " + maskValue("credentials")
+	case "oauth2":
+		headers["Authorization"] = "Bearer " + maskValue("oauth2-token")
+	default:
+		if _, hasAuth := headers["Authorization"]; !hasAuth {
+			headers["Authorization"] = maskValue("auth")
+		}
+	}
+}
+
+// detectAPIKeyHeaderName determines the header name used for API key authentication.
+// It creates a mock request and applies auth to detect which header is set.
+// Returns "X-API-Key" as fallback if detection fails.
+//
+// Note: Go's http.Header normalizes header names using CanonicalMIMEHeaderKey,
+// so "X-API-Key" becomes "X-Api-Key". We return the normalized name.
+func (h *HTTPRequestModule) detectAPIKeyHeaderName() string {
+	const defaultAPIKeyHeader = "X-API-Key"
+
+	ctx := context.Background()
+	mockReq, err := http.NewRequestWithContext(ctx, "GET", "http://example.com", nil)
+	if err != nil {
+		return defaultAPIKeyHeader
+	}
+
+	if err := h.authHandler.ApplyAuth(ctx, mockReq); err != nil {
+		return defaultAPIKeyHeader
+	}
+
+	// Find the header added by auth handler (excluding standard headers)
+	// Header names are normalized by Go's http package (e.g., "X-API-Key" -> "X-Api-Key")
+	standardHeaders := map[string]bool{
+		"User-Agent":    true,
+		"Content-Type":  true,
+		"Authorization": true, // API key doesn't use Authorization
+	}
+
+	for headerName, values := range mockReq.Header {
+		if standardHeaders[headerName] {
+			continue
+		}
+		if len(values) > 0 {
+			return headerName // Return the normalized header name
+		}
+	}
+
+	return defaultAPIKeyHeader
+}
+
+// addUnmaskedAuthHeaders adds authentication headers with actual values (for debugging)
+// WARNING: This exposes sensitive credentials - only use in secure debugging environments
+func (h *HTTPRequestModule) addUnmaskedAuthHeaders(headers map[string]string) {
+	if h.authHandler == nil {
+		return
+	}
+
+	// Create a mock request to see what headers the auth handler would add
+	ctx := context.Background()
+	mockReq, err := http.NewRequestWithContext(ctx, "GET", "http://example.com", nil)
+	if err != nil {
+		return
+	}
+
+	// Apply auth to mock request
+	if err := h.authHandler.ApplyAuth(ctx, mockReq); err != nil {
+		return
+	}
+
+	// Copy all headers from the mock request (including auth headers with real values)
+	for key, values := range mockReq.Header {
+		if len(values) > 0 {
+			headers[key] = values[0]
+		}
+	}
+}
+
+// maskValue returns a masked version of a sensitive value
+func maskValue(valueType string) string {
+	return "[MASKED-" + strings.ToUpper(valueType) + "]"
+}
+
+// Maximum size for body preview (1MB) to prevent memory issues with very large payloads
+const maxBodyPreviewSize = 1 * 1024 * 1024
+
+// formatJSONPreview formats data as indented JSON for preview.
+// If the formatted JSON exceeds maxBodyPreviewSize, it truncates with an indication.
+func formatJSONPreview(data interface{}) (string, error) {
+	formatted, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return "", err
+	}
+
+	formattedStr := string(formatted)
+	if len(formattedStr) > maxBodyPreviewSize {
+		// Truncate and add indication
+		truncated := formattedStr[:maxBodyPreviewSize]
+		// Try to truncate at a line boundary
+		if lastNewline := strings.LastIndex(truncated, "\n"); lastNewline > maxBodyPreviewSize-100 {
+			truncated = truncated[:lastNewline]
+		}
+		formattedStr = truncated + fmt.Sprintf("\n... (truncated, %d bytes total, %d bytes shown)", len(formatted), len(truncated))
+	}
+
+	return formattedStr, nil
+}

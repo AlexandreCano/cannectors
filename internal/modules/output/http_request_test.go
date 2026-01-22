@@ -2700,3 +2700,655 @@ func TestHTTPRequest_NoRandomBehavior(t *testing.T) {
 		t.Errorf("extra fields added: expected 2 fields, got %d", len(body[0]))
 	}
 }
+
+// =============================================================================
+// Story 4.2: Dry-Run Mode - Task 1: Request Preview Functionality Tests
+// =============================================================================
+
+func TestHTTPRequest_PreviewRequest_BatchMode(t *testing.T) {
+	config := newModuleConfig(map[string]interface{}{
+		"endpoint": "https://api.example.com/data",
+		"method":   "POST",
+		"headers": map[string]interface{}{
+			"X-Custom-Header": "custom-value",
+		},
+	})
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{
+		{"id": 1, "name": "first"},
+		{"id": 2, "name": "second"},
+	}
+
+	previews, err := module.PreviewRequest(records, PreviewOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Batch mode should return 1 preview (single request for all records)
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview (batch mode), got %d", len(previews))
+	}
+
+	preview := previews[0]
+
+	// Verify endpoint URL
+	if preview.Endpoint != "https://api.example.com/data" {
+		t.Errorf("expected endpoint https://api.example.com/data, got %s", preview.Endpoint)
+	}
+
+	// Verify HTTP method
+	if preview.Method != "POST" {
+		t.Errorf("expected method POST, got %s", preview.Method)
+	}
+
+	// Verify headers include custom header
+	if preview.Headers["X-Custom-Header"] != "custom-value" {
+		t.Errorf("expected X-Custom-Header: custom-value, got %s", preview.Headers["X-Custom-Header"])
+	}
+
+	// Verify Content-Type is set
+	if preview.Headers["Content-Type"] != "application/json" {
+		t.Errorf("expected Content-Type: application/json, got %s", preview.Headers["Content-Type"])
+	}
+
+	// Verify record count
+	if preview.RecordCount != 2 {
+		t.Errorf("expected RecordCount 2, got %d", preview.RecordCount)
+	}
+
+	// Verify body preview is valid JSON array
+	var body []map[string]interface{}
+	if err := json.Unmarshal([]byte(preview.BodyPreview), &body); err != nil {
+		t.Fatalf("body preview should be valid JSON: %v", err)
+	}
+	if len(body) != 2 {
+		t.Errorf("expected 2 records in body preview, got %d", len(body))
+	}
+}
+
+func TestHTTPRequest_PreviewRequest_SingleRecordMode(t *testing.T) {
+	config := newModuleConfig(map[string]interface{}{
+		"endpoint": "https://api.example.com/data",
+		"method":   "POST",
+		"request": map[string]interface{}{
+			"bodyFrom": "record",
+		},
+	})
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{
+		{"id": 1, "name": "first"},
+		{"id": 2, "name": "second"},
+		{"id": 3, "name": "third"},
+	}
+
+	previews, err := module.PreviewRequest(records, PreviewOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Single record mode should return 3 previews (one per record)
+	if len(previews) != 3 {
+		t.Fatalf("expected 3 previews (single record mode), got %d", len(previews))
+	}
+
+	// Verify each preview
+	for i, preview := range previews {
+		// Verify method
+		if preview.Method != "POST" {
+			t.Errorf("preview %d: expected method POST, got %s", i, preview.Method)
+		}
+
+		// Verify record count is 1 per request
+		if preview.RecordCount != 1 {
+			t.Errorf("preview %d: expected RecordCount 1, got %d", i, preview.RecordCount)
+		}
+
+		// Verify body is a single object (not array)
+		var body map[string]interface{}
+		if err := json.Unmarshal([]byte(preview.BodyPreview), &body); err != nil {
+			t.Errorf("preview %d: body preview should be valid JSON object: %v", i, err)
+		}
+
+		expectedID := float64(i + 1)
+		if body["id"] != expectedID {
+			t.Errorf("preview %d: expected id=%v, got %v", i, expectedID, body["id"])
+		}
+	}
+}
+
+func TestHTTPRequest_PreviewRequest_PathParameters(t *testing.T) {
+	config := newModuleConfig(map[string]interface{}{
+		"endpoint": "https://api.example.com/users/{userId}/orders/{orderId}",
+		"method":   "PUT",
+		"request": map[string]interface{}{
+			"bodyFrom": "record",
+			"pathParams": map[string]interface{}{
+				"userId":  "user.id",
+				"orderId": "order_id",
+			},
+		},
+	})
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{
+		{
+			"user":     map[string]interface{}{"id": "user123"},
+			"order_id": "order456",
+			"amount":   99.99,
+		},
+	}
+
+	previews, err := module.PreviewRequest(records, PreviewOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+
+	// Path should have substituted values
+	expectedEndpoint := "https://api.example.com/users/user123/orders/order456"
+	if previews[0].Endpoint != expectedEndpoint {
+		t.Errorf("expected endpoint %s, got %s", expectedEndpoint, previews[0].Endpoint)
+	}
+}
+
+func TestHTTPRequest_PreviewRequest_QueryParameters(t *testing.T) {
+	config := newModuleConfig(map[string]interface{}{
+		"endpoint": "https://api.example.com/data",
+		"method":   "POST",
+		"request": map[string]interface{}{
+			"query": map[string]interface{}{
+				"status": "active",
+				"limit":  "100",
+			},
+		},
+	})
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{{"test": "data"}}
+
+	previews, err := module.PreviewRequest(records, PreviewOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+
+	// Endpoint should include query parameters
+	endpoint := previews[0].Endpoint
+	if !strings.Contains(endpoint, "status=active") {
+		t.Errorf("expected status=active in endpoint, got %s", endpoint)
+	}
+	if !strings.Contains(endpoint, "limit=100") {
+		t.Errorf("expected limit=100 in endpoint, got %s", endpoint)
+	}
+}
+
+func TestHTTPRequest_PreviewRequest_QueryParametersFromRecord(t *testing.T) {
+	config := newModuleConfig(map[string]interface{}{
+		"endpoint": "https://api.example.com/data",
+		"method":   "POST",
+		"request": map[string]interface{}{
+			"bodyFrom": "record",
+			"queryFromRecord": map[string]interface{}{
+				"filter_status": "status",
+				"user_type":     "type",
+			},
+		},
+	})
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{
+		{"status": "pending", "type": "admin", "name": "John"},
+	}
+
+	previews, err := module.PreviewRequest(records, PreviewOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+
+	// Endpoint should include query parameters from record
+	endpoint := previews[0].Endpoint
+	if !strings.Contains(endpoint, "filter_status=pending") {
+		t.Errorf("expected filter_status=pending in endpoint, got %s", endpoint)
+	}
+	if !strings.Contains(endpoint, "user_type=admin") {
+		t.Errorf("expected user_type=admin in endpoint, got %s", endpoint)
+	}
+}
+
+func TestHTTPRequest_PreviewRequest_AuthHeadersMasked_APIKey(t *testing.T) {
+	config := newModuleConfigWithAuth(
+		map[string]interface{}{
+			"endpoint": "https://api.example.com/data",
+			"method":   "POST",
+		},
+		"api-key",
+		map[string]string{
+			"key":        "super-secret-api-key-12345",
+			"location":   "header",
+			"headerName": "X-API-Key",
+		},
+	)
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{{"test": "data"}}
+
+	previews, err := module.PreviewRequest(records, PreviewOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+
+	// API key should be masked in preview
+	// Note: Go normalizes header names, so "X-API-Key" becomes "X-Api-Key"
+	apiKeyHeader := findHeaderCaseInsensitive(previews[0].Headers, "X-API-Key")
+	if apiKeyHeader == "super-secret-api-key-12345" {
+		t.Error("API key should be masked in preview, but was shown in plain text")
+	}
+	if apiKeyHeader == "" {
+		t.Errorf("API key header should be present (masked), but was empty. Headers: %v", previews[0].Headers)
+	}
+	// Should contain mask indicator (format: [MASKED-*] or ***)
+	if !strings.Contains(apiKeyHeader, "***") && !strings.Contains(apiKeyHeader, "MASKED") {
+		t.Errorf("API key should be masked with *** or MASKED indicator, got: %s", apiKeyHeader)
+	}
+}
+
+// findHeaderCaseInsensitive finds a header value by case-insensitive key match
+func findHeaderCaseInsensitive(headers map[string]string, key string) string {
+	// First try exact match
+	if val, ok := headers[key]; ok {
+		return val
+	}
+	// Then try case-insensitive match
+	for k, v := range headers {
+		if strings.EqualFold(k, key) {
+			return v
+		}
+	}
+	return ""
+}
+
+func TestHTTPRequest_PreviewRequest_AuthHeadersMasked_Bearer(t *testing.T) {
+	config := newModuleConfigWithAuth(
+		map[string]interface{}{
+			"endpoint": "https://api.example.com/data",
+			"method":   "POST",
+		},
+		"bearer",
+		map[string]string{
+			"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.super-secret-payload",
+		},
+	)
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{{"test": "data"}}
+
+	previews, err := module.PreviewRequest(records, PreviewOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+
+	// Authorization header should be masked
+	authHeader := previews[0].Headers["Authorization"]
+	if strings.Contains(authHeader, "super-secret-payload") {
+		t.Error("Bearer token payload should be masked in preview")
+	}
+	if authHeader == "" {
+		t.Error("Authorization header should be present (masked), but was empty")
+	}
+	// Should start with Bearer and contain mask
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		t.Errorf("Authorization should start with 'Bearer ', got: %s", authHeader)
+	}
+}
+
+func TestHTTPRequest_PreviewRequest_AuthHeadersMasked_Basic(t *testing.T) {
+	config := newModuleConfigWithAuth(
+		map[string]interface{}{
+			"endpoint": "https://api.example.com/data",
+			"method":   "POST",
+		},
+		"basic",
+		map[string]string{
+			"username": "testuser",
+			"password": "super-secret-password",
+		},
+	)
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{{"test": "data"}}
+
+	previews, err := module.PreviewRequest(records, PreviewOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+
+	// Authorization header should be masked
+	authHeader := previews[0].Headers["Authorization"]
+	if authHeader == "" {
+		t.Error("Authorization header should be present (masked), but was empty")
+	}
+	// Should start with Basic and contain mask
+	if !strings.HasPrefix(authHeader, "Basic ") {
+		t.Errorf("Authorization should start with 'Basic ', got: %s", authHeader)
+	}
+	// Should NOT contain the actual base64 encoded credentials
+	if strings.Contains(authHeader, "dGVzdHVzZXI6c3VwZXItc2VjcmV0LXBhc3N3b3Jk") {
+		t.Error("Basic auth credentials should be masked in preview")
+	}
+}
+
+func TestHTTPRequest_PreviewRequest_ShowCredentials_Bearer(t *testing.T) {
+	// Test that credentials are shown when ShowCredentials is true
+	config := newModuleConfigWithAuth(
+		map[string]interface{}{
+			"endpoint": "https://api.example.com/data",
+			"method":   "POST",
+		},
+		"bearer",
+		map[string]string{
+			"token": "my-secret-bearer-token-12345",
+		},
+	)
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{{"test": "data"}}
+
+	// With ShowCredentials = true
+	previews, err := module.PreviewRequest(records, PreviewOptions{ShowCredentials: true})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+
+	// Authorization header should contain the actual token
+	authHeader := previews[0].Headers["Authorization"]
+	if authHeader == "" {
+		t.Error("Authorization header should be present")
+	}
+	// Should contain the actual token
+	if !strings.Contains(authHeader, "my-secret-bearer-token-12345") {
+		t.Errorf("Authorization should contain actual token with ShowCredentials=true, got: %s", authHeader)
+	}
+	// Should NOT be masked
+	if strings.Contains(authHeader, "[MASKED") {
+		t.Errorf("Authorization should NOT be masked with ShowCredentials=true, got: %s", authHeader)
+	}
+}
+
+func TestHTTPRequest_PreviewRequest_ShowCredentials_APIKey(t *testing.T) {
+	// Test that API key is shown when ShowCredentials is true
+	config := newModuleConfigWithAuth(
+		map[string]interface{}{
+			"endpoint": "https://api.example.com/data",
+			"method":   "POST",
+		},
+		"api-key",
+		map[string]string{
+			"key":        "secret-api-key-xyz789",
+			"headerName": "X-Api-Key",
+			"location":   "header",
+		},
+	)
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{{"test": "data"}}
+
+	// With ShowCredentials = true
+	previews, err := module.PreviewRequest(records, PreviewOptions{ShowCredentials: true})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+
+	// Check for API key in headers (http package canonicalizes header names)
+	// X-Api-Key becomes X-Api-Key in canonical form
+	var apiKeyHeader string
+	for key, value := range previews[0].Headers {
+		if strings.EqualFold(key, "X-Api-Key") {
+			apiKeyHeader = value
+			break
+		}
+	}
+
+	if apiKeyHeader == "" {
+		t.Logf("Headers received: %v", previews[0].Headers)
+		t.Error("API key header should be present")
+		return
+	}
+
+	// Should contain the actual key
+	if apiKeyHeader != "secret-api-key-xyz789" {
+		t.Errorf("API key should be actual key with ShowCredentials=true, got: %s", apiKeyHeader)
+	}
+}
+
+func TestHTTPRequest_PreviewRequest_EmptyRecords(t *testing.T) {
+	config := newModuleConfig(map[string]interface{}{
+		"endpoint": "https://api.example.com/data",
+		"method":   "POST",
+	})
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	// Empty records
+	previews, err := module.PreviewRequest([]map[string]interface{}{}, PreviewOptions{})
+	if err != nil {
+		t.Fatalf("expected no error for empty records, got %v", err)
+	}
+	if len(previews) != 0 {
+		t.Errorf("expected 0 previews for empty records, got %d", len(previews))
+	}
+
+	// Nil records
+	previews, err = module.PreviewRequest(nil, PreviewOptions{})
+	if err != nil {
+		t.Fatalf("expected no error for nil records, got %v", err)
+	}
+	if len(previews) != 0 {
+		t.Errorf("expected 0 previews for nil records, got %d", len(previews))
+	}
+}
+
+func TestHTTPRequest_PreviewRequest_BodyPreviewFormatted(t *testing.T) {
+	config := newModuleConfig(map[string]interface{}{
+		"endpoint": "https://api.example.com/data",
+		"method":   "POST",
+	})
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{
+		{
+			"user": map[string]interface{}{
+				"name":  "John",
+				"email": "john@example.com",
+			},
+		},
+	}
+
+	previews, err := module.PreviewRequest(records, PreviewOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+
+	// Body preview should be formatted (indented) JSON for readability
+	bodyPreview := previews[0].BodyPreview
+	if !strings.Contains(bodyPreview, "\n") {
+		t.Error("body preview should be formatted with newlines for readability")
+	}
+	if !strings.Contains(bodyPreview, "  ") {
+		t.Error("body preview should be indented for readability")
+	}
+}
+
+func TestHTTPRequest_PreviewRequest_HeadersFromRecord(t *testing.T) {
+	config := newModuleConfig(map[string]interface{}{
+		"endpoint": "https://api.example.com/data",
+		"method":   "POST",
+		"request": map[string]interface{}{
+			"bodyFrom": "record",
+			"headersFromRecord": map[string]interface{}{
+				"X-Correlation-ID": "correlation_id",
+				"X-Request-Source": "source",
+			},
+		},
+	})
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{
+		{
+			"correlation_id": "corr-12345",
+			"source":         "batch-processor",
+			"data":           "test",
+		},
+	}
+
+	previews, err := module.PreviewRequest(records, PreviewOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+
+	// Headers from record should be in preview
+	if previews[0].Headers["X-Correlation-ID"] != "corr-12345" {
+		t.Errorf("expected X-Correlation-ID: corr-12345, got %s", previews[0].Headers["X-Correlation-ID"])
+	}
+	if previews[0].Headers["X-Request-Source"] != "batch-processor" {
+		t.Errorf("expected X-Request-Source: batch-processor, got %s", previews[0].Headers["X-Request-Source"])
+	}
+}
+
+func TestHTTPRequest_PreviewRequest_NoSideEffects(t *testing.T) {
+	// Create a real test server to verify NO requests are made during preview
+	requestCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	config := newModuleConfig(map[string]interface{}{
+		"endpoint": ts.URL + "/api/data",
+		"method":   "POST",
+	})
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{{"test": "data"}}
+
+	// Call preview
+	_, err = module.PreviewRequest(records, PreviewOptions{})
+	if err != nil {
+		t.Fatalf("preview failed: %v", err)
+	}
+
+	// NO HTTP requests should have been made
+	if requestCount != 0 {
+		t.Errorf("preview should NOT make HTTP requests, but %d requests were made", requestCount)
+	}
+}
+
+func TestHTTPRequest_ImplementsPreviewableModule(t *testing.T) {
+	config := newModuleConfig(map[string]interface{}{
+		"endpoint": "https://api.example.com/data",
+		"method":   "POST",
+	})
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	// Verify HTTPRequest implements PreviewableModule interface
+	var _ PreviewableModule = module
+}

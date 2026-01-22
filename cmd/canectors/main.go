@@ -2,9 +2,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -14,6 +18,7 @@ import (
 	"github.com/canectors/runtime/internal/modules/input"
 	"github.com/canectors/runtime/internal/modules/output"
 	"github.com/canectors/runtime/internal/runtime"
+	"github.com/canectors/runtime/internal/scheduler"
 	"github.com/canectors/runtime/pkg/connector"
 )
 
@@ -101,6 +106,15 @@ var runCmd = &cobra.Command{
 The configuration file is first validated against the schema.
 If validation fails, the pipeline will not be executed.
 
+If the configuration includes a 'schedule' field with a CRON expression,
+the pipeline runs on a recurring schedule until interrupted (Ctrl+C).
+Without a schedule, the pipeline executes once and exits.
+
+CRON Schedule (optional):
+  If your config includes "schedule": "*/5 * * * *", the pipeline runs every 5 minutes.
+  Standard format: minute hour day month weekday
+  Extended format: second minute hour day month weekday
+
 Flags:
   --dry-run   Validate and prepare the pipeline without executing output module
 
@@ -111,9 +125,10 @@ Exit codes:
   3 - Runtime errors
 
 Examples:
-  canectors run config.json
-  canectors run --verbose pipeline.yaml
-  canectors run --dry-run config.json`,
+  canectors run config.json                    # Run once
+  canectors run --verbose pipeline.yaml        # Run once with verbose output
+  canectors run --dry-run config.json          # Dry-run mode
+  canectors run scheduled-pipeline.yaml        # Run on CRON schedule (if schedule field present)`,
 	Args: cobra.ExactArgs(1),
 	Run:  runPipeline,
 }
@@ -146,41 +161,61 @@ func runValidate(_ *cobra.Command, args []string) {
 		fmt.Printf("Validating configuration: %s\n", configPath)
 	}
 
-	// Parse and validate configuration
 	result := config.ParseConfig(configPath)
 
-	// Handle parse errors
+	if exitCode := handleConfigErrors(result); exitCode != ExitSuccess {
+		os.Exit(exitCode)
+	}
+
+	printValidationSuccess(result)
+	os.Exit(ExitSuccess)
+}
+
+// handleConfigErrors checks for parse and validation errors and returns the appropriate exit code.
+func handleConfigErrors(result *config.Result) int {
 	if len(result.ParseErrors) > 0 {
 		printParseErrors(result.ParseErrors)
-		os.Exit(ExitParseError)
+		return ExitParseError
 	}
 
-	// Handle validation errors
 	if len(result.ValidationErrors) > 0 {
 		printValidationErrors(result.ValidationErrors)
-		os.Exit(ExitValidationError)
+		return ExitValidationError
 	}
 
-	// Success
-	if !quiet {
-		fmt.Printf("✓ Configuration is valid (format: %s)\n", result.Format)
+	return ExitSuccess
+}
 
-		if verbose {
-			// Print configuration summary
-			if result.Data != nil {
-				if connector, ok := result.Data["connector"].(map[string]interface{}); ok {
-					if name, ok := connector["name"].(string); ok {
-						fmt.Printf("  Connector: %s\n", name)
-					}
-					if connectorVersion, ok := connector["version"].(string); ok {
-						fmt.Printf("  Version: %s\n", connectorVersion)
-					}
-				}
-			}
-		}
+// printValidationSuccess prints success message and optional configuration summary.
+func printValidationSuccess(result *config.Result) {
+	if quiet {
+		return
 	}
 
-	os.Exit(ExitSuccess)
+	fmt.Printf("✓ Configuration is valid (format: %s)\n", result.Format)
+
+	if verbose {
+		printConfigSummary(result.Data)
+	}
+}
+
+// printConfigSummary prints connector name and version if available.
+func printConfigSummary(data map[string]interface{}) {
+	if data == nil {
+		return
+	}
+
+	connector, ok := data["connector"].(map[string]interface{})
+	if !ok {
+		return
+	}
+
+	if name, ok := connector["name"].(string); ok {
+		fmt.Printf("  Connector: %s\n", name)
+	}
+	if connectorVersion, ok := connector["version"].(string); ok {
+		fmt.Printf("  Version: %s\n", connectorVersion)
+	}
 }
 
 func runPipeline(_ *cobra.Command, args []string) {
@@ -223,8 +258,19 @@ func runPipeline(_ *cobra.Command, args []string) {
 		}
 	}
 
+	// Check if pipeline has a schedule - if so, run in scheduler mode
+	if pipeline.Schedule != "" {
+		runScheduledPipeline(pipeline)
+		return
+	}
+
+	// Run pipeline once (no schedule)
+	runPipelineOnce(pipeline)
+}
+
+// runPipelineOnce executes a pipeline a single time and exits.
+func runPipelineOnce(pipeline *connector.Pipeline) {
 	// Create module instances
-	// Note: Mapping filter uses real implementation; other modules are stubbed for now.
 	inputModule := createInputModule(pipeline.Input)
 	filterModules, err := createFilterModules(pipeline.Filters)
 	if err != nil {
@@ -256,11 +302,153 @@ func runPipeline(_ *cobra.Command, args []string) {
 	os.Exit(ExitSuccess)
 }
 
+// runScheduledPipeline runs a pipeline on a CRON schedule until interrupted.
+func runScheduledPipeline(pipeline *connector.Pipeline) {
+	validateScheduledPipeline(pipeline)
+
+	sched := createAndStartScheduler(pipeline)
+
+	printSchedulerStarted(pipeline, sched)
+
+	waitForShutdownSignal(sched)
+}
+
+// validateScheduledPipeline validates the pipeline for scheduled execution.
+func validateScheduledPipeline(pipeline *connector.Pipeline) {
+	if err := scheduler.ValidateCronExpression(pipeline.Schedule); err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Invalid CRON expression: %v\n", err)
+		os.Exit(ExitValidationError)
+	}
+
+	if !pipeline.Enabled {
+		fmt.Fprintln(os.Stderr, "✗ Pipeline is disabled")
+		fmt.Fprintln(os.Stderr, "  Set 'enabled: true' in the configuration to run the pipeline")
+		os.Exit(ExitValidationError)
+	}
+
+	if verbose {
+		fmt.Printf("  Schedule: %s\n", pipeline.Schedule)
+	}
+}
+
+// createAndStartScheduler creates the scheduler, registers the pipeline, and starts it.
+func createAndStartScheduler(pipeline *connector.Pipeline) *scheduler.Scheduler {
+	executorAdapter := &PipelineExecutorAdapter{dryRun: dryRun}
+	sched := scheduler.NewWithExecutor(executorAdapter)
+
+	if err := sched.Register(pipeline); err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Failed to register pipeline with scheduler: %v\n", err)
+		os.Exit(ExitRuntimeError)
+	}
+
+	if err := sched.Start(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Failed to start scheduler: %v\n", err)
+		os.Exit(ExitRuntimeError)
+	}
+
+	return sched
+}
+
+// printSchedulerStarted prints scheduler status information.
+func printSchedulerStarted(pipeline *connector.Pipeline, sched *scheduler.Scheduler) {
+	if quiet {
+		return
+	}
+
+	if dryRun {
+		fmt.Println("🕐 Scheduler started (dry-run mode - output will not be sent)")
+	} else {
+		fmt.Println("🕐 Scheduler started")
+	}
+
+	fmt.Printf("  Pipeline: %s\n", pipeline.ID)
+	fmt.Printf("  Schedule: %s\n", pipeline.Schedule)
+
+	printNextRunTime(pipeline.ID, sched)
+
+	fmt.Println("  Press Ctrl+C to stop...")
+}
+
+// printNextRunTime prints the next scheduled run time if available.
+func printNextRunTime(pipelineID string, sched *scheduler.Scheduler) {
+	nextRun, err := sched.GetNextRun(pipelineID)
+	if err == nil && !nextRun.IsZero() {
+		fmt.Printf("  Next run: %s\n", nextRun.Format(time.RFC3339))
+	} else if verbose {
+		fmt.Printf("  Next run: unavailable (%v)\n", err)
+	}
+}
+
+// waitForShutdownSignal waits for an interrupt signal and gracefully stops the scheduler.
+func waitForShutdownSignal(sched *scheduler.Scheduler) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	sig := <-sigChan
+
+	if !quiet {
+		fmt.Printf("\n⏹ Received %s signal, stopping scheduler...\n", sig)
+	}
+
+	gracefulShutdown(sched)
+}
+
+// gracefulShutdown stops the scheduler with a timeout.
+func gracefulShutdown(sched *scheduler.Scheduler) {
+	stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := sched.Stop(stopCtx); err != nil {
+		fmt.Fprintf(os.Stderr, "⚠ Scheduler stop timeout: %v\n", err)
+		os.Exit(ExitRuntimeError)
+	}
+
+	if !quiet {
+		fmt.Println("✓ Scheduler stopped gracefully")
+	}
+
+	os.Exit(ExitSuccess)
+}
+
 func runVersion(_ *cobra.Command, _ []string) {
 	fmt.Printf("Version: %s\n", version)
 	fmt.Printf("Commit: %s\n", commit)
 	fmt.Printf("Build Date: %s\n", buildDate)
 }
+
+// PipelineExecutorAdapter adapts the runtime.Executor for use with the scheduler.
+// It implements the scheduler.Executor interface.
+type PipelineExecutorAdapter struct {
+	dryRun bool
+}
+
+// Execute runs a pipeline using the runtime executor.
+// It creates fresh module instances for each execution.
+func (a *PipelineExecutorAdapter) Execute(pipeline *connector.Pipeline) (*connector.ExecutionResult, error) {
+	// Create module instances for this execution
+	inputModule := createInputModule(pipeline.Input)
+	filterModules, err := createFilterModules(pipeline.Filters)
+	if err != nil {
+		return &connector.ExecutionResult{
+			PipelineID:  pipeline.ID,
+			Status:      "error",
+			StartedAt:   time.Now(),
+			CompletedAt: time.Now(),
+			Error: &connector.ExecutionError{
+				Code:    "FILTER_CREATION_FAILED",
+				Message: err.Error(),
+			},
+		}, err
+	}
+	outputModule := createOutputModule(pipeline.Output)
+
+	// Create executor and run pipeline
+	executor := runtime.NewExecutorWithModules(inputModule, filterModules, outputModule, a.dryRun)
+	return executor.Execute(pipeline)
+}
+
+// Verify PipelineExecutorAdapter implements scheduler.Executor
+var _ scheduler.Executor = (*PipelineExecutorAdapter)(nil)
 
 // createInputModule creates an input module instance from configuration.
 // Note: This returns a stub module until Epic 3 implements real modules.
@@ -290,40 +478,59 @@ func createFilterModules(cfgs []connector.ModuleConfig) ([]filter.Module, error)
 	if len(cfgs) == 0 {
 		return nil, nil
 	}
+
 	modules := make([]filter.Module, 0, len(cfgs))
 	for i, cfg := range cfgs {
-		switch cfg.Type {
-		case "mapping":
-			mappings, err := filter.ParseFieldMappings(cfg.Config["mappings"])
-			if err != nil {
-				return nil, fmt.Errorf("invalid mapping config at index %d: %w", i, err)
-			}
-			onError, _ := cfg.Config["onError"].(string)
-			module, err := filter.NewMappingFromConfig(mappings, onError)
-			if err != nil {
-				return nil, fmt.Errorf("invalid mapping config at index %d: %w", i, err)
-			}
-			modules = append(modules, module)
-
-		case "condition":
-			condConfig, err := parseConditionConfig(cfg.Config)
-			if err != nil {
-				return nil, fmt.Errorf("invalid condition config at index %d: %w", i, err)
-			}
-			module, err := filter.NewConditionFromConfig(condConfig)
-			if err != nil {
-				return nil, fmt.Errorf("invalid condition config at index %d: %w", i, err)
-			}
-			modules = append(modules, module)
-
-		default:
-			modules = append(modules, &StubFilterModule{
-				moduleType: cfg.Type,
-				index:      i,
-			})
+		module, err := createSingleFilterModule(cfg, i)
+		if err != nil {
+			return nil, err
 		}
+		modules = append(modules, module)
 	}
 	return modules, nil
+}
+
+// createSingleFilterModule creates a single filter module based on its type.
+func createSingleFilterModule(cfg connector.ModuleConfig, index int) (filter.Module, error) {
+	switch cfg.Type {
+	case "mapping":
+		return createMappingFilterModule(cfg, index)
+	case "condition":
+		return createConditionFilterModule(cfg, index)
+	default:
+		return &StubFilterModule{moduleType: cfg.Type, index: index}, nil
+	}
+}
+
+// createMappingFilterModule creates a mapping filter module from configuration.
+func createMappingFilterModule(cfg connector.ModuleConfig, index int) (filter.Module, error) {
+	mappings, err := filter.ParseFieldMappings(cfg.Config["mappings"])
+	if err != nil {
+		return nil, fmt.Errorf("invalid mapping config at index %d: %w", index, err)
+	}
+
+	onError, _ := cfg.Config["onError"].(string)
+	module, err := filter.NewMappingFromConfig(mappings, onError)
+	if err != nil {
+		return nil, fmt.Errorf("invalid mapping config at index %d: %w", index, err)
+	}
+
+	return module, nil
+}
+
+// createConditionFilterModule creates a condition filter module from configuration.
+func createConditionFilterModule(cfg connector.ModuleConfig, index int) (filter.Module, error) {
+	condConfig, err := parseConditionConfig(cfg.Config)
+	if err != nil {
+		return nil, fmt.Errorf("invalid condition config at index %d: %w", index, err)
+	}
+
+	module, err := filter.NewConditionFromConfig(condConfig)
+	if err != nil {
+		return nil, fmt.Errorf("invalid condition config at index %d: %w", index, err)
+	}
+
+	return module, nil
 }
 
 // parseConditionConfig parses a condition filter configuration from raw config.
@@ -671,59 +878,86 @@ var _ output.Module = (*StubOutputModule)(nil)
 func printParseErrors(errors []config.ParseError) {
 	fmt.Fprintln(os.Stderr, "✗ Parse errors:")
 	for _, err := range errors {
-		var location string
-		if err.Path != "" {
-			location = err.Path
-			if err.Line > 0 {
-				location += fmt.Sprintf(":%d", err.Line)
-				if err.Column > 0 {
-					location += fmt.Sprintf(":%d", err.Column)
-				}
-			}
-		}
+		printSingleParseError(err)
+	}
+}
 
-		if location != "" {
-			fmt.Fprintf(os.Stderr, "  %s: %s\n", location, err.Message)
-		} else {
-			fmt.Fprintf(os.Stderr, "  %s\n", err.Message)
-		}
+// printSingleParseError prints a single parse error with location information.
+func printSingleParseError(err config.ParseError) {
+	location := formatErrorLocation(err.Path, err.Line, err.Column)
 
-		if verbose && err.Type != "" {
-			fmt.Fprintf(os.Stderr, "    Type: %s\n", err.Type)
+	if location != "" {
+		fmt.Fprintf(os.Stderr, "  %s: %s\n", location, err.Message)
+	} else {
+		fmt.Fprintf(os.Stderr, "  %s\n", err.Message)
+	}
+
+	if verbose && err.Type != "" {
+		fmt.Fprintf(os.Stderr, "    Type: %s\n", err.Type)
+	}
+}
+
+// formatErrorLocation formats the error location string (path:line:column).
+func formatErrorLocation(path string, line, column int) string {
+	if path == "" {
+		return ""
+	}
+
+	location := path
+	if line > 0 {
+		location += fmt.Sprintf(":%d", line)
+		if column > 0 {
+			location += fmt.Sprintf(":%d", column)
 		}
 	}
+	return location
 }
 
 func printValidationErrors(errors []config.ValidationError) {
 	fmt.Fprintln(os.Stderr, "✗ Validation errors:")
 	for _, err := range errors {
-		path := err.Path
-		if path == "" {
-			path = "/"
-		}
+		printSingleValidationError(err)
+	}
+	printValidationHint()
+}
 
-		// Format message for readability
-		msg := err.Message
-		if verbose {
-			fmt.Fprintf(os.Stderr, "  %s:\n", path)
-			fmt.Fprintf(os.Stderr, "    Message: %s\n", msg)
-			if err.Type != "" {
-				fmt.Fprintf(os.Stderr, "    Type: %s\n", err.Type)
-			}
-			if err.Expected != "" {
-				fmt.Fprintf(os.Stderr, "    Expected: %s\n", err.Expected)
-			}
-		} else {
-			// Compact format
-			shortMsg := msg
-			if len(shortMsg) > 80 {
-				shortMsg = shortMsg[:77] + "..."
-			}
-			fmt.Fprintf(os.Stderr, "  %s: %s\n", path, shortMsg)
-		}
+// printSingleValidationError prints a single validation error.
+func printSingleValidationError(err config.ValidationError) {
+	path := err.Path
+	if path == "" {
+		path = "/"
 	}
 
-	// Suggestion
+	if verbose {
+		printVerboseValidationError(path, err)
+	} else {
+		printCompactValidationError(path, err.Message)
+	}
+}
+
+// printVerboseValidationError prints detailed validation error information.
+func printVerboseValidationError(path string, err config.ValidationError) {
+	fmt.Fprintf(os.Stderr, "  %s:\n", path)
+	fmt.Fprintf(os.Stderr, "    Message: %s\n", err.Message)
+	if err.Type != "" {
+		fmt.Fprintf(os.Stderr, "    Type: %s\n", err.Type)
+	}
+	if err.Expected != "" {
+		fmt.Fprintf(os.Stderr, "    Expected: %s\n", err.Expected)
+	}
+}
+
+// printCompactValidationError prints a compact validation error message.
+func printCompactValidationError(path, message string) {
+	shortMsg := message
+	if len(shortMsg) > 80 {
+		shortMsg = shortMsg[:77] + "..."
+	}
+	fmt.Fprintf(os.Stderr, "  %s: %s\n", path, shortMsg)
+}
+
+// printValidationHint prints a hint about verbose mode.
+func printValidationHint() {
 	if !quiet {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Hint: Use --verbose for detailed error information")

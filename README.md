@@ -29,7 +29,9 @@ Portable runtime CLI for executing connector pipelines. Canectors is a cross-pla
 - ✅ **Story 3.5**: HTTP request output module with retry logic
 - ✅ **Story 3.6**: Authentication handling (API key, Bearer, Basic, OAuth2)
 
-**Next**: Epic 4 - Advanced Runtime Features (CRON scheduler, enhanced dry-run, etc.)
+**Epic 4: Advanced Runtime Features** 🚧 **IN PROGRESS**
+
+- ✅ **Story 4.1**: CRON scheduler for periodic pipeline execution
 
 ## Project Structure
 
@@ -115,7 +117,44 @@ canectors run --dry-run ./configs/example-connector.json
 
 # Quiet mode (suppress non-error output)
 canectors validate --quiet ./configs/example-connector.json
+
+# Run a pipeline on a schedule (auto-detected from 'schedule' field)
+canectors run ./configs/examples/13-scheduled.yaml
 ```
+
+### Scheduled Mode (Auto-Detected)
+
+If your configuration includes a `schedule` field with a CRON expression, the `run` command automatically switches to scheduler mode. The scheduler keeps running until interrupted (Ctrl+C / SIGINT / SIGTERM).
+
+```bash
+# Run with schedule (auto-detected from config)
+canectors run ./configs/examples/13-scheduled.yaml
+
+# Output example:
+# Loading pipeline configuration: ./configs/examples/13-scheduled.yaml
+# ✓ Configuration loaded successfully (format: yaml)
+# 🕐 Scheduler started
+#   Pipeline: hourly-sync
+#   Schedule: 0 * * * *
+#   Next run: 2026-01-22T20:00:00Z
+#   Press Ctrl+C to stop...
+```
+
+**CRON Expression Format**:
+
+| Expression | Description |
+|------------|-------------|
+| `* * * * *` | Every minute |
+| `*/5 * * * *` | Every 5 minutes |
+| `0 * * * *` | Every hour at minute 0 |
+| `0 0 * * *` | Every day at midnight |
+| `0 9 * * 1-5` | Weekdays at 9 AM |
+| `* * * * * *` | Every second (6-field extended format) |
+
+**Scheduler Behavior**:
+- **Overlap handling**: If a pipeline execution is still running when the next trigger occurs, the new execution is skipped
+- **Graceful shutdown**: On SIGINT/SIGTERM, waits for in-flight executions to complete (30s timeout)
+- **Structured logging**: All scheduled executions are logged with timestamps and durations
 
 ### Exit Codes
 
@@ -236,6 +275,7 @@ The `configs/examples/` directory contains comprehensive examples covering all u
 #### Advanced Examples
 - **10-complete.json / 10-complete.yaml** - Complete example with OAuth2 authentication, pagination, multiple filters, retry, and advanced configurations
 - **12-output-single-record.json / 12-output-single-record.yaml** - Single record mode with path parameters
+- **13-scheduled.json / 13-scheduled.yaml** - CRON scheduled pipeline for periodic data polling
 
 #### Using Examples
 
@@ -416,7 +456,7 @@ For detailed architecture documentation, see the Architecture Document in the `c
 | **Filter Modules** | ✅ **COMPLETE** | Story 3.3 (Mapping), 3.4 (Conditions) |
 | **Output Modules** | ✅ **COMPLETE** | Story 3.5 (HTTP Request) |
 | **Authentication** | ✅ **COMPLETE** | Story 3.6 (Authentication Handling) |
-| **Scheduler** | 🔜 Coming in Epic 4 | Story 4.1 (CRON) |
+| **Scheduler** | ✅ **COMPLETE** | Story 4.1 (CRON) |
 
 **Current Implementation**: 
 - ✅ Pipeline orchestration engine (Epic 2)
@@ -444,9 +484,9 @@ For detailed architecture documentation, see the Architecture Document in the `c
 - [x] HTTP request output module with retry logic (Story 3.5)
 - [x] Authentication handling: API key, Bearer, Basic, OAuth2 (Story 3.6)
 
-### Epic 4: Advanced Runtime Features 📋 **PLANNED**
+### Epic 4: Advanced Runtime Features 🚧 **IN PROGRESS**
 
-- [ ] CRON scheduler (Story 4.1)
+- [x] CRON scheduler (Story 4.1)
 - [ ] Enhanced dry-run mode (Story 4.2)
 - [ ] Execution logging improvements (Story 4.3)
 - [ ] Error handling and retry logic (Story 4.4)

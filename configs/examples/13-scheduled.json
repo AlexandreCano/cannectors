@@ -1,0 +1,70 @@
+{
+  "id": "hourly-sync",
+  "name": "Hourly Data Synchronization",
+  "description": "Synchronizes data from source API to destination every hour",
+  "version": "1.0.0",
+  "enabled": true,
+  "schedule": "0 * * * *",
+  "input": {
+    "type": "http-polling",
+    "config": {
+      "endpoint": "https://api.example.com/data",
+      "method": "GET",
+      "timeout": 30000,
+      "headers": {
+        "Accept": "application/json"
+      }
+    },
+    "authentication": {
+      "type": "bearer",
+      "credentials": {
+        "token": "${SOURCE_API_TOKEN}"
+      }
+    }
+  },
+  "filters": [
+    {
+      "type": "mapping",
+      "config": {
+        "mappings": [
+          {
+            "source": "id",
+            "target": "externalId"
+          },
+          {
+            "source": "name",
+            "target": "displayName"
+          },
+          {
+            "source": "updated_at",
+            "target": "lastModified"
+          }
+        ]
+      }
+    }
+  ],
+  "output": {
+    "type": "http-request",
+    "config": {
+      "endpoint": "https://api.destination.com/import",
+      "method": "POST",
+      "timeout": 60000,
+      "headers": {
+        "Content-Type": "application/json"
+      }
+    },
+    "authentication": {
+      "type": "api-key",
+      "credentials": {
+        "key": "${DEST_API_KEY}",
+        "location": "header",
+        "headerName": "X-API-Key"
+      }
+    }
+  },
+  "errorHandling": {
+    "retryCount": 3,
+    "retryDelay": 5000,
+    "onError": "stop"
+  }
+}

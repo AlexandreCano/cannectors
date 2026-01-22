@@ -8,6 +8,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+require github.com/robfig/cron/v3 v3.0.1 // indirect
+
 require (
 	github.com/expr-lang/expr v1.17.7
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

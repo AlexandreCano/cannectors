@@ -120,6 +120,31 @@ Single record mode output example.
 - Retry logic with custom backoff
 - PATCH method for updates
 
+#### 13-scheduled.json / 13-scheduled.yaml
+CRON scheduled pipeline for periodic data polling.
+
+**Features:**
+- CRON schedule expression (`0 * * * *` = every hour)
+- HTTP Polling Input with Bearer authentication
+- Mapping filter for field transformations
+- HTTP Request Output with API key authentication
+- Error handling with retry configuration
+
+**Usage:**
+```bash
+# Run on schedule (auto-detected, keeps running until Ctrl+C)
+canectors run ./configs/examples/13-scheduled.yaml
+
+# Test with dry-run
+canectors run --dry-run ./configs/examples/13-scheduled.yaml
+```
+
+**Scheduler Behavior:**
+- Executes pipeline at scheduled times
+- Skips execution if previous is still running (overlap handling)
+- Graceful shutdown on SIGINT/SIGTERM
+- Logs all scheduled executions with timestamps
+
 ## Using the Examples
 
 ### Validate an Example

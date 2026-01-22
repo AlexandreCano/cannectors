@@ -33,6 +33,9 @@ type Pipeline struct {
 	// Schedule defines the CRON expression for periodic execution
 	Schedule string `json:"schedule,omitempty"`
 
+	// DryRunOptions configures dry-run mode behavior
+	DryRunOptions *DryRunOptions `json:"dryRunOptions,omitempty"`
+
 	// ErrorHandling configures retry and failure behavior
 	ErrorHandling *ErrorHandling `json:"errorHandling,omitempty"`
 
@@ -80,6 +83,13 @@ type ErrorHandling struct {
 	OnError string `json:"onError"`
 }
 
+// DryRunOptions configures dry-run mode behavior.
+type DryRunOptions struct {
+	// ShowCredentials when true displays actual credentials instead of masked values
+	// WARNING: Only use for debugging in secure environments
+	ShowCredentials bool `json:"showCredentials,omitempty"`
+}
+
 // ExecutionResult represents the result of a pipeline execution.
 type ExecutionResult struct {
 	// PipelineID is the ID of the executed pipeline
@@ -102,6 +112,31 @@ type ExecutionResult struct {
 
 	// Error contains error details if execution failed
 	Error *ExecutionError `json:"error,omitempty"`
+
+	// DryRunPreview contains preview of requests that would be sent (only set in dry-run mode)
+	// For output modules implementing PreviewableModule, this shows what would be sent
+	DryRunPreview []RequestPreview `json:"dryRunPreview,omitempty"`
+}
+
+// RequestPreview contains the preview of an HTTP request that would be sent.
+// Used in dry-run mode to show what would be sent without actually sending.
+type RequestPreview struct {
+	// Endpoint is the resolved URL including path parameters and query params
+	Endpoint string `json:"endpoint"`
+
+	// Method is the HTTP method (POST, PUT, PATCH)
+	Method string `json:"method"`
+
+	// Headers contains all request headers. Authentication-related headers may be
+	// masked or unmasked depending on DryRunOptions/PreviewOptions (for example,
+	// when ShowCredentials is enabled).
+	Headers map[string]string `json:"headers"`
+
+	// BodyPreview is the formatted JSON body that would be sent
+	BodyPreview string `json:"bodyPreview"`
+
+	// RecordCount is the number of records included in this request
+	RecordCount int `json:"recordCount"`
 }
 
 // ExecutionError contains details about an execution failure.

@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -277,7 +279,11 @@ func runPipelineOnce(pipeline *connector.Pipeline) {
 		fmt.Fprintf(os.Stderr, "✗ Failed to create filter modules: %v\n", err)
 		os.Exit(ExitRuntimeError)
 	}
-	outputModule := createOutputModule(pipeline.Output)
+	outputModule, err := createOutputModule(pipeline.Output)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Failed to create output module: %v\n", err)
+		os.Exit(ExitRuntimeError)
+	}
 
 	// Create executor and run pipeline
 	executor := runtime.NewExecutorWithModules(inputModule, filterModules, outputModule, dryRun)
@@ -440,7 +446,19 @@ func (a *PipelineExecutorAdapter) Execute(pipeline *connector.Pipeline) (*connec
 			},
 		}, err
 	}
-	outputModule := createOutputModule(pipeline.Output)
+	outputModule, err := createOutputModule(pipeline.Output)
+	if err != nil {
+		return &connector.ExecutionResult{
+			PipelineID:  pipeline.ID,
+			Status:      "error",
+			StartedAt:   time.Now(),
+			CompletedAt: time.Now(),
+			Error: &connector.ExecutionError{
+				Code:    "OUTPUT_CREATION_FAILED",
+				Message: err.Error(),
+			},
+		}, err
+	}
 
 	// Create executor and run pipeline
 	executor := runtime.NewExecutorWithModules(inputModule, filterModules, outputModule, a.dryRun)
@@ -748,24 +766,29 @@ func parseNestedThenElse(cfg map[string]interface{}, nestedConfig *filter.Nested
 }
 
 // createOutputModule creates an output module instance from configuration.
-// Note: This returns a stub module until Epic 3 implements real modules.
-func createOutputModule(cfg *connector.ModuleConfig) output.Module {
+// Uses real HTTPRequestModule for httpRequest type, stub for unsupported types.
+// Returns an error if the module cannot be created (fail-fast to avoid silent no-op).
+func createOutputModule(cfg *connector.ModuleConfig) (output.Module, error) {
 	if cfg == nil {
-		return nil
+		return nil, nil
 	}
+
 	switch cfg.Type {
 	case "httpRequest":
+		module, err := output.NewHTTPRequestFromConfig(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("creating httpRequest module: %w", err)
+		}
+		return module, nil
+	default:
+		// Stub for unsupported output types
 		endpoint, _ := cfg.Config["endpoint"].(string)
 		method, _ := cfg.Config["method"].(string)
 		return &StubOutputModule{
 			moduleType: cfg.Type,
 			endpoint:   endpoint,
 			method:     method,
-		}
-	default:
-		return &StubOutputModule{
-			moduleType: cfg.Type,
-		}
+		}, nil
 	}
 }
 
@@ -795,7 +818,112 @@ func printExecutionResult(result *connector.ExecutionResult, err error) {
 		if verbose {
 			fmt.Printf("  Duration: %v\n", result.CompletedAt.Sub(result.StartedAt))
 		}
+
+		// Display dry-run preview if available
+		if dryRun && len(result.DryRunPreview) > 0 {
+			printDryRunPreview(result.DryRunPreview)
+		}
 	}
+}
+
+// printDryRunPreview displays the request preview for dry-run mode.
+func printDryRunPreview(previews []connector.RequestPreview) {
+	fmt.Println()
+	fmt.Println("📋 Dry-Run Preview (what would have been sent):")
+	fmt.Println()
+
+	for i, preview := range previews {
+		if len(previews) > 1 {
+			fmt.Printf("─── Request %d of %d ───\n", i+1, len(previews))
+		}
+
+		// Endpoint and method
+		fmt.Printf("  Endpoint: %s %s\n", preview.Method, preview.Endpoint)
+		fmt.Printf("  Records: %d\n", preview.RecordCount)
+
+		// Headers (always show all headers in dry-run mode, sorted for stable output)
+		if len(preview.Headers) > 0 {
+			fmt.Println("  Headers:")
+			headerNames := make([]string, 0, len(preview.Headers))
+			for name := range preview.Headers {
+				headerNames = append(headerNames, name)
+			}
+			sort.Strings(headerNames)
+			for _, name := range headerNames {
+				fmt.Printf("    %s: %s\n", name, preview.Headers[name])
+			}
+		}
+
+		// Body preview
+		if preview.BodyPreview != "" {
+			printBodyPreview(preview.BodyPreview)
+		}
+
+		if i < len(previews)-1 {
+			fmt.Println()
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("ℹ️  No data was sent to the target system (dry-run mode)")
+}
+
+// printBodyPreview displays the formatted JSON body preview.
+// In verbose mode or for small payloads (<=10 lines), shows full body.
+// For large payloads in non-verbose mode, truncates to 10 lines.
+func printBodyPreview(bodyPreview string) {
+	const maxLinesCompact = 10
+	lineCount := countLines(bodyPreview)
+
+	// Show full body in verbose mode or for small payloads
+	if verbose || lineCount <= maxLinesCompact {
+		fmt.Println("  Body:")
+		printIndentedBody(bodyPreview, "    ")
+		return
+	}
+
+	// Truncate large payloads in non-verbose mode
+	fmt.Println("  Body (truncated, use --verbose for full):")
+	printTruncatedBody(bodyPreview, "    ", maxLinesCompact)
+}
+
+// printIndentedBody prints the body with indentation.
+func printIndentedBody(body string, indent string) {
+	lines := splitLines(body)
+	for _, line := range lines {
+		fmt.Printf("%s%s\n", indent, line)
+	}
+}
+
+// printTruncatedBody prints the first N lines of the body.
+func printTruncatedBody(body string, indent string, maxLines int) {
+	lines := splitLines(body)
+	for i := 0; i < maxLines && i < len(lines); i++ {
+		fmt.Printf("%s%s\n", indent, lines[i])
+	}
+	if len(lines) > maxLines {
+		fmt.Printf("%s... (%d more lines)\n", indent, len(lines)-maxLines)
+	}
+}
+
+// countLines counts the number of lines in a string.
+// Optimized using strings.Count for better performance.
+func countLines(s string) int {
+	return strings.Count(s, "\n") + 1
+}
+
+// splitLines splits a string into lines.
+// Uses strings.Split for simplicity and performance.
+func splitLines(s string) []string {
+	if s == "" {
+		return nil
+	}
+	lines := strings.Split(s, "\n")
+	// Remove trailing empty line if string ends with newline
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
 }
 
 // =============================================================================
@@ -850,7 +978,8 @@ func (m *StubFilterModule) Process(records []map[string]interface{}) ([]map[stri
 var _ filter.Module = (*StubFilterModule)(nil)
 
 // StubOutputModule is a placeholder output module for testing the pipeline flow.
-// Real implementations will be added in Epic 3.
+// It implements both output.Module and output.PreviewableModule for dry-run support.
+// Real implementations will be added when production-ready modules are needed.
 type StubOutputModule struct {
 	moduleType string
 	endpoint   string
@@ -872,8 +1001,32 @@ func (m *StubOutputModule) Close() error {
 	return nil
 }
 
-// Verify StubOutputModule implements output.Module
+// PreviewRequest generates a preview of what would be sent (for dry-run mode).
+func (m *StubOutputModule) PreviewRequest(records []map[string]interface{}, opts output.PreviewOptions) ([]output.RequestPreview, error) {
+	if len(records) == 0 {
+		return nil, nil
+	}
+
+	// Generate a simple preview showing what would be sent
+	bodyPreview := fmt.Sprintf("[%d records would be sent]", len(records))
+
+	return []output.RequestPreview{
+		{
+			Endpoint: m.endpoint,
+			Method:   m.method,
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+				"User-Agent":   "Canectors-Runtime/1.0 (stub)",
+			},
+			BodyPreview: bodyPreview,
+			RecordCount: len(records),
+		},
+	}, nil
+}
+
+// Verify StubOutputModule implements output.Module and output.PreviewableModule
 var _ output.Module = (*StubOutputModule)(nil)
+var _ output.PreviewableModule = (*StubOutputModule)(nil)
 
 func printParseErrors(errors []config.ParseError) {
 	fmt.Fprintln(os.Stderr, "✗ Parse errors:")

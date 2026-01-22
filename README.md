@@ -122,6 +122,76 @@ canectors validate --quiet ./configs/example-connector.json
 canectors run ./configs/examples/13-scheduled.yaml
 ```
 
+### Dry-Run Mode
+
+Dry-run mode validates and tests your pipeline configuration without actually sending data to the target system. This is useful for:
+- **Testing configurations** before production use
+- **Validating transformations** to ensure data is processed correctly
+- **Debugging pipelines** without side effects
+
+```bash
+# Execute pipeline in dry-run mode
+canectors run --dry-run ./configs/example-connector.json
+
+# With verbose output (shows full request details)
+canectors run --dry-run --verbose ./configs/example-connector.json
+```
+
+**What happens in dry-run mode:**
+1. ✅ **Input module executes normally** - Data is fetched from the source
+2. ✅ **Filter modules execute normally** - Data transformations are applied
+3. ❌ **Output module is skipped** - No HTTP requests are sent to the target
+4. 📋 **Preview is displayed (when supported by the configured output module)** - Shows what would have been sent when preview is available
+
+> Note: Some output modules do not support preview. In those cases, dry-run will still execute inputs and filters and skip sending data, but no "Dry-Run Preview" section will be shown in the output.
+**Example output:**
+```
+✓ Pipeline executed successfully
+  Status: success
+  Records processed: 15
+
+📋 Dry-Run Preview (what would have been sent):
+
+  Endpoint: POST https://api.destination.com/import
+  Records: 15
+  Headers:
+    Authorization: Bearer [MASKED-TOKEN]
+    Content-Type: application/json
+    User-Agent: Canectors-Runtime/1.0
+    X-Custom-Header: custom-value
+  Body:
+    [
+      {
+        "externalId": "123",
+        "name": "Example Record",
+        ...
+      }
+    ]
+
+ℹ️  No data was sent to the target system (dry-run mode)
+```
+
+**Verbose mode** (`--verbose`) shows additional details:
+- Full request body (without truncation for large payloads)
+- Execution duration
+
+**Show credentials for debugging** (`dryRunOptions.showCredentials`):
+
+By default, authentication credentials are masked in dry-run preview for security. If you need to debug authentication issues, you can enable credential display in your configuration:
+
+```yaml
+# In your pipeline configuration
+dryRunOptions:
+  showCredentials: true  # WARNING: Only use in secure environments
+
+# Or in JSON
+"dryRunOptions": {
+  "showCredentials": true
+}
+```
+
+⚠️ **Security Warning**: Only enable `showCredentials` in secure, local debugging environments. Never commit configurations with this option enabled to version control or use in production.
+
 ### Scheduled Mode (Auto-Detected)
 
 If your configuration includes a `schedule` field with a CRON expression, the `run` command automatically switches to scheduler mode. The scheduler keeps running until interrupted (Ctrl+C / SIGINT / SIGTERM).
@@ -217,6 +287,9 @@ The configuration file uses a simple structure with Input, Filters (optional), a
     }
   },
   "schedule": "*/5 * * * *",
+  "dryRunOptions": {
+    "showCredentials": false
+  },
   "errorHandling": {
     "retryCount": 3,
     "retryDelay": 5000,
@@ -487,7 +560,7 @@ For detailed architecture documentation, see the Architecture Document in the `c
 ### Epic 4: Advanced Runtime Features 🚧 **IN PROGRESS**
 
 - [x] CRON scheduler (Story 4.1)
-- [ ] Enhanced dry-run mode (Story 4.2)
+- [x] Enhanced dry-run mode with request preview (Story 4.2)
 - [ ] Execution logging improvements (Story 4.3)
 - [ ] Error handling and retry logic (Story 4.4)
 - [ ] CLI commands interface enhancements (Story 4.5)

@@ -141,8 +141,9 @@ canectors run --dry-run --verbose ./configs/example-connector.json
 1. ✅ **Input module executes normally** - Data is fetched from the source
 2. ✅ **Filter modules execute normally** - Data transformations are applied
 3. ❌ **Output module is skipped** - No HTTP requests are sent to the target
-4. 📋 **Preview is displayed** - Shows what would have been sent
+4. 📋 **Preview is displayed (when supported by the configured output module)** - Shows what would have been sent when preview is available
 
+> Note: Some output modules do not support preview. In those cases, dry-run will still execute inputs and filters and skip sending data, but no "Dry-Run Preview" section will be shown in the output.
 **Example output:**
 ```
 ✓ Pipeline executed successfully

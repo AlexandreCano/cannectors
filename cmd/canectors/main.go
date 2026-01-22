@@ -766,23 +766,28 @@ func parseNestedThenElse(cfg map[string]interface{}, nestedConfig *filter.Nested
 }
 
 // createOutputModule creates an output module instance from configuration.
-// Uses real HTTPRequestModule for httpRequest type, stub for others.
+// Uses real HTTPRequestModule for httpRequest type, stub for unsupported types.
 // Returns an error if the module cannot be created (fail-fast to avoid silent no-op).
 func createOutputModule(cfg *connector.ModuleConfig) (output.Module, error) {
 	if cfg == nil {
 		return nil, nil
 	}
+
 	switch cfg.Type {
 	case "httpRequest":
-		// Use real HTTPRequestModule which implements PreviewableModule
 		module, err := output.NewHTTPRequestFromConfig(cfg)
 		if err != nil {
 			return nil, fmt.Errorf("creating httpRequest module: %w", err)
 		}
 		return module, nil
 	default:
+		// Stub for unsupported output types
+		endpoint, _ := cfg.Config["endpoint"].(string)
+		method, _ := cfg.Config["method"].(string)
 		return &StubOutputModule{
 			moduleType: cfg.Type,
+			endpoint:   endpoint,
+			method:     method,
 		}, nil
 	}
 }
@@ -973,7 +978,8 @@ func (m *StubFilterModule) Process(records []map[string]interface{}) ([]map[stri
 var _ filter.Module = (*StubFilterModule)(nil)
 
 // StubOutputModule is a placeholder output module for testing the pipeline flow.
-// Real implementations will be added in Epic 3.
+// It implements both output.Module and output.PreviewableModule for dry-run support.
+// Real implementations will be added when production-ready modules are needed.
 type StubOutputModule struct {
 	moduleType string
 	endpoint   string
@@ -995,8 +1001,32 @@ func (m *StubOutputModule) Close() error {
 	return nil
 }
 
-// Verify StubOutputModule implements output.Module
+// PreviewRequest generates a preview of what would be sent (for dry-run mode).
+func (m *StubOutputModule) PreviewRequest(records []map[string]interface{}, opts output.PreviewOptions) ([]output.RequestPreview, error) {
+	if len(records) == 0 {
+		return nil, nil
+	}
+
+	// Generate a simple preview showing what would be sent
+	bodyPreview := fmt.Sprintf("[%d records would be sent]", len(records))
+
+	return []output.RequestPreview{
+		{
+			Endpoint: m.endpoint,
+			Method:   m.method,
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+				"User-Agent":   "Canectors-Runtime/1.0 (stub)",
+			},
+			BodyPreview: bodyPreview,
+			RecordCount: len(records),
+		},
+	}, nil
+}
+
+// Verify StubOutputModule implements output.Module and output.PreviewableModule
 var _ output.Module = (*StubOutputModule)(nil)
+var _ output.PreviewableModule = (*StubOutputModule)(nil)
 
 func printParseErrors(errors []config.ParseError) {
 	fmt.Fprintln(os.Stderr, "✗ Parse errors:")

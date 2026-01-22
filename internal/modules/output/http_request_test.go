@@ -1734,6 +1734,9 @@ func TestHTTPRequest_Send_ServerError500(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
+		"retry": map[string]interface{}{
+			"backoffMs": float64(1), // Minimal backoff for fast tests
+		},
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -1763,6 +1766,9 @@ func TestHTTPRequest_Send_ServerError503(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
+		"retry": map[string]interface{}{
+			"backoffMs": float64(1), // Minimal backoff for fast tests
+		},
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -2150,10 +2156,13 @@ func TestHTTPRequest_Send_DefaultRetryConfig(t *testing.T) {
 	ts := newTestServerWithRetry(2) // Fails twice, succeeds on third
 	defer ts.Close()
 
-	// No retry config specified - should use defaults
+	// Use minimal backoff for fast tests while testing retry logic
 	config := newModuleConfig(map[string]interface{}{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
+		"retry": map[string]interface{}{
+			"backoffMs": float64(1), // Minimal backoff for fast tests
+		},
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)

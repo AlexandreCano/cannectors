@@ -36,7 +36,8 @@ const (
 
 // Authentication type constants
 const (
-	authTypeAPIKey = "api-key"
+	authTypeAPIKey      = "api-key"
+	defaultAPIKeyHeader = "X-API-Key"
 )
 
 // Supported HTTP methods for output module
@@ -96,17 +97,16 @@ var defaultRetryConfig = RetryConfig{
 // HTTPRequestModule implements HTTP-based data sending.
 // It sends transformed records to a target REST API via HTTP requests.
 type HTTPRequestModule struct {
-	endpoint           string
-	method             string
-	headers            map[string]string
-	timeout            time.Duration
-	request            RequestConfig
-	retry              RetryConfig
-	authHandler        auth.Handler
-	client             *http.Client
-	onError            string // "fail", "skip", "log"
-	successCodes       []int  // HTTP status codes considered success
-	cachedAPIKeyHeader string // Cached API key header name (computed once)
+	endpoint     string
+	method       string
+	headers      map[string]string
+	timeout      time.Duration
+	request      RequestConfig
+	retry        RetryConfig
+	authHandler  auth.Handler
+	client       *http.Client
+	onError      string // "fail", "skip", "log"
+	successCodes []int  // HTTP status codes considered success
 }
 
 // Default success status codes
@@ -158,11 +158,6 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 		client:       client,
 		onError:      onError,
 		successCodes: successCodes,
-	}
-
-	// Pre-compute API key header name to avoid repeated detection per-record
-	if authHandler != nil && authHandler.Type() == authTypeAPIKey {
-		module.cachedAPIKeyHeader = module.detectAPIKeyHeaderName()
 	}
 
 	logger.Debug("http request output module created",
@@ -920,12 +915,7 @@ func (h *HTTPRequestModule) addMaskedAuthHeaders(headers map[string]string) {
 	authType := h.authHandler.Type()
 	switch authType {
 	case authTypeAPIKey:
-		// Use cached header name (computed once at module creation)
-		headerName := h.cachedAPIKeyHeader
-		if headerName == "" {
-			headerName = "X-API-Key" // Fallback (should not happen)
-		}
-		headers[headerName] = maskValue(authTypeAPIKey)
+		headers[defaultAPIKeyHeader] = maskValue(authTypeAPIKey)
 	case "bearer":
 		headers["Authorization"] = "Bearer " + maskValue("token")
 	case "basic":
@@ -937,45 +927,6 @@ func (h *HTTPRequestModule) addMaskedAuthHeaders(headers map[string]string) {
 			headers["Authorization"] = maskValue("auth")
 		}
 	}
-}
-
-// detectAPIKeyHeaderName determines the header name used for API key authentication.
-// It creates a mock request and applies auth to detect which header is set.
-// Returns "X-API-Key" as fallback if detection fails.
-//
-// Note: Go's http.Header normalizes header names using CanonicalMIMEHeaderKey,
-// so "X-API-Key" becomes "X-Api-Key". We return the normalized name.
-func (h *HTTPRequestModule) detectAPIKeyHeaderName() string {
-	const defaultAPIKeyHeader = "X-API-Key"
-
-	ctx := context.Background()
-	mockReq, err := http.NewRequestWithContext(ctx, "GET", "http://example.com", nil)
-	if err != nil {
-		return defaultAPIKeyHeader
-	}
-
-	if err := h.authHandler.ApplyAuth(ctx, mockReq); err != nil {
-		return defaultAPIKeyHeader
-	}
-
-	// Find the header added by auth handler (excluding standard headers)
-	// Header names are normalized by Go's http package (e.g., "X-API-Key" -> "X-Api-Key")
-	standardHeaders := map[string]bool{
-		headerUserAgent:   true,
-		headerContentType: true,
-		"Authorization":   true, // API key doesn't use Authorization
-	}
-
-	for headerName, values := range mockReq.Header {
-		if standardHeaders[headerName] {
-			continue
-		}
-		if len(values) > 0 {
-			return headerName // Return the normalized header name
-		}
-	}
-
-	return defaultAPIKeyHeader
 }
 
 // addUnmaskedAuthHeaders adds authentication headers with actual values (for debugging)

@@ -742,4 +742,8 @@ func TestLogErrorMinimalContext(t *testing.T) {
 	if _, exists := logEntry["endpoint"]; exists {
 		t.Errorf("Expected endpoint to be absent, got %v", logEntry["endpoint"])
 	}
+	// RecordIndex should not be present when not set (defaults to 0, and we check > 0)
+	if _, exists := logEntry["record_index"]; exists {
+		t.Errorf("Expected record_index to be absent when not set, got %v", logEntry["record_index"])
+	}
 }

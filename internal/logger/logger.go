@@ -60,12 +60,12 @@ func Error(msg string, args ...any) {
 
 // WithPipeline returns a logger with pipeline context.
 func WithPipeline(pipelineID string) *slog.Logger {
-	return Logger.With("pipelineId", pipelineID)
+	return Logger.With("pipeline_id", pipelineID)
 }
 
 // WithModule returns a logger with module context.
 func WithModule(moduleType string, moduleName string) *slog.Logger {
-	return Logger.With("moduleType", moduleType, "moduleName", moduleName)
+	return Logger.With("module_type", moduleType, "module_name", moduleName)
 }
 
 // =============================================================================
@@ -298,7 +298,9 @@ func LogError(message string, errCtx ErrorContext) {
 	}
 
 	// Contextual information
-	if errCtx.RecordIndex >= 0 {
+	// Only include RecordIndex if it's been explicitly set (> 0)
+	// 0 is the default value and indicates "not set"
+	if errCtx.RecordIndex > 0 {
 		attrs = append(attrs, slog.Int("record_index", errCtx.RecordIndex))
 	}
 	if errCtx.RecordCount > 0 {

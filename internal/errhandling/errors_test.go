@@ -1,4 +1,4 @@
-// Package runtime provides error types and classification for pipeline execution.
+// Package errhandling provides error types and classification for pipeline execution.
 package errhandling
 
 import (

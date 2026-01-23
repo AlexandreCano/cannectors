@@ -36,8 +36,11 @@ type Pipeline struct {
 	// DryRunOptions configures dry-run mode behavior
 	DryRunOptions *DryRunOptions `json:"dryRunOptions,omitempty"`
 
-	// ErrorHandling configures retry and failure behavior
+	// ErrorHandling configures retry and failure behavior (legacy; prefer Defaults)
 	ErrorHandling *ErrorHandling `json:"errorHandling,omitempty"`
+
+	// Defaults holds module-level defaults (onError, timeoutMs, retry). Precedence: module > defaults > errorHandling.
+	Defaults *ModuleDefaults `json:"defaults,omitempty"`
 
 	// Enabled indicates whether the pipeline is active
 	Enabled bool `json:"enabled"`
@@ -71,16 +74,30 @@ type AuthConfig struct {
 	Credentials map[string]string `json:"credentials"`
 }
 
+// ModuleDefaults holds default settings for all modules. Overridable per module.
+type ModuleDefaults struct {
+	OnError   string                 `json:"onError,omitempty"`
+	TimeoutMs int                    `json:"timeoutMs,omitempty"`
+	Retry     map[string]interface{} `json:"retry,omitempty"`
+}
+
 // ErrorHandling defines how errors should be handled during execution.
+// Supports legacy (retryCount, retryDelay) and full retryConfig (maxAttempts, delayMs, etc.).
 type ErrorHandling struct {
-	// RetryCount is the number of retry attempts
+	// RetryCount is the number of retry attempts (legacy; prefer Retry.MaxAttempts)
 	RetryCount int `json:"retryCount"`
 
-	// RetryDelay is the delay between retries in milliseconds
+	// RetryDelay is the delay between retries in milliseconds (legacy; prefer Retry.DelayMs)
 	RetryDelay int `json:"retryDelay"`
 
-	// OnError specifies the action on unrecoverable errors ("stop", "continue", "notify")
+	// OnError specifies the action on error: "fail", "skip", "log"
 	OnError string `json:"onError"`
+
+	// TimeoutMs is the default timeout in milliseconds
+	TimeoutMs int `json:"timeoutMs"`
+
+	// Retry holds full retry config (module > defaults > errorHandling). Parsed from "retry" in config.
+	Retry map[string]interface{} `json:"retry,omitempty"`
 }
 
 // DryRunOptions configures dry-run mode behavior.
@@ -88,6 +105,22 @@ type DryRunOptions struct {
 	// ShowCredentials when true displays actual credentials instead of masked values
 	// WARNING: Only use for debugging in secure environments
 	ShowCredentials bool `json:"showCredentials,omitempty"`
+}
+
+// RetryInfo holds retry attempt information from module execution.
+type RetryInfo struct {
+	// TotalAttempts is the total number of attempts (initial + retries)
+	TotalAttempts int `json:"totalAttempts,omitempty"`
+	// RetryCount is the number of retries performed
+	RetryCount int `json:"retryCount,omitempty"`
+	// RetryDelaysMs is the delay before each retry in milliseconds
+	RetryDelaysMs []int64 `json:"retryDelaysMs,omitempty"`
+}
+
+// RetryInfoProvider is implemented by modules that perform retries (e.g. HTTP Polling, HTTP Request).
+// The executor uses it to populate ExecutionResult.RetryInfo.
+type RetryInfoProvider interface {
+	GetRetryInfo() *RetryInfo
 }
 
 // ExecutionResult represents the result of a pipeline execution.
@@ -112,6 +145,9 @@ type ExecutionResult struct {
 
 	// Error contains error details if execution failed
 	Error *ExecutionError `json:"error,omitempty"`
+
+	// RetryInfo holds retry information from the last stage that performed retries (Input or Output)
+	RetryInfo *RetryInfo `json:"retryInfo,omitempty"`
 
 	// DryRunPreview contains preview of requests that would be sent (only set in dry-run mode)
 	// For output modules implementing PreviewableModule, this shows what would be sent
@@ -149,6 +185,12 @@ type ExecutionError struct {
 
 	// Module is the module where the error occurred
 	Module string `json:"module,omitempty"`
+
+	// ErrorCategory is the classified category (e.g. "network", "authentication", "validation", "server")
+	ErrorCategory string `json:"errorCategory,omitempty"`
+
+	// ErrorType is the error type (e.g. "retryable", "fatal")
+	ErrorType string `json:"errorType,omitempty"`
 
 	// Details contains additional error context
 	Details map[string]interface{} `json:"details,omitempty"`

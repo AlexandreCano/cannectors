@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/canectors/runtime/internal/errhandling"
 	"github.com/canectors/runtime/pkg/connector"
 )
 
@@ -2195,26 +2196,17 @@ func TestHTTPRequest_IsTransientError(t *testing.T) {
 		{403, false}, // Forbidden
 		{404, false}, // Not Found
 		{422, false}, // Unprocessable Entity
-		{200, false}, // OK
-		{201, false}, // Created
-	}
-
-	config := newModuleConfig(map[string]interface{}{
-		"endpoint": "https://example.com/api",
-		"method":   "POST",
-	})
-
-	module, err := NewHTTPRequestFromConfig(config)
-	if err != nil {
-		t.Fatalf("failed to create module: %v", err)
+		{200, false}, // OK (classified as unknown, not retryable)
+		{201, false}, // Created (classified as unknown, not retryable)
 	}
 
 	for _, tt := range tests {
 		t.Run(string(rune(tt.statusCode)), func(t *testing.T) {
-			httpErr := &HTTPError{StatusCode: tt.statusCode}
-			result := module.isTransientError(httpErr)
+			// Use errhandling.ClassifyHTTPStatus and check Retryable field
+			classifiedErr := errhandling.ClassifyHTTPStatus(tt.statusCode, "test error")
+			result := classifiedErr.Retryable
 			if result != tt.isTransient {
-				t.Errorf("isTransientError(%d) = %v, want %v", tt.statusCode, result, tt.isTransient)
+				t.Errorf("ClassifyHTTPStatus(%d).Retryable = %v, want %v", tt.statusCode, result, tt.isTransient)
 			}
 		})
 	}

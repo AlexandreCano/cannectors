@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/canectors/runtime/internal/auth"
+	"github.com/canectors/runtime/internal/errhandling"
 	"github.com/canectors/runtime/internal/logger"
 	"github.com/canectors/runtime/pkg/connector"
 )
@@ -60,15 +61,17 @@ type PaginationConfig struct {
 }
 
 // HTTPPolling implements polling-based HTTP data fetching.
-// It supports HTTP GET requests with authentication and pagination.
+// It supports HTTP GET requests with authentication, pagination, and retry logic.
 type HTTPPolling struct {
-	endpoint    string
-	headers     map[string]string
-	timeout     time.Duration
-	dataField   string
-	pagination  *PaginationConfig
-	authHandler auth.Handler
-	client      *http.Client
+	endpoint      string
+	headers       map[string]string
+	timeout       time.Duration
+	dataField     string
+	pagination    *PaginationConfig
+	authHandler   auth.Handler
+	client        *http.Client
+	retryConfig   errhandling.RetryConfig
+	lastRetryInfo *connector.RetryInfo
 }
 
 // NewHTTPPollingFromConfig creates a new HTTP polling input module from configuration.
@@ -79,7 +82,7 @@ type HTTPPolling struct {
 //
 // Optional config fields:
 //   - headers: Custom HTTP headers (map[string]string)
-//   - timeout: Request timeout in seconds (float64, default 30)
+//   - timeoutMs: Request timeout in milliseconds (default 30000). Also accepts timeout in seconds (float64) for backward compatibility.
 //   - dataField: JSON field containing the array of records (for object responses)
 //   - pagination: Pagination configuration (map with type, params, etc.)
 func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, error) {
@@ -93,9 +96,20 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 		return nil, ErrMissingEndpoint
 	}
 
-	// Extract timeout (optional, default 30s)
+	// Extract timeout: prefer timeoutMs (milliseconds), fall back to timeout (seconds)
 	timeout := defaultTimeout
-	if timeoutVal, ok := config.Config["timeout"].(float64); ok {
+	if ms, ok := config.Config["timeoutMs"]; ok {
+		switch v := ms.(type) {
+		case float64:
+			if v > 0 {
+				timeout = time.Duration(v) * time.Millisecond
+			}
+		case int:
+			if v > 0 {
+				timeout = time.Duration(v) * time.Millisecond
+			}
+		}
+	} else if timeoutVal, ok := config.Config["timeout"].(float64); ok && timeoutVal > 0 {
 		timeout = time.Duration(timeoutVal * float64(time.Second))
 	}
 
@@ -129,6 +143,12 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 		return nil, fmt.Errorf("creating auth handler: %w", err)
 	}
 
+	// Extract retry configuration (optional)
+	retryConfig := errhandling.DefaultRetryConfig()
+	if retryVal, ok := config.Config["retry"].(map[string]interface{}); ok {
+		retryConfig = errhandling.ParseRetryConfig(retryVal)
+	}
+
 	h := &HTTPPolling{
 		endpoint:    endpoint,
 		headers:     headers,
@@ -137,6 +157,7 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 		pagination:  pagination,
 		authHandler: authHandler,
 		client:      client,
+		retryConfig: retryConfig,
 	}
 
 	logger.Debug("http polling module created",
@@ -144,6 +165,7 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 		"timeout", timeout.String(),
 		"has_auth", authHandler != nil,
 		"has_pagination", pagination != nil,
+		"retry_max_attempts", retryConfig.MaxAttempts,
 	)
 
 	return h, nil
@@ -290,7 +312,8 @@ func (h *HTTPPolling) doRequest(ctx context.Context, endpoint string) ([]byte, e
 			"duration", requestDuration,
 			"error", err.Error(),
 		)
-		return nil, fmt.Errorf("%w: %w", ErrHTTPRequest, err)
+		// Classify network error for retry logic
+		return nil, errhandling.ClassifyNetworkError(err)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
@@ -340,12 +363,15 @@ func (h *HTTPPolling) doRequest(ctx context.Context, endpoint string) ([]byte, e
 			}
 		}
 
-		return nil, &HTTPError{
+		// Classify HTTP error for retry logic
+		classifiedErr := errhandling.ClassifyHTTPStatus(resp.StatusCode, bodySnippet)
+		classifiedErr.OriginalErr = &HTTPError{
 			StatusCode: resp.StatusCode,
 			Status:     resp.Status,
 			Endpoint:   endpoint,
 			Message:    string(body),
 		}
+		return nil, classifiedErr
 	}
 
 	// Log successful response
@@ -361,9 +387,87 @@ func (h *HTTPPolling) doRequest(ctx context.Context, endpoint string) ([]byte, e
 	return body, nil
 }
 
+// doRequestWithRetry executes an HTTP request with retry logic.
+// It uses the RetryExecutor to retry transient errors.
+func (h *HTTPPolling) doRequestWithRetry(ctx context.Context, endpoint string) ([]byte, error) {
+	executor := errhandling.NewRetryExecutor(h.retryConfig)
+
+	result, err := executor.ExecuteWithCallback(ctx,
+		func(ctx context.Context) (interface{}, error) {
+			return h.doRequest(ctx, endpoint)
+		},
+		func(attempt int, err error, nextDelay time.Duration) {
+			if err != nil && nextDelay > 0 {
+				logger.Info("retrying http request",
+					"module_type", "httpPolling",
+					"endpoint", endpoint,
+					"attempt", attempt+1,
+					"max_attempts", h.retryConfig.MaxAttempts+1,
+					"next_delay", nextDelay.String(),
+					"error", err.Error(),
+					"error_category", errhandling.GetErrorCategory(err),
+					"retryable", errhandling.IsRetryable(err),
+				)
+			}
+		},
+	)
+
+	info := executor.GetRetryInfo()
+	h.lastRetryInfo = retryInfoFromErrhandling(info)
+
+	if err != nil {
+		if info.RetryCount > 0 {
+			logger.Error("http request failed after retries",
+				"module_type", "httpPolling",
+				"endpoint", endpoint,
+				"total_attempts", info.TotalAttempts,
+				"total_duration", info.TotalDuration.String(),
+				"error", err.Error(),
+			)
+		}
+		return nil, err
+	}
+
+	body, ok := result.([]byte)
+	if !ok {
+		return nil, fmt.Errorf("unexpected result type from retry executor")
+	}
+
+	if info.RetryCount > 0 {
+		logger.Info("http request succeeded after retries",
+			"module_type", "httpPolling",
+			"endpoint", endpoint,
+			"total_attempts", info.TotalAttempts,
+			"retry_count", info.RetryCount,
+			"total_duration", info.TotalDuration.String(),
+		)
+	}
+
+	return body, nil
+}
+
+// GetRetryInfo returns retry information from the last Fetch request (RetryInfoProvider).
+func (h *HTTPPolling) GetRetryInfo() *connector.RetryInfo {
+	return h.lastRetryInfo
+}
+
+func retryInfoFromErrhandling(info errhandling.RetryInfo) *connector.RetryInfo {
+	if info.RetryCount == 0 {
+		return nil
+	}
+	out := &connector.RetryInfo{
+		TotalAttempts: info.TotalAttempts,
+		RetryCount:    info.RetryCount,
+	}
+	for _, d := range info.Delays {
+		out.RetryDelaysMs = append(out.RetryDelaysMs, d.Milliseconds())
+	}
+	return out
+}
+
 // fetchSingle executes a single HTTP GET request and returns the records
 func (h *HTTPPolling) fetchSingle(ctx context.Context, endpoint string) ([]map[string]interface{}, error) {
-	body, err := h.doRequest(ctx, endpoint)
+	body, err := h.doRequestWithRetry(ctx, endpoint)
 	if err != nil {
 		return nil, err
 	}

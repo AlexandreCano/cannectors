@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/canectors/runtime/internal/auth"
+	"github.com/canectors/runtime/internal/errhandling"
 	"github.com/canectors/runtime/internal/logger"
 	"github.com/canectors/runtime/pkg/connector"
 )
@@ -80,33 +81,24 @@ type RequestConfig struct {
 	HeadersFromRecord map[string]string // Headers extracted from record data
 }
 
-// RetryConfig holds retry configuration
-type RetryConfig struct {
-	MaxRetries        int     // Maximum number of retry attempts (default: 3)
-	BackoffMs         int     // Initial backoff in milliseconds (default: 1000)
-	BackoffMultiplier float64 // Backoff multiplier (default: 2.0)
-}
-
-// Default retry configuration
-var defaultRetryConfig = RetryConfig{
-	MaxRetries:        3,
-	BackoffMs:         1000,
-	BackoffMultiplier: 2.0,
-}
+// RetryConfig is an alias for errhandling.RetryConfig for backward compatibility.
+// Use errhandling.RetryConfig directly for new code.
+type RetryConfig = errhandling.RetryConfig
 
 // HTTPRequestModule implements HTTP-based data sending.
 // It sends transformed records to a target REST API via HTTP requests.
 type HTTPRequestModule struct {
-	endpoint     string
-	method       string
-	headers      map[string]string
-	timeout      time.Duration
-	request      RequestConfig
-	retry        RetryConfig
-	authHandler  auth.Handler
-	client       *http.Client
-	onError      string // "fail", "skip", "log"
-	successCodes []int  // HTTP status codes considered success
+	endpoint      string
+	method        string
+	headers       map[string]string
+	timeout       time.Duration
+	request       RequestConfig
+	retry         RetryConfig
+	authHandler   auth.Handler
+	client        *http.Client
+	onError       errhandling.OnErrorStrategy // "fail", "skip", "log"
+	successCodes  []int                       // HTTP status codes considered success
+	lastRetryInfo *connector.RetryInfo
 }
 
 // Default success status codes
@@ -255,11 +247,11 @@ func extractStringMap(m map[string]interface{}) map[string]string {
 }
 
 // extractErrorHandling extracts error handling mode from configuration
-func extractErrorHandling(config map[string]interface{}) string {
+func extractErrorHandling(config map[string]interface{}) errhandling.OnErrorStrategy {
 	if onErrorVal, ok := config["onError"].(string); ok {
-		return onErrorVal
+		return errhandling.ParseOnErrorStrategy(onErrorVal)
 	}
-	return "fail" // default
+	return errhandling.OnErrorFail // default
 }
 
 // extractSuccessCodes extracts custom success status codes from configuration
@@ -288,28 +280,13 @@ func extractSuccessCodes(config map[string]interface{}) []int {
 	return successCodes
 }
 
-// extractRetryConfig extracts retry configuration from config
+// extractRetryConfig extracts retry configuration from config using errhandling.
 func extractRetryConfig(config map[string]interface{}) RetryConfig {
-	retryConfig := defaultRetryConfig
-
 	retryVal, ok := config["retry"].(map[string]interface{})
 	if !ok {
-		return retryConfig
+		return errhandling.DefaultRetryConfig()
 	}
-
-	if maxRetries, ok := retryVal["maxRetries"].(float64); ok {
-		retryConfig.MaxRetries = int(maxRetries)
-	}
-
-	if backoffMs, ok := retryVal["backoffMs"].(float64); ok {
-		retryConfig.BackoffMs = int(backoffMs)
-	}
-
-	if backoffMult, ok := retryVal["backoffMultiplier"].(float64); ok {
-		retryConfig.BackoffMultiplier = backoffMult
-	}
-
-	return retryConfig
+	return errhandling.ParseRetryConfig(retryVal)
 }
 
 // createHTTPClient creates an HTTP client with configured timeout and transport settings
@@ -454,6 +431,7 @@ func (h *HTTPRequestModule) sendSingleRecordMode(ctx context.Context, records []
 		slog.String("endpoint", h.endpoint),
 		slog.String("method", h.method),
 		slog.Int("record_count", len(records)),
+		slog.String("on_error", string(h.onError)),
 	)
 
 	sent := 0
@@ -470,7 +448,8 @@ func (h *HTTPRequestModule) sendSingleRecordMode(ctx context.Context, records []
 				slog.Int("record_index", i),
 				slog.String("error", err.Error()),
 			)
-			if h.onError == "fail" {
+			// Marshal errors respect onError strategy
+			if h.onError == errhandling.OnErrorFail {
 				return sent, fmt.Errorf("%w at record %d: %w", ErrJSONMarshal, i, err)
 			}
 			// skip or log mode: continue
@@ -489,17 +468,26 @@ func (h *HTTPRequestModule) sendSingleRecordMode(ctx context.Context, records []
 
 		if err != nil {
 			failed++
+			errorCategory := errhandling.GetErrorCategory(err)
+			isFatal := errhandling.IsFatal(err)
+
 			logger.Error("request failed for record",
 				slog.String("module_type", "httpRequest"),
 				slog.Int("record_index", i),
 				slog.String("endpoint", endpoint),
 				slog.Duration("duration", requestDuration),
 				slog.String("error", err.Error()),
+				slog.String("error_category", string(errorCategory)),
+				slog.Bool("is_fatal", isFatal),
+				slog.String("on_error", string(h.onError)),
 			)
-			if h.onError == "fail" {
+
+			// All errors respect onError strategy
+			// "fatal" means no retry (handled by retry executor), not always fail
+			if h.onError == errhandling.OnErrorFail {
 				return sent, err
 			}
-			// skip or log mode: continue
+			// skip or log mode: continue to next record
 			continue
 		}
 
@@ -564,17 +552,19 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 	var lastErr error
 	oauth2Retried := false // Track if we've already retried once for OAuth2 401
 	startTime := time.Now()
+	var delaysMs []int64
 
-	for attempt := 0; attempt <= h.retry.MaxRetries; attempt++ {
+	for attempt := 0; attempt <= h.retry.MaxAttempts; attempt++ {
 		// Wait before retry (not on first attempt)
 		if attempt > 0 {
-			backoff := h.calculateBackoff(attempt)
+			backoff := h.retry.CalculateDelay(attempt - 1) // CalculateDelay is 0-indexed
+			delaysMs = append(delaysMs, backoff.Milliseconds())
 			logger.Info("retrying request",
 				slog.String("module_type", "httpRequest"),
 				slog.String("endpoint", endpoint),
 				slog.String("method", h.method),
 				slog.Int("attempt", attempt),
-				slog.Int("max_retries", h.retry.MaxRetries),
+				slog.Int("max_attempts", h.retry.MaxAttempts),
 				slog.Duration("backoff", backoff),
 			)
 			time.Sleep(backoff)
@@ -589,6 +579,13 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 					slog.Int("attempts", attempt+1),
 					slog.Duration("total_duration", time.Since(startTime)),
 				)
+				h.lastRetryInfo = &connector.RetryInfo{
+					TotalAttempts: attempt + 1,
+					RetryCount:    attempt,
+					RetryDelaysMs: delaysMs,
+				}
+			} else {
+				h.lastRetryInfo = nil
 			}
 			return nil // Success
 		}
@@ -601,12 +598,13 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 			continue // Retry immediately without counting as retry attempt
 		}
 
-		// Non-transient errors don't retry
-		if !h.isTransientError(err) {
+		// Non-transient errors don't retry - use errhandling classification
+		if !errhandling.IsRetryable(err) {
 			logger.Debug("non-transient error, not retrying",
 				slog.String("module_type", "httpRequest"),
 				slog.String("endpoint", endpoint),
 				slog.String("error", err.Error()),
+				slog.String("error_category", string(errhandling.GetErrorCategory(err))),
 			)
 			return err
 		}
@@ -615,26 +613,42 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 			slog.String("module_type", "httpRequest"),
 			slog.String("endpoint", endpoint),
 			slog.Int("attempt", attempt+1),
-			slog.Int("max_retries", h.retry.MaxRetries),
+			slog.Int("max_attempts", h.retry.MaxAttempts),
 			slog.String("error", err.Error()),
+			slog.String("error_category", string(errhandling.GetErrorCategory(err))),
 		)
 	}
 
 	// Guard against nil lastErr in case the retry loop never executed
 	safeErr := lastErr
 	if safeErr == nil {
-		safeErr = fmt.Errorf("all retry attempts exhausted but no error captured (max_retries=%d)", h.retry.MaxRetries)
+		safeErr = fmt.Errorf("all retry attempts exhausted but no error captured (max_attempts=%d)", h.retry.MaxAttempts)
+	}
+
+	if len(delaysMs) > 0 {
+		h.lastRetryInfo = &connector.RetryInfo{
+			TotalAttempts: h.retry.MaxAttempts + 1,
+			RetryCount:    h.retry.MaxAttempts,
+			RetryDelaysMs: delaysMs,
+		}
+	} else {
+		h.lastRetryInfo = nil
 	}
 
 	logger.Error("all retry attempts exhausted",
 		slog.String("module_type", "httpRequest"),
 		slog.String("endpoint", endpoint),
-		slog.Int("attempts", h.retry.MaxRetries+1),
+		slog.Int("attempts", h.retry.MaxAttempts+1),
 		slog.Duration("total_duration", time.Since(startTime)),
 		slog.String("error", safeErr.Error()),
 	)
 
 	return safeErr
+}
+
+// GetRetryInfo returns retry information from the last Send request (RetryInfoProvider).
+func (h *HTTPRequestModule) GetRetryInfo() *connector.RetryInfo {
+	return h.lastRetryInfo
 }
 
 // executeHTTPRequest executes a single HTTP request without retry logic
@@ -695,15 +709,8 @@ func (h *HTTPRequestModule) executeHTTPRequest(ctx context.Context, endpoint str
 			slog.Duration("duration", requestDuration),
 			slog.String("error", err.Error()),
 		)
-		// Network errors are transient
-		return &HTTPError{
-			StatusCode:   0,
-			Status:       "network error",
-			Endpoint:     endpoint,
-			Method:       h.method,
-			Message:      err.Error(),
-			ResponseBody: "",
-		}
+		// Classify network error for retry logic
+		return errhandling.ClassifyNetworkError(err)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
@@ -739,7 +746,9 @@ func (h *HTTPRequestModule) executeHTTPRequest(ctx context.Context, endpoint str
 
 		// Note: OAuth2 token invalidation for 401 responses is handled by
 		// handleOAuth2Unauthorized in doRequestWithHeaders to avoid duplicate invalidation
-		return &HTTPError{
+		// Classify HTTP error for retry logic
+		classifiedErr := errhandling.ClassifyHTTPStatus(resp.StatusCode, bodySnippet)
+		classifiedErr.OriginalErr = &HTTPError{
 			StatusCode:   resp.StatusCode,
 			Status:       resp.Status,
 			Endpoint:     endpoint,
@@ -747,6 +756,7 @@ func (h *HTTPRequestModule) executeHTTPRequest(ctx context.Context, endpoint str
 			Message:      "request failed",
 			ResponseBody: string(respBody),
 		}
+		return classifiedErr
 	}
 
 	logger.Debug("http request completed successfully",
@@ -761,56 +771,8 @@ func (h *HTTPRequestModule) executeHTTPRequest(ctx context.Context, endpoint str
 	return nil
 }
 
-// Default maximum backoff duration (5 minutes)
-const maxBackoffDuration = 5 * time.Minute
-
-// calculateBackoff calculates the backoff duration for a retry attempt
-// Protects against integer overflow and caps the maximum backoff duration
-func (h *HTTPRequestModule) calculateBackoff(attempt int) time.Duration {
-	backoffMs := float64(h.retry.BackoffMs)
-	for i := 1; i < attempt; i++ {
-		backoffMs *= h.retry.BackoffMultiplier
-		// Prevent overflow - cap at reasonable maximum
-		if backoffMs > float64(maxBackoffDuration.Milliseconds()) {
-			backoffMs = float64(maxBackoffDuration.Milliseconds())
-			break
-		}
-	}
-
-	// Cap final result to maxBackoffDuration
-	result := time.Duration(backoffMs) * time.Millisecond
-	if result > maxBackoffDuration {
-		return maxBackoffDuration
-	}
-	return result
-}
-
-// isTransientError determines if an error is transient and should be retried
-func (h *HTTPRequestModule) isTransientError(err error) bool {
-	var httpErr *HTTPError
-	if !errors.As(err, &httpErr) {
-		// Non-HTTP errors (e.g., network errors) are transient
-		return true
-	}
-
-	// Network errors (status code 0) are transient
-	if httpErr.StatusCode == 0 {
-		return true
-	}
-
-	// 5xx server errors are transient
-	if httpErr.StatusCode >= 500 && httpErr.StatusCode < 600 {
-		return true
-	}
-
-	// 429 Too Many Requests is transient
-	if httpErr.StatusCode == 429 {
-		return true
-	}
-
-	// 4xx client errors are NOT transient (don't retry)
-	return false
-}
+// Note: calculateBackoff and isTransientError methods have been replaced by
+// errhandling.RetryConfig.CalculateDelay and errhandling.IsRetryable respectively.
 
 // resolveEndpointWithStaticQuery adds static query parameters to the endpoint
 func (h *HTTPRequestModule) resolveEndpointWithStaticQuery(endpoint string) string {

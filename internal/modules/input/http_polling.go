@@ -199,24 +199,69 @@ func parsePaginationConfig(config map[string]interface{}) *PaginationConfig {
 //   - error: Any error encountered during fetching
 func (h *HTTPPolling) Fetch() ([]map[string]interface{}, error) {
 	ctx := context.Background()
+	startTime := time.Now()
 
-	logger.Debug("starting http fetch",
+	// Log fetch start with configuration summary
+	logger.Info("input fetch started",
+		"module_type", "httpPolling",
 		"endpoint", h.endpoint,
+		"timeout", h.timeout.String(),
+		"has_pagination", h.pagination != nil,
+		"has_auth", h.authHandler != nil,
 	)
+
+	var records []map[string]interface{}
+	var err error
 
 	// Handle pagination if configured
 	if h.pagination != nil {
-		return h.fetchWithPagination(ctx)
+		records, err = h.fetchWithPagination(ctx)
+	} else {
+		// Single request without pagination
+		records, err = h.fetchSingle(ctx, h.endpoint)
 	}
 
-	// Single request without pagination
-	return h.fetchSingle(ctx, h.endpoint)
+	duration := time.Since(startTime)
+
+	if err != nil {
+		logger.Error("input fetch failed",
+			"module_type", "httpPolling",
+			"endpoint", h.endpoint,
+			"duration", duration,
+			"error", err.Error(),
+		)
+		return nil, err
+	}
+
+	// Log successful completion with metrics
+	logger.Info("input fetch completed",
+		"module_type", "httpPolling",
+		"endpoint", h.endpoint,
+		"record_count", len(records),
+		"duration", duration,
+		"has_pagination", h.pagination != nil,
+	)
+
+	return records, nil
 }
 
 // doRequest executes an HTTP GET request and returns the raw response body
 func (h *HTTPPolling) doRequest(ctx context.Context, endpoint string) ([]byte, error) {
+	requestStart := time.Now()
+
+	logger.Debug("http request started",
+		"module_type", "httpPolling",
+		"endpoint", endpoint,
+		"method", http.MethodGet,
+	)
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
+		logger.Error("http request creation failed",
+			"module_type", "httpPolling",
+			"endpoint", endpoint,
+			"error", err.Error(),
+		)
 		return nil, fmt.Errorf("creating http request: %w", err)
 	}
 
@@ -226,29 +271,64 @@ func (h *HTTPPolling) doRequest(ctx context.Context, endpoint string) ([]byte, e
 	}
 
 	if err = h.applyAuthentication(ctx, req); err != nil {
+		logger.Error("authentication failed",
+			"module_type", "httpPolling",
+			"endpoint", endpoint,
+			"error", err.Error(),
+		)
 		return nil, fmt.Errorf("applying authentication: %w", err)
 	}
 
 	resp, err := h.client.Do(req)
+	requestDuration := time.Since(requestStart)
+
 	if err != nil {
 		logger.Error("http request failed",
+			"module_type", "httpPolling",
 			"endpoint", endpoint,
+			"method", http.MethodGet,
+			"duration", requestDuration,
 			"error", err.Error(),
 		)
 		return nil, fmt.Errorf("%w: %w", ErrHTTPRequest, err)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			logger.Error("failed to close response body", "error", closeErr.Error())
+			logger.Warn("failed to close response body",
+				"endpoint", endpoint,
+				"error", closeErr.Error(),
+			)
 		}
 	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		logger.Error("response body read failed",
+			"module_type", "httpPolling",
+			"endpoint", endpoint,
+			"status_code", resp.StatusCode,
+			"error", err.Error(),
+		)
 		return nil, fmt.Errorf("reading response body: %w", err)
 	}
 
 	if resp.StatusCode >= 400 {
+		// Truncate response body for logging (max 500 chars)
+		bodySnippet := string(body)
+		if len(bodySnippet) > 500 {
+			bodySnippet = bodySnippet[:500] + "..."
+		}
+
+		logger.Error("http error response",
+			"module_type", "httpPolling",
+			"endpoint", endpoint,
+			"method", http.MethodGet,
+			"status_code", resp.StatusCode,
+			"status", resp.Status,
+			"duration", requestDuration,
+			"response_body", bodySnippet,
+		)
+
 		// If we get 401 Unauthorized with OAuth2 auth, invalidate the token
 		// to force refresh on next request (token may have been revoked server-side)
 		if resp.StatusCode == http.StatusUnauthorized && h.authHandler != nil {
@@ -267,6 +347,16 @@ func (h *HTTPPolling) doRequest(ctx context.Context, endpoint string) ([]byte, e
 			Message:    string(body),
 		}
 	}
+
+	// Log successful response
+	logger.Debug("http request completed",
+		"module_type", "httpPolling",
+		"endpoint", endpoint,
+		"method", http.MethodGet,
+		"status_code", resp.StatusCode,
+		"duration", requestDuration,
+		"response_size", len(body),
+	)
 
 	return body, nil
 }
@@ -367,6 +457,12 @@ func (h *HTTPPolling) fetchPageBased(ctx context.Context) ([]map[string]interfac
 	var allRecords []map[string]interface{}
 	page := 1
 
+	logger.Debug("pagination started",
+		"module_type", "httpPolling",
+		"pagination_type", "page",
+		"page_param", h.pagination.PageParam,
+	)
+
 	for page <= maxPaginationPages {
 		// Build URL with page parameter
 		pageURL, err := h.buildPaginatedURL(h.pagination.PageParam, strconv.Itoa(page))
@@ -379,6 +475,15 @@ func (h *HTTPPolling) fetchPageBased(ctx context.Context) ([]map[string]interfac
 		if err != nil {
 			return nil, err
 		}
+
+		logger.Debug("pagination page fetched",
+			"module_type", "httpPolling",
+			"pagination_type", "page",
+			"current_page", page,
+			"total_pages", totalPages,
+			"records_in_page", len(records),
+			"total_records_so_far", len(allRecords)+len(records),
+		)
 
 		allRecords = append(allRecords, records...)
 
@@ -393,8 +498,10 @@ func (h *HTTPPolling) fetchPageBased(ctx context.Context) ([]map[string]interfac
 		page++
 	}
 
-	logger.Debug("page-based pagination completed",
-		"total_pages", page-1,
+	logger.Info("pagination completed",
+		"module_type", "httpPolling",
+		"pagination_type", "page",
+		"pages_fetched", page,
 		"total_records", len(allRecords),
 	)
 
@@ -484,8 +591,18 @@ func (h *HTTPPolling) fetchOffsetBased(ctx context.Context) ([]map[string]interf
 	if limit == 0 {
 		limit = 100 // Default limit
 	}
+	pageNum := 0
+
+	logger.Debug("pagination started",
+		"module_type", "httpPolling",
+		"pagination_type", "offset",
+		"offset_param", h.pagination.OffsetParam,
+		"limit_param", h.pagination.LimitParam,
+		"limit", limit,
+	)
 
 	for offset < maxPaginationPages*limit {
+		pageNum++
 		// Build URL with offset and limit parameters
 		offsetURL, err := h.buildPaginatedURLMulti(map[string]string{
 			h.pagination.OffsetParam: strconv.Itoa(offset),
@@ -501,6 +618,16 @@ func (h *HTTPPolling) fetchOffsetBased(ctx context.Context) ([]map[string]interf
 			return nil, err
 		}
 
+		logger.Debug("pagination page fetched",
+			"module_type", "httpPolling",
+			"pagination_type", "offset",
+			"current_offset", offset,
+			"limit", limit,
+			"total_available", total,
+			"records_in_page", len(records),
+			"total_records_so_far", len(allRecords)+len(records),
+		)
+
 		allRecords = append(allRecords, records...)
 
 		// Check if we've fetched all records
@@ -514,7 +641,10 @@ func (h *HTTPPolling) fetchOffsetBased(ctx context.Context) ([]map[string]interf
 		offset += limit
 	}
 
-	logger.Debug("offset-based pagination completed",
+	logger.Info("pagination completed",
+		"module_type", "httpPolling",
+		"pagination_type", "offset",
+		"pages_fetched", pageNum,
 		"total_records", len(allRecords),
 	)
 
@@ -542,6 +672,12 @@ func (h *HTTPPolling) fetchCursorBased(ctx context.Context) ([]map[string]interf
 	cursor := ""
 	iterations := 0
 
+	logger.Debug("pagination started",
+		"module_type", "httpPolling",
+		"pagination_type", "cursor",
+		"cursor_param", h.pagination.CursorParam,
+	)
+
 	for iterations < maxPaginationPages {
 		// Build URL with cursor parameter (only if we have a cursor)
 		var fetchURL string
@@ -561,6 +697,15 @@ func (h *HTTPPolling) fetchCursorBased(ctx context.Context) ([]map[string]interf
 			return nil, err
 		}
 
+		logger.Debug("pagination page fetched",
+			"module_type", "httpPolling",
+			"pagination_type", "cursor",
+			"iteration", iterations+1,
+			"has_next_cursor", nextCursor != "",
+			"records_in_page", len(records),
+			"total_records_so_far", len(allRecords)+len(records),
+		)
+
 		allRecords = append(allRecords, records...)
 
 		// Check if we've reached the end
@@ -572,8 +717,10 @@ func (h *HTTPPolling) fetchCursorBased(ctx context.Context) ([]map[string]interf
 		iterations++
 	}
 
-	logger.Debug("cursor-based pagination completed",
-		"iterations", iterations,
+	logger.Info("pagination completed",
+		"module_type", "httpPolling",
+		"pagination_type", "cursor",
+		"iterations", iterations+1,
 		"total_records", len(allRecords),
 	)
 

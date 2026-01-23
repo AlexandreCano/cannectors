@@ -36,6 +36,7 @@ var (
 	// Global flags
 	verbose bool
 	quiet   bool
+	logFile string
 
 	// Run command flags
 	dryRun bool
@@ -67,15 +68,35 @@ Examples:
   # Run a pipeline
   canectors run config.yaml
 
-  # Validate with verbose output
+  # Validate with verbose output (human-readable logs)
   canectors validate --verbose config.json`,
 	PersistentPreRun: func(_ *cobra.Command, _ []string) {
-		// Configure logger level based on flags
+		// Determine log level and console format based on flags
+		logLevel := slog.LevelInfo
+		consoleFormat := logger.FormatJSON
+
 		if verbose {
-			logger.SetLevel(slog.LevelDebug)
+			logLevel = slog.LevelDebug
+			consoleFormat = logger.FormatHuman
 		} else if quiet {
-			logger.SetLevel(slog.LevelError)
+			logLevel = slog.LevelError
 		}
+
+		// Configure log file if specified (logs to both console and file)
+		if logFile != "" {
+			if err := logger.SetLogFile(logFile, logLevel, consoleFormat); err != nil {
+				fmt.Fprintf(os.Stderr, "⚠ Failed to open log file: %v\n", err)
+				// Continue with console-only logging
+				logger.SetLevelAndFormat(logLevel, consoleFormat)
+			}
+		} else {
+			// Console-only logging
+			logger.SetLevelAndFormat(logLevel, consoleFormat)
+		}
+	},
+	PersistentPostRun: func(_ *cobra.Command, _ []string) {
+		// Close log file if one was opened
+		logger.CloseLogFile()
 	},
 }
 
@@ -144,8 +165,9 @@ var versionCmd = &cobra.Command{
 
 func init() {
 	// Global flags
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output (human-readable format)")
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "Suppress non-error output")
+	rootCmd.PersistentFlags().StringVar(&logFile, "log-file", "", "Write logs to file (always JSON format, in addition to console)")
 
 	// Run command flags
 	runCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Validate and prepare without executing output module")

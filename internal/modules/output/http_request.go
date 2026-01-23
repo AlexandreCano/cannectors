@@ -334,27 +334,70 @@ func createHTTPClient(timeout time.Duration) *http.Client {
 //
 // Empty or nil records return success with 0 sent.
 func (h *HTTPRequestModule) Send(records []map[string]interface{}) (int, error) {
+	startTime := time.Now()
+
 	// Handle empty/nil records gracefully
 	if len(records) == 0 {
 		logger.Debug("no records to send, returning success",
+			slog.String("module_type", "httpRequest"),
 			slog.String("endpoint", h.endpoint),
 		)
 		return 0, nil
 	}
 
+	logger.Info("output send started",
+		slog.String("module_type", "httpRequest"),
+		slog.String("endpoint", h.endpoint),
+		slog.String("method", h.method),
+		slog.Int("record_count", len(records)),
+		slog.String("body_from", h.request.BodyFrom),
+		slog.Bool("has_auth", h.authHandler != nil),
+	)
+
 	ctx := context.Background()
+	var sent int
+	var err error
 
 	// Choose send mode based on configuration
 	if h.request.BodyFrom == "record" {
-		return h.sendSingleRecordMode(ctx, records)
+		sent, err = h.sendSingleRecordMode(ctx, records)
+	} else {
+		sent, err = h.sendBatchMode(ctx, records)
 	}
 
-	return h.sendBatchMode(ctx, records)
+	duration := time.Since(startTime)
+
+	if err != nil {
+		logger.Error("output send failed",
+			slog.String("module_type", "httpRequest"),
+			slog.String("endpoint", h.endpoint),
+			slog.String("method", h.method),
+			slog.Int("records_sent", sent),
+			slog.Int("records_failed", len(records)-sent),
+			slog.Duration("duration", duration),
+			slog.String("error", err.Error()),
+		)
+		return sent, err
+	}
+
+	logger.Info("output send completed",
+		slog.String("module_type", "httpRequest"),
+		slog.String("endpoint", h.endpoint),
+		slog.String("method", h.method),
+		slog.Int("records_sent", sent),
+		slog.Int("records_failed", len(records)-sent),
+		slog.Duration("duration", duration),
+	)
+
+	return sent, nil
 }
 
 // sendBatchMode sends all records in a single HTTP request as JSON array
 func (h *HTTPRequestModule) sendBatchMode(ctx context.Context, records []map[string]interface{}) (int, error) {
+	requestStart := time.Now()
+
 	logger.Debug("sending records in batch mode",
+		slog.String("module_type", "httpRequest"),
 		slog.String("endpoint", h.endpoint),
 		slog.String("method", h.method),
 		slog.Int("record_count", len(records)),
@@ -363,17 +406,43 @@ func (h *HTTPRequestModule) sendBatchMode(ctx context.Context, records []map[str
 	// Marshal records to JSON array
 	body, err := json.Marshal(records)
 	if err != nil {
+		logger.Error("failed to marshal records to JSON",
+			slog.String("module_type", "httpRequest"),
+			slog.String("endpoint", h.endpoint),
+			slog.Int("record_count", len(records)),
+			slog.String("error", err.Error()),
+		)
 		return 0, fmt.Errorf("%w: %w", ErrJSONMarshal, err)
 	}
+
+	logger.Debug("request body prepared",
+		slog.String("module_type", "httpRequest"),
+		slog.Int("body_size", len(body)),
+	)
 
 	// Resolve endpoint with static query parameters
 	endpoint := h.resolveEndpointWithStaticQuery(h.endpoint)
 
 	// Execute request (no record-specific headers in batch mode)
 	err = h.doRequestWithHeaders(ctx, endpoint, body, nil)
+	requestDuration := time.Since(requestStart)
+
 	if err != nil {
+		logger.Debug("batch request failed",
+			slog.String("module_type", "httpRequest"),
+			slog.String("endpoint", endpoint),
+			slog.Duration("duration", requestDuration),
+			slog.String("error", err.Error()),
+		)
 		return 0, err
 	}
+
+	logger.Debug("batch request completed",
+		slog.String("module_type", "httpRequest"),
+		slog.String("endpoint", endpoint),
+		slog.Int("records_sent", len(records)),
+		slog.Duration("duration", requestDuration),
+	)
 
 	return len(records), nil
 }
@@ -381,17 +450,23 @@ func (h *HTTPRequestModule) sendBatchMode(ctx context.Context, records []map[str
 // sendSingleRecordMode sends one HTTP request per record
 func (h *HTTPRequestModule) sendSingleRecordMode(ctx context.Context, records []map[string]interface{}) (int, error) {
 	logger.Debug("sending records in single record mode",
+		slog.String("module_type", "httpRequest"),
 		slog.String("endpoint", h.endpoint),
 		slog.String("method", h.method),
 		slog.Int("record_count", len(records)),
 	)
 
 	sent := 0
+	failed := 0
 	for i, record := range records {
+		requestStart := time.Now()
+
 		// Marshal single record to JSON object
 		body, err := json.Marshal(record)
 		if err != nil {
+			failed++
 			logger.Error("failed to marshal record",
+				slog.String("module_type", "httpRequest"),
 				slog.Int("record_index", i),
 				slog.String("error", err.Error()),
 			)
@@ -410,9 +485,15 @@ func (h *HTTPRequestModule) sendSingleRecordMode(ctx context.Context, records []
 
 		// Execute request with record-specific headers
 		err = h.doRequestWithHeaders(ctx, endpoint, body, recordHeaders)
+		requestDuration := time.Since(requestStart)
+
 		if err != nil {
+			failed++
 			logger.Error("request failed for record",
+				slog.String("module_type", "httpRequest"),
 				slog.Int("record_index", i),
+				slog.String("endpoint", endpoint),
+				slog.Duration("duration", requestDuration),
 				slog.String("error", err.Error()),
 			)
 			if h.onError == "fail" {
@@ -423,7 +504,20 @@ func (h *HTTPRequestModule) sendSingleRecordMode(ctx context.Context, records []
 		}
 
 		sent++
+		logger.Debug("record sent successfully",
+			slog.String("module_type", "httpRequest"),
+			slog.Int("record_index", i),
+			slog.String("endpoint", endpoint),
+			slog.Duration("duration", requestDuration),
+		)
 	}
+
+	logger.Debug("single record mode completed",
+		slog.String("module_type", "httpRequest"),
+		slog.Int("total_records", len(records)),
+		slog.Int("sent", sent),
+		slog.Int("failed", failed),
+	)
 
 	return sent, nil
 }
@@ -469,14 +563,18 @@ func (h *HTTPRequestModule) handleOAuth2Unauthorized(err error, alreadyRetried b
 func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint string, body []byte, recordHeaders map[string]string) error {
 	var lastErr error
 	oauth2Retried := false // Track if we've already retried once for OAuth2 401
+	startTime := time.Now()
 
 	for attempt := 0; attempt <= h.retry.MaxRetries; attempt++ {
 		// Wait before retry (not on first attempt)
 		if attempt > 0 {
 			backoff := h.calculateBackoff(attempt)
-			logger.Debug("retrying request",
+			logger.Info("retrying request",
+				slog.String("module_type", "httpRequest"),
 				slog.String("endpoint", endpoint),
+				slog.String("method", h.method),
 				slog.Int("attempt", attempt),
+				slog.Int("max_retries", h.retry.MaxRetries),
 				slog.Duration("backoff", backoff),
 			)
 			time.Sleep(backoff)
@@ -484,6 +582,14 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 
 		err := h.executeHTTPRequest(ctx, endpoint, body, recordHeaders)
 		if err == nil {
+			if attempt > 0 {
+				logger.Info("retry succeeded",
+					slog.String("module_type", "httpRequest"),
+					slog.String("endpoint", endpoint),
+					slog.Int("attempts", attempt+1),
+					slog.Duration("total_duration", time.Since(startTime)),
+				)
+			}
 			return nil // Success
 		}
 
@@ -497,23 +603,46 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 
 		// Non-transient errors don't retry
 		if !h.isTransientError(err) {
+			logger.Debug("non-transient error, not retrying",
+				slog.String("module_type", "httpRequest"),
+				slog.String("endpoint", endpoint),
+				slog.String("error", err.Error()),
+			)
 			return err
 		}
 
-		logger.Debug("transient error, will retry",
+		logger.Warn("transient error, will retry",
+			slog.String("module_type", "httpRequest"),
 			slog.String("endpoint", endpoint),
-			slog.Int("attempt", attempt),
+			slog.Int("attempt", attempt+1),
+			slog.Int("max_retries", h.retry.MaxRetries),
 			slog.String("error", err.Error()),
 		)
 	}
+
+	logger.Error("all retry attempts exhausted",
+		slog.String("module_type", "httpRequest"),
+		slog.String("endpoint", endpoint),
+		slog.Int("attempts", h.retry.MaxRetries+1),
+		slog.Duration("total_duration", time.Since(startTime)),
+		slog.String("error", lastErr.Error()),
+	)
 
 	return lastErr
 }
 
 // executeHTTPRequest executes a single HTTP request without retry logic
 func (h *HTTPRequestModule) executeHTTPRequest(ctx context.Context, endpoint string, body []byte, recordHeaders map[string]string) error {
+	requestStart := time.Now()
+
 	req, err := http.NewRequestWithContext(ctx, h.method, endpoint, bytes.NewReader(body))
 	if err != nil {
+		logger.Error("failed to create http request",
+			slog.String("module_type", "httpRequest"),
+			slog.String("endpoint", endpoint),
+			slog.String("method", h.method),
+			slog.String("error", err.Error()),
+		)
 		return fmt.Errorf("creating http request: %w", err)
 	}
 
@@ -533,15 +662,31 @@ func (h *HTTPRequestModule) executeHTTPRequest(ctx context.Context, endpoint str
 
 	// Apply authentication if configured
 	if err = h.applyAuthentication(ctx, req); err != nil {
+		logger.Error("failed to apply authentication",
+			slog.String("module_type", "httpRequest"),
+			slog.String("endpoint", endpoint),
+			slog.String("error", err.Error()),
+		)
 		return fmt.Errorf("applying authentication: %w", err)
 	}
 
+	logger.Debug("sending http request",
+		slog.String("module_type", "httpRequest"),
+		slog.String("endpoint", endpoint),
+		slog.String("method", h.method),
+		slog.Int("body_size", len(body)),
+	)
+
 	// Execute request
 	resp, err := h.client.Do(req)
+	requestDuration := time.Since(requestStart)
+
 	if err != nil {
-		logger.Error("http request failed",
+		logger.Error("http request network error",
+			slog.String("module_type", "httpRequest"),
 			slog.String("endpoint", endpoint),
 			slog.String("method", h.method),
+			slog.Duration("duration", requestDuration),
 			slog.String("error", err.Error()),
 		)
 		// Network errors are transient
@@ -556,7 +701,10 @@ func (h *HTTPRequestModule) executeHTTPRequest(ctx context.Context, endpoint str
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			logger.Error("failed to close response body", slog.String("error", closeErr.Error()))
+			logger.Warn("failed to close response body",
+				slog.String("endpoint", endpoint),
+				slog.String("error", closeErr.Error()),
+			)
 		}
 	}()
 
@@ -567,6 +715,22 @@ func (h *HTTPRequestModule) executeHTTPRequest(ctx context.Context, endpoint str
 
 	// Check if status code is in success codes
 	if !h.isSuccessStatusCode(resp.StatusCode) {
+		// Truncate response body for logging (max 500 chars)
+		bodySnippet := string(respBody)
+		if len(bodySnippet) > 500 {
+			bodySnippet = bodySnippet[:500] + "..."
+		}
+
+		logger.Error("http error response",
+			slog.String("module_type", "httpRequest"),
+			slog.String("endpoint", endpoint),
+			slog.String("method", h.method),
+			slog.Int("status_code", resp.StatusCode),
+			slog.String("status", resp.Status),
+			slog.Duration("duration", requestDuration),
+			slog.String("response_body", bodySnippet),
+		)
+
 		// Note: OAuth2 token invalidation for 401 responses is handled by
 		// handleOAuth2Unauthorized in doRequestWithHeaders to avoid duplicate invalidation
 		return &HTTPError{
@@ -579,10 +743,13 @@ func (h *HTTPRequestModule) executeHTTPRequest(ctx context.Context, endpoint str
 		}
 	}
 
-	logger.Debug("http request completed",
+	logger.Debug("http request completed successfully",
+		slog.String("module_type", "httpRequest"),
 		slog.String("endpoint", endpoint),
 		slog.String("method", h.method),
 		slog.Int("status_code", resp.StatusCode),
+		slog.Duration("duration", requestDuration),
+		slog.Int("response_size", len(respBody)),
 	)
 
 	return nil

@@ -393,7 +393,18 @@ func (m *MappingModule) Process(records []map[string]interface{}) ([]map[string]
 		return []map[string]interface{}{}, nil
 	}
 
+	startTime := time.Now()
+	inputCount := len(records)
+
+	logger.Debug("filter processing started",
+		slog.String("module_type", "mapping"),
+		slog.Int("mapping_count", len(m.mappings)),
+		slog.Int("input_records", inputCount),
+		slog.String("on_error", m.onError),
+	)
+
 	result := make([]map[string]interface{}, 0, len(records))
+	skippedCount := 0
 
 	for recordIdx, record := range records {
 		targetRecord, err := m.processRecord(record, recordIdx)
@@ -402,10 +413,19 @@ func (m *MappingModule) Process(records []map[string]interface{}) ([]map[string]
 			hasContext := errors.As(err, &mappingErr)
 			switch m.onError {
 			case OnErrorFail:
+				duration := time.Since(startTime)
+				logger.Error("filter processing failed",
+					slog.String("module_type", "mapping"),
+					slog.Int("record_index", recordIdx),
+					slog.Duration("duration", duration),
+					slog.String("error", err.Error()),
+				)
 				return nil, err
 			case OnErrorSkip:
+				skippedCount++
 				if hasContext {
 					logger.Warn("skipping record due to mapping error",
+						slog.String("module_type", "mapping"),
 						slog.Int("record_index", mappingErr.RecordIndex),
 						slog.Int("mapping_index", mappingErr.MappingIndex),
 						slog.String("source_field", mappingErr.SourceField),
@@ -417,6 +437,7 @@ func (m *MappingModule) Process(records []map[string]interface{}) ([]map[string]
 					)
 				} else {
 					logger.Warn("skipping record due to mapping error",
+						slog.String("module_type", "mapping"),
 						slog.Int("record_index", recordIdx),
 						slog.String("error", err.Error()),
 					)
@@ -425,6 +446,7 @@ func (m *MappingModule) Process(records []map[string]interface{}) ([]map[string]
 			case OnErrorLog:
 				if hasContext {
 					logger.Error("mapping error (continuing)",
+						slog.String("module_type", "mapping"),
 						slog.Int("record_index", mappingErr.RecordIndex),
 						slog.Int("mapping_index", mappingErr.MappingIndex),
 						slog.String("source_field", mappingErr.SourceField),
@@ -436,6 +458,7 @@ func (m *MappingModule) Process(records []map[string]interface{}) ([]map[string]
 					)
 				} else {
 					logger.Error("mapping error (continuing)",
+						slog.String("module_type", "mapping"),
 						slog.Int("record_index", recordIdx),
 						slog.String("error", err.Error()),
 					)
@@ -447,6 +470,17 @@ func (m *MappingModule) Process(records []map[string]interface{}) ([]map[string]
 		}
 		result = append(result, targetRecord)
 	}
+
+	duration := time.Since(startTime)
+	outputCount := len(result)
+
+	logger.Info("filter processing completed",
+		slog.String("module_type", "mapping"),
+		slog.Int("input_records", inputCount),
+		slog.Int("output_records", outputCount),
+		slog.Int("skipped_records", skippedCount),
+		slog.Duration("duration", duration),
+	)
 
 	return result, nil
 }

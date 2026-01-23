@@ -9,7 +9,11 @@ Portable runtime CLI for executing connector pipelines. Canectors is a cross-pla
 - **Modular Architecture**: Input, Filter, and Output modules for flexible data processing (Epic 3)
 - **Cross-Platform**: Runs on Windows, macOS (Intel & Apple Silicon), and Linux
 - **Dry-Run Mode**: Validate and test pipelines without executing output modules
-- **Structured Logging**: JSON-formatted logs with configurable verbosity levels
+- **Execution Logging**: Comprehensive structured logging with JSON and human-readable formats
+  - Per-stage timing (input, filter, output durations)
+  - Performance metrics (records/sec, throughput)
+  - Configurable log levels and output formats
+  - File logging support (`--log-file`)
 - **Resource Cleanup**: Automatic cleanup of module resources (connections, file handles)
 
 ## Project Status
@@ -32,6 +36,8 @@ Portable runtime CLI for executing connector pipelines. Canectors is a cross-pla
 **Epic 4: Advanced Runtime Features** 🚧 **IN PROGRESS**
 
 - ✅ **Story 4.1**: CRON scheduler for periodic pipeline execution
+- ✅ **Story 4.2**: Dry-run mode with request preview
+- ✅ **Story 4.3**: Execution logging with structured output and metrics
 
 ## Project Structure
 
@@ -234,6 +240,133 @@ canectors run ./configs/examples/13-scheduled.yaml
 | 1 | Validation errors (schema violations) |
 | 2 | Parse errors (invalid JSON/YAML syntax) |
 | 3 | Runtime errors (execution failures) |
+
+### Logging
+
+The CLI provides comprehensive execution logging with configurable output formats and levels.
+
+#### Log Formats
+
+| Format | Description | Use Case |
+|--------|-------------|----------|
+| **JSON** (default) | Machine-readable structured logs | Production, log aggregation, automated analysis |
+| **Human** (`--verbose`) | Human-readable console output with colors and prefixes | Development, debugging, manual inspection |
+
+#### Log Levels
+
+| Level | Description | Flag |
+|-------|-------------|------|
+| **Debug** | Detailed execution information (requests, transformations) | `--verbose` |
+| **Info** | Important execution events (start, end, summary) | default |
+| **Warn** | Warnings (non-fatal issues, retries) | default |
+| **Error** | Errors (execution failures) | `--quiet` (only errors) |
+
+#### CLI Flags for Logging
+
+```bash
+# Verbose mode: Human-readable output, debug level
+canectors run --verbose config.yaml
+
+# Quiet mode: Only show errors
+canectors run --quiet config.yaml
+
+# Log to file (always JSON, in addition to console)
+canectors run --log-file execution.log config.yaml
+
+# Combine flags
+canectors run --verbose --log-file debug.log config.yaml
+```
+
+#### Log Output Examples
+
+**JSON format (default):**
+```json
+{"time":"2026-01-22T16:00:00Z","level":"INFO","msg":"input fetch started","module_type":"httpPolling","endpoint":"https://api.example.com/data","timeout":"30s"}
+{"time":"2026-01-22T16:00:01Z","level":"INFO","msg":"input fetch completed","module_type":"httpPolling","record_count":100,"duration":"1.2s"}
+{"time":"2026-01-22T16:00:02Z","level":"INFO","msg":"execution metrics","pipeline_id":"sync-pipeline","records_processed":100,"records_per_second":50.5,"total_duration":"2s"}
+```
+
+**Human-readable format (`--verbose`):**
+```
+16:00:00 ℹ input fetch started module_type=httpPolling endpoint=https://api.example.com/data
+16:00:01 ℹ input fetch completed module_type=httpPolling record_count=100 duration=1.2s
+16:00:01 ℹ filter processing completed module_type=mapping input_records=100 output_records=95
+16:00:02 ℹ output send completed records_sent=95 duration=800ms
+16:00:02 ℹ execution metrics records_processed=95 records_per_second=47.5 total_duration=2s
+```
+
+#### Structured Log Fields
+
+All logs include consistent, structured fields for easy parsing:
+
+| Field | Description |
+|-------|-------------|
+| `pipeline_id` | Pipeline identifier |
+| `pipeline_name` | Human-readable pipeline name |
+| `stage` | Execution stage (input, filter, output) |
+| `module_type` | Module type (httpPolling, mapping, httpRequest) |
+| `duration` | Execution duration |
+| `record_count` | Number of records processed |
+| `records_processed` | Total records successfully processed |
+| `records_failed` | Number of failed records |
+| `error` | Error message (for error logs) |
+| `error_code` | Error code (HTTP_ERROR, INPUT_FAILED, etc.) |
+
+#### Analyzing Logs
+
+**Parse JSON logs with `jq`:**
+```bash
+# Show all errors
+cat execution.log | jq 'select(.level == "ERROR")'
+
+# Show execution metrics
+cat execution.log | jq 'select(.msg == "execution metrics")'
+
+# Filter by pipeline
+cat execution.log | jq 'select(.pipeline_id == "my-pipeline")'
+
+# Calculate average throughput
+cat execution.log | jq 'select(.msg == "execution metrics") | .records_per_second' | awk '{sum+=$1; count++} END {print sum/count}'
+```
+
+**Monitor logs in real-time:**
+```bash
+# Follow log file with formatted output
+tail -f execution.log | jq .
+
+# Filter for errors only
+tail -f execution.log | jq 'select(.level == "ERROR")'
+```
+
+#### Troubleshooting with Logs
+
+**Common log patterns:**
+
+| Log Message | Meaning | Action |
+|-------------|---------|--------|
+| `http error response` with `status_code=401` | Authentication failed | Check credentials configuration |
+| `http error response` with `status_code=429` | Rate limited | Reduce request frequency or add delays |
+| `retrying request` with `attempt=3` | Transient failures | Check network/target availability |
+| `filter processing failed` | Transformation error | Check filter configuration and data format |
+| `all retry attempts exhausted` | Persistent failure | Investigate target system issues |
+
+**Debug authentication issues:**
+```bash
+# Run with verbose logging
+canectors run --verbose --dry-run config.yaml 2>&1 | grep -i auth
+
+# Check for 401 errors in logs
+cat execution.log | jq 'select(.http_status == 401)'
+```
+
+**Debug data transformation issues:**
+```bash
+# See filter processing details
+canectors run --verbose config.yaml 2>&1 | grep -i filter
+
+# Check for transformation errors
+cat execution.log | jq 'select(.msg | contains("mapping error"))'
+```
 
 ### Pipeline Configuration Format
 
@@ -561,7 +694,7 @@ For detailed architecture documentation, see the Architecture Document in the `c
 
 - [x] CRON scheduler (Story 4.1)
 - [x] Enhanced dry-run mode with request preview (Story 4.2)
-- [ ] Execution logging improvements (Story 4.3)
+- [x] Execution logging with structured output and metrics (Story 4.3)
 - [ ] Error handling and retry logic (Story 4.4)
 - [ ] CLI commands interface enhancements (Story 4.5)
 - [ ] Cross-platform CLI support verification (Story 4.6)

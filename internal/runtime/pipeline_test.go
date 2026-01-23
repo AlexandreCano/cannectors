@@ -2,11 +2,15 @@
 package runtime
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/canectors/runtime/internal/logger"
 	"github.com/canectors/runtime/internal/modules/filter"
 	"github.com/canectors/runtime/internal/modules/input"
 	"github.com/canectors/runtime/internal/modules/output"
@@ -2031,5 +2035,206 @@ func TestExecutor_DryRun_NilInputModule_ErrorDetails(t *testing.T) {
 
 	if result.Error.Module != "input" {
 		t.Errorf("Expected module 'input', got %s", result.Error.Module)
+	}
+}
+
+// =============================================================================
+// Execution Logging Tests
+// =============================================================================
+
+// TestExecutor_Execute_LogsExecutionStart verifies that LogExecutionStart is called.
+func TestExecutor_Execute_LogsExecutionStart(t *testing.T) {
+	// Capture log output
+	var buf bytes.Buffer
+	originalLogger := logger.Logger
+	defer func() { logger.Logger = originalLogger }()
+
+	logger.Logger = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+
+	// Arrange
+	inputData := []map[string]interface{}{
+		{"id": "1", "name": "Test 1"},
+	}
+	mockInput := NewMockInputModule(inputData, nil)
+	mockOutput := NewMockOutputModule(nil)
+
+	pipeline := &connector.Pipeline{
+		ID:      "test-pipeline-logging",
+		Name:    "Test Pipeline Logging",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, nil, mockOutput, false)
+
+	// Act
+	_, err := executor.Execute(pipeline)
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+
+	// Assert - check for execution start log
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, "execution started") {
+		t.Error("Expected log to contain 'execution started'")
+	}
+
+	// Parse JSON to verify structure
+	lines := strings.Split(strings.TrimSpace(logOutput), "\n")
+	found := false
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var logEntry map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &logEntry); err == nil {
+			if logEntry["msg"] == "execution started" {
+				found = true
+				if logEntry["pipeline_id"] != "test-pipeline-logging" {
+					t.Errorf("Expected pipeline_id 'test-pipeline-logging', got %v", logEntry["pipeline_id"])
+				}
+				if logEntry["pipeline_name"] != "Test Pipeline Logging" {
+					t.Errorf("Expected pipeline_name 'Test Pipeline Logging', got %v", logEntry["pipeline_name"])
+				}
+				break
+			}
+		}
+	}
+	if !found {
+		t.Error("Expected to find 'execution started' log entry with proper structure")
+	}
+}
+
+// TestExecutor_Execute_LogsStageStart verifies that LogStageStart is called for each stage.
+func TestExecutor_Execute_LogsStageStart(t *testing.T) {
+	// Capture log output
+	var buf bytes.Buffer
+	originalLogger := logger.Logger
+	defer func() { logger.Logger = originalLogger }()
+
+	logger.Logger = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+
+	// Arrange
+	inputData := []map[string]interface{}{
+		{"id": "1", "name": "Test 1"},
+	}
+	mockInput := NewMockInputModule(inputData, nil)
+	mockOutput := NewMockOutputModule(nil)
+
+	pipeline := &connector.Pipeline{
+		ID:      "test-pipeline-stages",
+		Name:    "Test Pipeline Stages",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, nil, mockOutput, false)
+
+	// Act
+	_, err := executor.Execute(pipeline)
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+
+	// Assert - check for stage start logs
+	logOutput := buf.String()
+
+	// Check for input stage start
+	if !strings.Contains(logOutput, "stage started") {
+		t.Error("Expected log to contain 'stage started'")
+	}
+
+	// Parse JSON to verify stage logs
+	lines := strings.Split(strings.TrimSpace(logOutput), "\n")
+	stagesFound := make(map[string]bool)
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var logEntry map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &logEntry); err == nil {
+			if logEntry["msg"] == "stage started" {
+				if stage, ok := logEntry["stage"].(string); ok {
+					stagesFound[stage] = true
+				}
+			}
+		}
+	}
+
+	// Verify we have stage logs for input and output (filter is optional)
+	if !stagesFound["input"] {
+		t.Error("Expected to find 'stage started' log for 'input' stage")
+	}
+	if !stagesFound["output"] {
+		t.Error("Expected to find 'stage started' log for 'output' stage")
+	}
+}
+
+// TestExecutor_Execute_LogsExecutionEnd verifies that LogExecutionEnd is called on success.
+func TestExecutor_Execute_LogsExecutionEnd(t *testing.T) {
+	// Capture log output
+	var buf bytes.Buffer
+	originalLogger := logger.Logger
+	defer func() { logger.Logger = originalLogger }()
+
+	logger.Logger = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+
+	// Arrange
+	inputData := []map[string]interface{}{
+		{"id": "1", "name": "Test 1"},
+	}
+	mockInput := NewMockInputModule(inputData, nil)
+	mockOutput := NewMockOutputModule(nil)
+
+	pipeline := &connector.Pipeline{
+		ID:      "test-pipeline-end",
+		Name:    "Test Pipeline End",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, nil, mockOutput, false)
+
+	// Act
+	_, err := executor.Execute(pipeline)
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+
+	// Assert - check for execution end log
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, "execution completed") {
+		t.Error("Expected log to contain 'execution completed'")
+	}
+
+	// Parse JSON to verify structure
+	lines := strings.Split(strings.TrimSpace(logOutput), "\n")
+	found := false
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var logEntry map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &logEntry); err == nil {
+			if logEntry["msg"] == "execution completed" {
+				found = true
+				if logEntry["status"] != "success" {
+					t.Errorf("Expected status 'success', got %v", logEntry["status"])
+				}
+				if logEntry["pipeline_id"] != "test-pipeline-end" {
+					t.Errorf("Expected pipeline_id 'test-pipeline-end', got %v", logEntry["pipeline_id"])
+				}
+				break
+			}
+		}
+	}
+	if !found {
+		t.Error("Expected to find 'execution completed' log entry with proper structure")
 	}
 }

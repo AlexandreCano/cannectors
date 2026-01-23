@@ -265,8 +265,9 @@ func ResolveErrorHandlingConfig(moduleConfig, defaultsConfig *ErrorHandlingConfi
 		if moduleConfig.TimeoutMs > 0 {
 			result.TimeoutMs = moduleConfig.TimeoutMs
 		}
-		// Module retry completely overrides if set
-		if moduleConfig.Retry.MaxAttempts != 0 || moduleConfig.Retry.DelayMs != 0 {
+		// Module retry completely overrides if set (non-zero RetryConfig)
+		zeroRetry := RetryConfig{}
+		if moduleConfig.Retry != zeroRetry {
 			result.Retry = moduleConfig.Retry
 		}
 	}

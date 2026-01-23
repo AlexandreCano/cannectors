@@ -515,39 +515,6 @@ func (h *HumanHandler) WithGroup(name string) slog.Handler {
 	return newHandler
 }
 
-// levelPrefix returns a human-readable prefix for the log level.
-func (h *HumanHandler) levelPrefix(level slog.Level) string {
-	// ANSI color codes
-	const (
-		colorReset  = "\033[0m"
-		colorRed    = "\033[31m"
-		colorYellow = "\033[33m"
-		colorGreen  = "\033[32m"
-		colorCyan   = "\033[36m"
-	)
-
-	var prefix, color string
-	switch {
-	case level >= slog.LevelError:
-		prefix = "✗"
-		color = colorRed
-	case level >= slog.LevelWarn:
-		prefix = "⚠"
-		color = colorYellow
-	case level >= slog.LevelInfo:
-		prefix = "ℹ"
-		color = colorCyan
-	default:
-		prefix = "·"
-		color = colorReset
-	}
-
-	if h.opts.UseColors {
-		return color + prefix + colorReset
-	}
-	return prefix
-}
-
 // levelPrefixWithMessage returns a human-readable prefix for the log level, using ✓ for success messages.
 func (h *HumanHandler) levelPrefixWithMessage(level slog.Level, message string) string {
 	// Check if message indicates success

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
@@ -424,12 +425,28 @@ func (c *ConditionModule) Process(records []map[string]interface{}) ([]map[strin
 		return []map[string]interface{}{}, nil
 	}
 
+	startTime := time.Now()
+	inputCount := len(records)
+
+	logger.Debug("filter processing started",
+		slog.String("module_type", "condition"),
+		slog.String("expression", c.expression),
+		slog.Int("input_records", inputCount),
+		slog.String("on_error", c.onError),
+		slog.Bool("has_then", c.thenModule != nil),
+		slog.Bool("has_else", c.elseModule != nil),
+	)
+
 	result := make([]map[string]interface{}, 0, len(records))
+	trueCount := 0
+	falseCount := 0
+	errorCount := 0
 
 	for recordIdx, record := range records {
 		// Evaluate the condition using expr library
 		output, err := expr.Run(c.program, record)
 		if err != nil {
+			errorCount++
 			// Handle evaluation error
 			condErr := newConditionError(
 				ErrCodeEvaluationFailed,
@@ -441,6 +458,14 @@ func (c *ConditionModule) Process(records []map[string]interface{}) ([]map[strin
 			)
 
 			if handleErr := c.handleError(condErr, recordIdx, "condition evaluation"); handleErr != nil {
+				duration := time.Since(startTime)
+				logger.Error("filter processing failed",
+					slog.String("module_type", "condition"),
+					slog.String("expression", c.expression),
+					slog.Int("record_index", recordIdx),
+					slog.Duration("duration", duration),
+					slog.String("error", handleErr.Error()),
+				)
 				return nil, handleErr
 			}
 			continue
@@ -453,10 +478,25 @@ func (c *ConditionModule) Process(records []map[string]interface{}) ([]map[strin
 			conditionResult = toBool(output)
 		}
 
+		if conditionResult {
+			trueCount++
+		} else {
+			falseCount++
+		}
+
 		// Process based on condition result
 		processedRecords, err := c.processConditionResult(conditionResult, record)
 		if err != nil {
+			errorCount++
 			if handleErr := c.handleNestedModuleError(err, recordIdx); handleErr != nil {
+				duration := time.Since(startTime)
+				logger.Error("filter processing failed",
+					slog.String("module_type", "condition"),
+					slog.String("expression", c.expression),
+					slog.Int("record_index", recordIdx),
+					slog.Duration("duration", duration),
+					slog.String("error", handleErr.Error()),
+				)
 				return nil, handleErr
 			}
 			continue
@@ -464,6 +504,20 @@ func (c *ConditionModule) Process(records []map[string]interface{}) ([]map[strin
 
 		result = append(result, processedRecords...)
 	}
+
+	duration := time.Since(startTime)
+	outputCount := len(result)
+
+	logger.Info("filter processing completed",
+		slog.String("module_type", "condition"),
+		slog.String("expression", c.expression),
+		slog.Int("input_records", inputCount),
+		slog.Int("output_records", outputCount),
+		slog.Int("true_count", trueCount),
+		slog.Int("false_count", falseCount),
+		slog.Int("error_count", errorCount),
+		slog.Duration("duration", duration),
+	)
 
 	return result, nil
 }

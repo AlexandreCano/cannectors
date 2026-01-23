@@ -257,6 +257,13 @@ func (e *Executor) executeDryRunPreview(pipelineID string, records []map[string]
 	return previews
 }
 
+// stageTimings holds timing measurements for each execution stage
+type stageTimings struct {
+	inputDuration  time.Duration
+	filterDuration time.Duration
+	outputDuration time.Duration
+}
+
 // Execute runs a pipeline configuration.
 // It processes data through Input → Filters → Output modules.
 //
@@ -271,14 +278,32 @@ func (e *Executor) executeDryRunPreview(pipelineID string, records []map[string]
 func (e *Executor) Execute(pipeline *connector.Pipeline) (*connector.ExecutionResult, error) {
 	startedAt := time.Now()
 	result := e.newErrorResult(startedAt)
+	var timings stageTimings
 
-	// Validate pipeline and modules
+	// Validate pipeline and modules first (before logging, in case pipeline is nil)
 	if err := e.validateExecution(pipeline, result); err != nil {
+		// Log execution start and end on validation error (if pipeline is valid)
+		if pipeline != nil {
+			execCtx := logger.ExecutionContext{
+				PipelineID:   pipeline.ID,
+				PipelineName: pipeline.Name,
+				DryRun:       e.dryRun,
+			}
+			logger.LogExecutionStart(execCtx)
+			totalDuration := time.Since(startedAt)
+			logger.LogExecutionEnd(execCtx, StatusError, 0, totalDuration)
+		}
 		return result, err
 	}
 	result.PipelineID = pipeline.ID
 
-	e.logExecutionStart(pipeline)
+	// Log execution start using helper
+	execCtx := logger.ExecutionContext{
+		PipelineID:   pipeline.ID,
+		PipelineName: pipeline.Name,
+		DryRun:       e.dryRun,
+	}
+	logger.LogExecutionStart(execCtx)
 
 	// Setup module cleanup (must be in Execute for defers to work)
 	if e.inputModule != nil {
@@ -288,15 +313,23 @@ func (e *Executor) Execute(pipeline *connector.Pipeline) (*connector.ExecutionRe
 		defer e.closeModule(pipeline.ID, "output", e.outputModule)
 	}
 
-	// Execute Input module
-	records, err := e.executeInput(pipeline.ID, result)
+	// Execute Input module (returns duration measured inside)
+	records, inputDuration, err := e.executeInput(pipeline, result)
+	timings.inputDuration = inputDuration
 	if err != nil {
+		// Log execution end on input failure
+		totalDuration := time.Since(startedAt)
+		logger.LogExecutionEnd(execCtx, StatusError, 0, totalDuration)
 		return result, err
 	}
 
-	// Execute Filter modules
-	filteredRecords, err := e.executeFiltersWithResult(pipeline.ID, records, result)
+	// Execute Filter modules (returns duration measured inside)
+	filteredRecords, filterDuration, err := e.executeFiltersWithResult(pipeline, records, result)
+	timings.filterDuration = filterDuration
 	if err != nil {
+		// Log execution end on filter failure
+		totalDuration := time.Since(startedAt)
+		logger.LogExecutionEnd(execCtx, StatusError, len(records), totalDuration)
 		return result, err
 	}
 
@@ -305,12 +338,17 @@ func (e *Executor) Execute(pipeline *connector.Pipeline) (*connector.ExecutionRe
 		result.DryRunPreview = e.executeDryRunPreview(pipeline.ID, filteredRecords, pipeline.DryRunOptions)
 	}
 
-	// Execute Output module
-	if err := e.executeOutputWithResult(pipeline.ID, filteredRecords, result); err != nil {
+	// Execute Output module (returns duration measured inside)
+	outputDuration, err := e.executeOutputWithResult(pipeline, filteredRecords, result)
+	timings.outputDuration = outputDuration
+	if err != nil {
+		// Log execution end on output failure
+		totalDuration := time.Since(startedAt)
+		logger.LogExecutionEnd(execCtx, StatusError, result.RecordsProcessed, totalDuration)
 		return result, err
 	}
 
-	e.finalizeSuccess(result, startedAt, pipeline.ID)
+	e.finalizeSuccessWithMetrics(result, startedAt, pipeline, timings)
 	return result, nil
 }
 
@@ -363,17 +401,6 @@ func (e *Executor) validateExecution(pipeline *connector.Pipeline, result *conne
 	return nil
 }
 
-// logExecutionStart logs the start of pipeline execution.
-func (e *Executor) logExecutionStart(pipeline *connector.Pipeline) {
-	logger.Info("starting pipeline execution",
-		slog.String("pipeline_id", pipeline.ID),
-		slog.String("pipeline_name", pipeline.Name),
-		slog.String("version", pipeline.Version),
-		slog.Bool("dry_run", e.dryRun),
-		slog.Int("filter_count", len(e.filterModules)),
-	)
-}
-
 // moduleCloser interface for modules that can be closed.
 type moduleCloser interface {
 	Close() error
@@ -390,46 +417,58 @@ func (e *Executor) closeModule(pipelineID, moduleName string, m moduleCloser) {
 	}
 }
 
-// executeInput executes the input module and returns fetched records.
-func (e *Executor) executeInput(pipelineID string, result *connector.ExecutionResult) ([]map[string]interface{}, error) {
-	logger.Debug("executing input module",
-		slog.String("pipeline_id", pipelineID),
-		slog.String("stage", "input"),
-	)
+// executeInput executes the input module and returns fetched records and duration.
+func (e *Executor) executeInput(pipeline *connector.Pipeline, result *connector.ExecutionResult) ([]map[string]interface{}, time.Duration, error) {
+	// Log stage start
+	stageCtx := logger.ExecutionContext{
+		PipelineID:   pipeline.ID,
+		PipelineName: pipeline.Name,
+		Stage:        "input",
+		DryRun:       e.dryRun,
+	}
+	logger.LogStageStart(stageCtx)
 
 	inputStartTime := time.Now()
 	records, err := e.inputModule.Fetch()
 	inputDuration := time.Since(inputStartTime)
 
 	if err != nil {
-		logger.Error("input module execution failed",
-			slog.String("pipeline_id", pipelineID),
-			slog.String("module", "input"),
-			slog.Duration("duration", inputDuration),
-			slog.String("error", err.Error()),
-		)
 		result.CompletedAt = time.Now()
 		result.Error = &connector.ExecutionError{
 			Code:    ErrCodeInputFailed,
 			Message: fmt.Sprintf("input module failed: %v", err),
 			Module:  "input",
 		}
-		return nil, fmt.Errorf("executing input module: %w", err)
+		// Log stage failure
+		logger.LogStageEnd(stageCtx, 0, inputDuration, &logger.ExecutionError{
+			Code:    ErrCodeInputFailed,
+			Message: err.Error(),
+		})
+		return nil, inputDuration, fmt.Errorf("executing input module: %w", err)
 	}
 
-	logger.Debug("input module completed",
-		slog.String("pipeline_id", pipelineID),
-		slog.String("stage", "input"),
-		slog.Int("records_fetched", len(records)),
-		slog.Duration("duration", inputDuration),
-	)
+	// Log stage completion
+	logger.LogStageEnd(stageCtx, len(records), inputDuration, nil)
 
-	return records, nil
+	return records, inputDuration, nil
 }
 
 // executeFiltersWithResult executes filter modules and updates result on error.
-func (e *Executor) executeFiltersWithResult(pipelineID string, records []map[string]interface{}, result *connector.ExecutionResult) ([]map[string]interface{}, error) {
-	filterRes := e.executeFilters(pipelineID, records)
+// Returns filtered records, duration, and error.
+func (e *Executor) executeFiltersWithResult(pipeline *connector.Pipeline, records []map[string]interface{}, result *connector.ExecutionResult) ([]map[string]interface{}, time.Duration, error) {
+	// Log stage start
+	stageCtx := logger.ExecutionContext{
+		PipelineID:   pipeline.ID,
+		PipelineName: pipeline.Name,
+		Stage:        "filter",
+		DryRun:       e.dryRun,
+	}
+	logger.LogStageStart(stageCtx)
+
+	filterStartTime := time.Now()
+	filterRes := e.executeFilters(pipeline.ID, records)
+	filterDuration := time.Since(filterStartTime)
+
 	if filterRes.err != nil {
 		result.CompletedAt = time.Now()
 		result.Error = &connector.ExecutionError{
@@ -440,14 +479,35 @@ func (e *Executor) executeFiltersWithResult(pipelineID string, records []map[str
 				"filterIndex": filterRes.errIdx,
 			},
 		}
-		return nil, fmt.Errorf("executing filter module %d: %w", filterRes.errIdx, filterRes.err)
+		// Log stage failure
+		logger.LogStageEnd(stageCtx, len(records), filterDuration, &logger.ExecutionError{
+			Code:    ErrCodeFilterFailed,
+			Message: filterRes.err.Error(),
+		})
+		return nil, filterDuration, fmt.Errorf("executing filter module %d: %w", filterRes.errIdx, filterRes.err)
 	}
-	return filterRes.records, nil
+
+	// Log stage completion
+	logger.LogStageEnd(stageCtx, len(filterRes.records), filterDuration, nil)
+	return filterRes.records, filterDuration, nil
 }
 
 // executeOutputWithResult executes the output module and updates result.
-func (e *Executor) executeOutputWithResult(pipelineID string, records []map[string]interface{}, result *connector.ExecutionResult) error {
-	outputRes := e.executeOutput(pipelineID, records)
+// Returns duration and error.
+func (e *Executor) executeOutputWithResult(pipeline *connector.Pipeline, records []map[string]interface{}, result *connector.ExecutionResult) (time.Duration, error) {
+	// Log stage start
+	stageCtx := logger.ExecutionContext{
+		PipelineID:   pipeline.ID,
+		PipelineName: pipeline.Name,
+		Stage:        "output",
+		DryRun:       e.dryRun,
+	}
+	logger.LogStageStart(stageCtx)
+
+	outputStartTime := time.Now()
+	outputRes := e.executeOutput(pipeline.ID, records)
+	outputDuration := time.Since(outputStartTime)
+
 	if outputRes.err != nil {
 		result.CompletedAt = time.Now()
 		result.RecordsProcessed = outputRes.recordsSent
@@ -457,29 +517,59 @@ func (e *Executor) executeOutputWithResult(pipelineID string, records []map[stri
 			Message: fmt.Sprintf("output module failed: %v", outputRes.err),
 			Module:  "output",
 		}
-		return fmt.Errorf("executing output module: %w", outputRes.err)
+		// Log stage failure
+		logger.LogStageEnd(stageCtx, len(records), outputDuration, &logger.ExecutionError{
+			Code:    ErrCodeOutputFailed,
+			Message: outputRes.err.Error(),
+		})
+		return outputDuration, fmt.Errorf("executing output module: %w", outputRes.err)
 	}
 
+	// Log stage completion
+	logger.LogStageEnd(stageCtx, outputRes.recordsSent, outputDuration, nil)
 	result.RecordsProcessed = outputRes.recordsSent
-	return nil
+	return outputDuration, nil
 }
 
-// finalizeSuccess marks the execution as successful and logs completion.
-func (e *Executor) finalizeSuccess(result *connector.ExecutionResult, startedAt time.Time, pipelineID string) {
+// finalizeSuccessWithMetrics marks the execution as successful and logs completion with detailed metrics.
+func (e *Executor) finalizeSuccessWithMetrics(result *connector.ExecutionResult, startedAt time.Time, pipeline *connector.Pipeline, timings stageTimings) {
 	result.Status = StatusSuccess
 	result.RecordsFailed = 0
 	result.CompletedAt = time.Now()
 	result.Error = nil
 
 	totalDuration := time.Since(startedAt)
-	logger.Info("pipeline execution completed",
-		slog.String("pipeline_id", pipelineID),
-		slog.String("status", StatusSuccess),
-		slog.Int("records_processed", result.RecordsProcessed),
-		slog.Int("records_failed", 0),
-		slog.Duration("total_duration", totalDuration),
-		slog.Bool("dry_run", e.dryRun),
-	)
+
+	// Calculate performance metrics
+	recordsProcessed := result.RecordsProcessed
+	var recordsPerSecond float64
+	var avgRecordTime time.Duration
+	if recordsProcessed > 0 && totalDuration > 0 {
+		recordsPerSecond = float64(recordsProcessed) / totalDuration.Seconds()
+		avgRecordTime = totalDuration / time.Duration(recordsProcessed)
+	}
+
+	// Log detailed metrics using the new helper
+	ctx := logger.ExecutionContext{
+		PipelineID:   pipeline.ID,
+		PipelineName: pipeline.Name,
+		DryRun:       e.dryRun,
+	}
+
+	metrics := logger.ExecutionMetrics{
+		TotalDuration:    totalDuration,
+		InputDuration:    timings.inputDuration,
+		FilterDuration:   timings.filterDuration,
+		OutputDuration:   timings.outputDuration,
+		RecordsProcessed: recordsProcessed,
+		RecordsFailed:    0,
+		RecordsPerSecond: recordsPerSecond,
+		AvgRecordTime:    avgRecordTime,
+	}
+
+	// Log execution end (includes metrics via LogMetrics call)
+	logger.LogExecutionEnd(ctx, StatusSuccess, recordsProcessed, totalDuration)
+	logger.LogMetrics(ctx, metrics)
 }
 
 // ExecuteWithRecords runs a pipeline configuration using pre-fetched records.

@@ -1,4 +1,4 @@
-// Package runtime provides retry configuration and mechanism for pipeline execution.
+// Package errhandling provides retry configuration and mechanism for pipeline execution.
 package errhandling
 
 import (

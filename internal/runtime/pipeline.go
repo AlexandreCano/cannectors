@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/canectors/runtime/internal/errhandling"
 	"github.com/canectors/runtime/internal/logger"
 	"github.com/canectors/runtime/internal/modules/filter"
 	"github.com/canectors/runtime/internal/modules/input"
@@ -362,15 +363,29 @@ func (e *Executor) newErrorResult(startedAt time.Time) *connector.ExecutionResul
 	}
 }
 
+// buildExecutionError creates an ExecutionError with classified category and type.
+func buildExecutionError(code, module string, err error) *connector.ExecutionError {
+	ex := &connector.ExecutionError{
+		Code:    code,
+		Message: err.Error(),
+		Module:  module,
+	}
+	cl := errhandling.ClassifyError(err)
+	ex.ErrorCategory = string(cl.Category)
+	if errhandling.IsFatal(err) {
+		ex.ErrorType = "fatal"
+	} else {
+		ex.ErrorType = "retryable"
+	}
+	return ex
+}
+
 // validateExecution validates the pipeline and modules before execution.
 func (e *Executor) validateExecution(pipeline *connector.Pipeline, result *connector.ExecutionResult) error {
 	if pipeline == nil {
 		logger.Error("pipeline execution failed: nil pipeline configuration")
 		result.CompletedAt = time.Now()
-		result.Error = &connector.ExecutionError{
-			Code:    ErrCodeInvalidInput,
-			Message: ErrNilPipeline.Error(),
-		}
+		result.Error = buildExecutionError(ErrCodeInvalidInput, "", ErrNilPipeline)
 		return ErrNilPipeline
 	}
 
@@ -378,11 +393,7 @@ func (e *Executor) validateExecution(pipeline *connector.Pipeline, result *conne
 		logger.Error("pipeline execution failed: input module is nil",
 			slog.String("pipeline_id", pipeline.ID))
 		result.CompletedAt = time.Now()
-		result.Error = &connector.ExecutionError{
-			Code:    ErrCodeInvalidInput,
-			Message: ErrNilInputModule.Error(),
-			Module:  "input",
-		}
+		result.Error = buildExecutionError(ErrCodeInvalidInput, "input", ErrNilInputModule)
 		return ErrNilInputModule
 	}
 
@@ -390,11 +401,7 @@ func (e *Executor) validateExecution(pipeline *connector.Pipeline, result *conne
 		logger.Error("pipeline execution failed: output module is nil",
 			slog.String("pipeline_id", pipeline.ID))
 		result.CompletedAt = time.Now()
-		result.Error = &connector.ExecutionError{
-			Code:    ErrCodeInvalidInput,
-			Message: ErrNilOutputModule.Error(),
-			Module:  "output",
-		}
+		result.Error = buildExecutionError(ErrCodeInvalidInput, "output", ErrNilOutputModule)
 		return ErrNilOutputModule
 	}
 
@@ -434,12 +441,10 @@ func (e *Executor) executeInput(pipeline *connector.Pipeline, result *connector.
 
 	if err != nil {
 		result.CompletedAt = time.Now()
-		result.Error = &connector.ExecutionError{
-			Code:    ErrCodeInputFailed,
-			Message: fmt.Sprintf("input module failed: %v", err),
-			Module:  "input",
+		result.Error = buildExecutionError(ErrCodeInputFailed, "input", err)
+		if p, ok := e.inputModule.(connector.RetryInfoProvider); ok {
+			result.RetryInfo = p.GetRetryInfo()
 		}
-		// Log stage failure
 		logger.LogStageEnd(stageCtx, 0, inputDuration, &logger.ExecutionError{
 			Code:    ErrCodeInputFailed,
 			Message: err.Error(),
@@ -447,9 +452,10 @@ func (e *Executor) executeInput(pipeline *connector.Pipeline, result *connector.
 		return nil, inputDuration, fmt.Errorf("executing input module: %w", err)
 	}
 
-	// Log stage completion
+	if p, ok := e.inputModule.(connector.RetryInfoProvider); ok {
+		result.RetryInfo = p.GetRetryInfo()
+	}
 	logger.LogStageEnd(stageCtx, len(records), inputDuration, nil)
-
 	return records, inputDuration, nil
 }
 
@@ -471,18 +477,13 @@ func (e *Executor) executeFiltersWithResult(pipeline *connector.Pipeline, record
 
 	if filterRes.err != nil {
 		result.CompletedAt = time.Now()
-		result.Error = &connector.ExecutionError{
-			Code:    ErrCodeFilterFailed,
-			Message: fmt.Sprintf("filter module %d failed: %v", filterRes.errIdx, filterRes.err),
-			Module:  "filter",
-			Details: map[string]interface{}{
-				"filterIndex": filterRes.errIdx,
-			},
-		}
-		// Log stage failure
+		errMsg := fmt.Sprintf("filter module %d failed: %v", filterRes.errIdx, filterRes.err)
+		result.Error = buildExecutionError(ErrCodeFilterFailed, "filter", filterRes.err)
+		result.Error.Message = errMsg
+		result.Error.Details = map[string]interface{}{"filterIndex": filterRes.errIdx}
 		logger.LogStageEnd(stageCtx, len(records), filterDuration, &logger.ExecutionError{
 			Code:    ErrCodeFilterFailed,
-			Message: filterRes.err.Error(),
+			Message: errMsg,
 		})
 		return nil, filterDuration, fmt.Errorf("executing filter module %d: %w", filterRes.errIdx, filterRes.err)
 	}
@@ -512,12 +513,10 @@ func (e *Executor) executeOutputWithResult(pipeline *connector.Pipeline, records
 		result.CompletedAt = time.Now()
 		result.RecordsProcessed = outputRes.recordsSent
 		result.RecordsFailed = outputRes.recordsFailed
-		result.Error = &connector.ExecutionError{
-			Code:    ErrCodeOutputFailed,
-			Message: fmt.Sprintf("output module failed: %v", outputRes.err),
-			Module:  "output",
+		result.Error = buildExecutionError(ErrCodeOutputFailed, "output", outputRes.err)
+		if p, ok := e.outputModule.(connector.RetryInfoProvider); ok {
+			result.RetryInfo = p.GetRetryInfo()
 		}
-		// Log stage failure
 		logger.LogStageEnd(stageCtx, len(records), outputDuration, &logger.ExecutionError{
 			Code:    ErrCodeOutputFailed,
 			Message: outputRes.err.Error(),
@@ -525,7 +524,9 @@ func (e *Executor) executeOutputWithResult(pipeline *connector.Pipeline, records
 		return outputDuration, fmt.Errorf("executing output module: %w", outputRes.err)
 	}
 
-	// Log stage completion
+	if p, ok := e.outputModule.(connector.RetryInfoProvider); ok {
+		result.RetryInfo = p.GetRetryInfo()
+	}
 	logger.LogStageEnd(stageCtx, outputRes.recordsSent, outputDuration, nil)
 	result.RecordsProcessed = outputRes.recordsSent
 	return outputDuration, nil
@@ -587,10 +588,7 @@ func (e *Executor) ExecuteWithRecords(pipeline *connector.Pipeline, records []ma
 	if pipeline == nil {
 		logger.Error("pipeline execution failed: nil pipeline configuration")
 		result.CompletedAt = time.Now()
-		result.Error = &connector.ExecutionError{
-			Code:    ErrCodeInvalidInput,
-			Message: ErrNilPipeline.Error(),
-		}
+		result.Error = buildExecutionError(ErrCodeInvalidInput, "", ErrNilPipeline)
 		return result, ErrNilPipeline
 	}
 
@@ -611,11 +609,7 @@ func (e *Executor) ExecuteWithRecords(pipeline *connector.Pipeline, records []ma
 			slog.String("pipeline_id", pipeline.ID),
 		)
 		result.CompletedAt = time.Now()
-		result.Error = &connector.ExecutionError{
-			Code:    ErrCodeInvalidInput,
-			Message: ErrNilOutputModule.Error(),
-			Module:  "output",
-		}
+		result.Error = buildExecutionError(ErrCodeInvalidInput, "output", ErrNilOutputModule)
 		return result, ErrNilOutputModule
 	}
 
@@ -635,14 +629,9 @@ func (e *Executor) ExecuteWithRecords(pipeline *connector.Pipeline, records []ma
 	filterRes := e.executeFilters(pipeline.ID, records)
 	if filterRes.err != nil {
 		result.CompletedAt = time.Now()
-		result.Error = &connector.ExecutionError{
-			Code:    ErrCodeFilterFailed,
-			Message: fmt.Sprintf("filter module %d failed: %v", filterRes.errIdx, filterRes.err),
-			Module:  "filter",
-			Details: map[string]interface{}{
-				"filterIndex": filterRes.errIdx,
-			},
-		}
+		result.Error = buildExecutionError(ErrCodeFilterFailed, "filter", filterRes.err)
+		result.Error.Message = fmt.Sprintf("filter module %d failed: %v", filterRes.errIdx, filterRes.err)
+		result.Error.Details = map[string]interface{}{"filterIndex": filterRes.errIdx}
 		return result, fmt.Errorf("executing filter module %d: %w", filterRes.errIdx, filterRes.err)
 	}
 
@@ -657,12 +646,14 @@ func (e *Executor) ExecuteWithRecords(pipeline *connector.Pipeline, records []ma
 		result.CompletedAt = time.Now()
 		result.RecordsProcessed = outputRes.recordsSent
 		result.RecordsFailed = outputRes.recordsFailed
-		result.Error = &connector.ExecutionError{
-			Code:    ErrCodeOutputFailed,
-			Message: fmt.Sprintf("output module failed: %v", outputRes.err),
-			Module:  "output",
+		result.Error = buildExecutionError(ErrCodeOutputFailed, "output", outputRes.err)
+		if p, ok := e.outputModule.(connector.RetryInfoProvider); ok {
+			result.RetryInfo = p.GetRetryInfo()
 		}
 		return result, fmt.Errorf("executing output module: %w", outputRes.err)
+	}
+	if p, ok := e.outputModule.(connector.RetryInfoProvider); ok {
+		result.RetryInfo = p.GetRetryInfo()
 	}
 
 	result.Status = StatusSuccess

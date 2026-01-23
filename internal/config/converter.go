@@ -29,90 +29,117 @@ func ConvertToPipeline(data map[string]interface{}) (*connector.Pipeline, error)
 		return nil, fmt.Errorf("configuration data is nil")
 	}
 
-	// Extract connector section
 	connectorData, ok := data["connector"].(map[string]interface{})
 	if !ok {
 		return nil, fmt.Errorf("missing or invalid 'connector' section")
 	}
 
-	pipeline := &connector.Pipeline{
+	pipeline := newPipeline()
+	if err := extractPipelineMetadata(pipeline, connectorData); err != nil {
+		return nil, err
+	}
+
+	if err := extractModules(pipeline, connectorData); err != nil {
+		return nil, err
+	}
+
+	extractDefaultsAndErrorHandling(pipeline, connectorData)
+	resolveAndInjectErrorHandling(pipeline)
+
+	return pipeline, nil
+}
+
+// newPipeline creates a new Pipeline with default values.
+func newPipeline() *connector.Pipeline {
+	return &connector.Pipeline{
 		Enabled:   true,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
+}
 
-	// Extract required fields
-	var name string
-	if name, ok = connectorData["name"].(string); !ok {
-		return nil, fmt.Errorf("missing required field 'connector.name'")
+// extractPipelineMetadata extracts name, version, description, id, and schedule.
+func extractPipelineMetadata(p *connector.Pipeline, connectorData map[string]interface{}) error {
+	name, ok := connectorData["name"].(string)
+	if !ok {
+		return fmt.Errorf("missing required field 'connector.name'")
 	}
-	pipeline.Name = name
-	// Use name as ID if not specified
-	pipeline.ID = name
+	p.Name = name
+	p.ID = name // Use name as ID if not specified
 
-	var version string
-	if version, ok = connectorData["version"].(string); !ok {
-		return nil, fmt.Errorf("missing required field 'connector.version'")
+	version, ok := connectorData["version"].(string)
+	if !ok {
+		return fmt.Errorf("missing required field 'connector.version'")
 	}
-	pipeline.Version = version
+	p.Version = version
 
-	// Extract optional fields
-	if description, okDesc := connectorData["description"].(string); okDesc {
-		pipeline.Description = description
-	}
-
-	if id, okID := connectorData["id"].(string); okID {
-		pipeline.ID = id
+	if description, ok := connectorData["description"].(string); ok {
+		p.Description = description
 	}
 
-	// Extract input module config
+	if id, ok := connectorData["id"].(string); ok {
+		p.ID = id
+	}
+
+	return nil
+}
+
+// extractModules extracts input, filters, and output modules.
+func extractModules(p *connector.Pipeline, connectorData map[string]interface{}) error {
+	// Extract input
 	inputData, ok := connectorData["input"].(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("missing or invalid 'connector.input' section")
+		return fmt.Errorf("missing or invalid 'connector.input' section")
 	}
 	inputConfig, err := convertModuleConfig(inputData)
 	if err != nil {
-		return nil, fmt.Errorf("invalid input config: %w", err)
+		return fmt.Errorf("invalid input config: %w", err)
 	}
-	pipeline.Input = inputConfig
+	p.Input = inputConfig
 
-	// Extract schedule from input if present (for pipeline-level schedule)
+	// Extract schedule from input if present
 	if schedule, okSchedule := inputData["schedule"].(string); okSchedule {
-		pipeline.Schedule = schedule
+		p.Schedule = schedule
 	}
 
-	// Extract filters (optional)
+	// Extract filters
 	if filtersData, okFilters := connectorData["filters"].([]interface{}); okFilters {
 		for i, filterData := range filtersData {
 			filterMap, isMap := filterData.(map[string]interface{})
 			if !isMap {
-				return nil, fmt.Errorf("invalid filter at index %d", i)
+				return fmt.Errorf("invalid filter at index %d", i)
 			}
 			filterConfig, convertErr := convertModuleConfig(filterMap)
 			if convertErr != nil {
-				return nil, fmt.Errorf("invalid filter at index %d: %w", i, convertErr)
+				return fmt.Errorf("invalid filter at index %d: %w", i, convertErr)
 			}
-			pipeline.Filters = append(pipeline.Filters, *filterConfig)
+			p.Filters = append(p.Filters, *filterConfig)
 		}
 	}
 
-	// Extract output module config
-	outputData, okOutput := connectorData["output"].(map[string]interface{})
-	if !okOutput {
-		return nil, fmt.Errorf("missing or invalid 'connector.output' section")
+	// Extract output
+	outputData, ok := connectorData["output"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("missing or invalid 'connector.output' section")
 	}
 	outputConfig, err := convertModuleConfig(outputData)
 	if err != nil {
-		return nil, fmt.Errorf("invalid output config: %w", err)
+		return fmt.Errorf("invalid output config: %w", err)
 	}
-	pipeline.Output = outputConfig
+	p.Output = outputConfig
 
-	// Extract error handling (optional)
-	if errorHandling, okErrHandling := connectorData["errorHandling"].(map[string]interface{}); okErrHandling {
-		pipeline.ErrorHandling = convertErrorHandling(errorHandling)
+	return nil
+}
+
+// extractDefaultsAndErrorHandling extracts defaults and errorHandling (optional).
+func extractDefaultsAndErrorHandling(p *connector.Pipeline, connectorData map[string]interface{}) {
+	if defaults, ok := connectorData["defaults"].(map[string]interface{}); ok {
+		p.Defaults = convertModuleDefaults(defaults)
 	}
 
-	return pipeline, nil
+	if errorHandling, ok := connectorData["errorHandling"].(map[string]interface{}); ok {
+		p.ErrorHandling = convertErrorHandling(errorHandling)
+	}
 }
 
 // convertModuleConfig converts a raw module configuration map to ModuleConfig.
@@ -174,21 +201,175 @@ func convertAuthConfig(data map[string]interface{}) (*connector.AuthConfig, erro
 	return authConfig, nil
 }
 
+// convertModuleDefaults converts connector.defaults to ModuleDefaults.
+func convertModuleDefaults(data map[string]interface{}) *connector.ModuleDefaults {
+	d := &connector.ModuleDefaults{}
+	if v, ok := data["onError"].(string); ok {
+		d.OnError = v
+	}
+	if v, ok := getIntFromMap(data, "timeoutMs"); ok && v > 0 {
+		d.TimeoutMs = v
+	}
+	if r, ok := data["retry"].(map[string]interface{}); ok && len(r) > 0 {
+		d.Retry = r
+	}
+	return d
+}
+
+func getIntFromMap(m map[string]interface{}, key string) (int, bool) {
+	if v, ok := m[key]; !ok {
+		return 0, false
+	} else if f, ok := v.(float64); ok {
+		return int(f), true
+	} else if i, ok := v.(int); ok {
+		return i, true
+	}
+	return 0, false
+}
+
 // convertErrorHandling converts a raw error handling configuration map to ErrorHandling.
+// Supports legacy (retryCount, retryDelay) and full retryConfig (retry.*, timeoutMs).
 func convertErrorHandling(data map[string]interface{}) *connector.ErrorHandling {
-	errorHandling := &connector.ErrorHandling{}
+	eh := &connector.ErrorHandling{}
 
-	if retryCount, ok := data["retryCount"].(float64); ok {
-		errorHandling.RetryCount = int(retryCount)
+	parseLegacyRetryFields(eh, data)
+	eh.OnError = extractStringField(data, "onError")
+	eh.TimeoutMs = extractTimeoutMs(data)
+	eh.Retry = extractRetryConfig(data)
+
+	// Build Retry from legacy fields if no retry object
+	if eh.Retry == nil && (eh.RetryCount > 0 || eh.RetryDelay > 0) {
+		eh.Retry = buildRetryFromLegacy(eh, data)
 	}
 
-	if retryDelay, ok := data["retryDelay"].(float64); ok {
-		errorHandling.RetryDelay = int(retryDelay)
+	return eh
+}
+
+// parseLegacyRetryFields extracts legacy retry fields (retryCount, retryDelay, retryDelayMs).
+func parseLegacyRetryFields(eh *connector.ErrorHandling, data map[string]interface{}) {
+	if v, ok := data["retryCount"].(float64); ok {
+		eh.RetryCount = int(v)
+	}
+	if v, ok := data["retryDelay"].(float64); ok {
+		eh.RetryDelay = int(v)
+	}
+	if v, ok := data["retryDelayMs"].(float64); ok {
+		eh.RetryDelay = int(v)
+	}
+}
+
+// extractStringField extracts a string value from a map.
+func extractStringField(data map[string]interface{}, key string) string {
+	if v, ok := data[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// extractTimeoutMs extracts timeoutMs from data.
+func extractTimeoutMs(data map[string]interface{}) int {
+	if v, ok := getIntFromMap(data, "timeoutMs"); ok && v > 0 {
+		return v
+	}
+	return 0
+}
+
+// extractRetryConfig extracts retry config map from data.
+func extractRetryConfig(data map[string]interface{}) map[string]interface{} {
+	if r, ok := data["retry"].(map[string]interface{}); ok && len(r) > 0 {
+		return r
+	}
+	return nil
+}
+
+// buildRetryFromLegacy builds a retry config map from legacy fields.
+func buildRetryFromLegacy(eh *connector.ErrorHandling, data map[string]interface{}) map[string]interface{} {
+	retry := map[string]interface{}{
+		"maxAttempts": eh.RetryCount,
+		"delayMs":     eh.RetryDelay,
 	}
 
-	if onError, ok := data["onError"].(string); ok {
-		errorHandling.OnError = onError
+	if b, ok := data["backoffMultiplier"].(float64); ok {
+		retry["backoffMultiplier"] = b
+	}
+	if v, ok := getIntFromMap(data, "maxRetryDelayMs"); ok {
+		retry["maxDelayMs"] = v
+	}
+	if c, ok := data["retryableStatusCodes"].([]interface{}); ok {
+		retry["retryableStatusCodes"] = c
 	}
 
-	return errorHandling
+	return retry
+}
+
+// resolveAndInjectErrorHandling resolves retry/onError/timeoutMs per module (module > defaults > errorHandling)
+// and injects resolved values into each module's Config so modules read them directly.
+func resolveAndInjectErrorHandling(p *connector.Pipeline) {
+	resolve := func(m *connector.ModuleConfig) {
+		if m == nil || m.Config == nil {
+			return
+		}
+		resolveOnError(m, p.Defaults, p.ErrorHandling)
+		resolveTimeout(m, p.Defaults, p.ErrorHandling)
+		resolveRetry(m, p.Defaults, p.ErrorHandling)
+	}
+
+	resolve(p.Input)
+	for i := range p.Filters {
+		resolve(&p.Filters[i])
+	}
+	resolve(p.Output)
+}
+
+// resolveOnError resolves onError with precedence: module > defaults > errorHandling.
+func resolveOnError(m *connector.ModuleConfig, defaults *connector.ModuleDefaults, eh *connector.ErrorHandling) {
+	if v, ok := m.Config["onError"].(string); ok && v != "" {
+		m.Config["onError"] = v
+		return
+	}
+	if defaults != nil && defaults.OnError != "" {
+		m.Config["onError"] = defaults.OnError
+		return
+	}
+	if eh != nil && eh.OnError != "" {
+		m.Config["onError"] = eh.OnError
+	}
+}
+
+// resolveTimeout resolves timeoutMs with precedence: module > defaults > errorHandling.
+// Also handles legacy "timeout" in seconds (converts to milliseconds).
+func resolveTimeout(m *connector.ModuleConfig, defaults *connector.ModuleDefaults, eh *connector.ErrorHandling) {
+	// Check module config first (timeoutMs or legacy timeout)
+	if v, ok := getIntFromMap(m.Config, "timeoutMs"); ok && v > 0 {
+		m.Config["timeoutMs"] = v
+		return
+	}
+	if v, ok := getIntFromMap(m.Config, "timeout"); ok && v > 0 {
+		m.Config["timeoutMs"] = v * 1000
+		return
+	}
+	// Fall back to defaults
+	if defaults != nil && defaults.TimeoutMs > 0 {
+		m.Config["timeoutMs"] = defaults.TimeoutMs
+		return
+	}
+	// Fall back to errorHandling
+	if eh != nil && eh.TimeoutMs > 0 {
+		m.Config["timeoutMs"] = eh.TimeoutMs
+	}
+}
+
+// resolveRetry resolves retry config with precedence: module > defaults > errorHandling.
+func resolveRetry(m *connector.ModuleConfig, defaults *connector.ModuleDefaults, eh *connector.ErrorHandling) {
+	if r, ok := m.Config["retry"].(map[string]interface{}); ok && len(r) > 0 {
+		m.Config["retry"] = r
+		return
+	}
+	if defaults != nil && len(defaults.Retry) > 0 {
+		m.Config["retry"] = defaults.Retry
+		return
+	}
+	if eh != nil && len(eh.Retry) > 0 {
+		m.Config["retry"] = eh.Retry
+	}
 }

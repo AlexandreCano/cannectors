@@ -15,6 +15,7 @@ Portable runtime CLI for executing connector pipelines. Canectors is a cross-pla
   - Configurable log levels and output formats
   - File logging support (`--log-file`)
 - **Resource Cleanup**: Automatic cleanup of module resources (connections, file handles)
+- **Error Handling & Retry**: Classified errors (network, auth, validation, server), configurable retry with exponential backoff, timeout handling, and structured error logging (Story 4.4)
 
 ## Project Status
 
@@ -38,6 +39,7 @@ Portable runtime CLI for executing connector pipelines. Canectors is a cross-pla
 - ✅ **Story 4.1**: CRON scheduler for periodic pipeline execution
 - ✅ **Story 4.2**: Dry-run mode with request preview
 - ✅ **Story 4.3**: Execution logging with structured output and metrics
+- ✅ **Story 4.4**: Error handling and retry logic (classification, retry config, onError, timeout, ExecutionResult retry/error details)
 
 ## Project Structure
 
@@ -53,6 +55,10 @@ canectors-runtime/
 │   │   ├── validator.go    # JSON Schema validation
 │   │   ├── converter.go    # Config to Pipeline type conversion
 │   │   └── types.go        # ConfigResult, ParseError, ValidationError
+│   ├── errhandling/        # Error classification and retry (Story 4.4)
+│   │   ├── errors.go       # Error categories, ClassifyError, ClassifyHTTPStatus
+│   │   ├── retry.go        # RetryConfig, RetryExecutor, exponential backoff
+│   │   └── *_test.go       # Unit tests
 │   ├── logger/             # Structured JSON logging (slog)
 │   ├── modules/            # Module implementations
 │   │   ├── input/          # Input modules (HTTP Polling, Webhook)
@@ -60,7 +66,9 @@ canectors-runtime/
 │   │   └── output/         # Output modules (HTTP Request)
 │   ├── runtime/            # Pipeline execution engine
 │   │   ├── pipeline.go     # Executor with Input → Filter → Output orchestration
-│   │   └── pipeline_test.go # Executor tests (12 tests)
+│   │   ├── errors.go       # Re-exports from errhandling
+│   │   ├── retry.go        # Re-exports from errhandling
+│   │   └── pipeline_test.go # Executor tests
 │   └── scheduler/          # CRON scheduling (Epic 4)
 ├── pkg/
 │   └── connector/          # Public types (Pipeline, ExecutionResult, ModuleConfig)
@@ -311,6 +319,8 @@ All logs include consistent, structured fields for easy parsing:
 | `records_failed` | Number of failed records |
 | `error` | Error message (for error logs) |
 | `error_code` | Error code (HTTP_ERROR, INPUT_FAILED, etc.) |
+| `error_category` | Classified category (network, authentication, validation, server, etc.) |
+| `error_type` | `retryable` or `fatal` |
 
 #### Analyzing Logs
 
@@ -367,6 +377,79 @@ canectors run --verbose config.yaml 2>&1 | grep -i filter
 # Check for transformation errors
 cat execution.log | jq 'select(.msg | contains("mapping error"))'
 ```
+
+### Error Handling and Retry (Story 4.4)
+
+The runtime classifies errors and applies configurable retry logic. **Precedence:** `module` > `defaults` > `errorHandling`.
+
+#### Error categories
+
+| Category | Examples | Retryable |
+|----------|----------|-----------|
+| `network` | Timeout, connection refused, DNS | Yes |
+| `authentication` | 401, 403 | No |
+| `validation` | 400, 422 | No |
+| `not_found` | 404 | No |
+| `rate_limit` | 429 | Yes |
+| `server` | 500, 502, 503, 504 | Yes |
+
+#### Retry configuration
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| `maxAttempts` | Max retries (0 = no retry) | 3 |
+| `delayMs` | Initial delay (ms) | 1000 |
+| `backoffMultiplier` | Exponential backoff factor | 2 |
+| `maxDelayMs` | Cap per delay (ms) | 30000 |
+| `retryableStatusCodes` | HTTP codes that trigger retry | [429, 500, 502, 503, 504] |
+
+#### Error handling strategies (`onError`)
+
+| Value | Behavior |
+|-------|----------|
+| `fail` | Stop execution, return error (default) |
+| `skip` | Skip failed record/module, continue |
+| `log` | Log error, continue |
+
+#### Timeout (`timeoutMs`)
+
+Request timeout in milliseconds. Applied to HTTP Polling and HTTP Request modules. Default: 30000.
+
+#### Example configuration
+
+```yaml
+connector:
+  name: my-connector
+  version: 1.0.0
+  defaults:
+    onError: fail
+    timeoutMs: 30000
+    retry:
+      maxAttempts: 5
+      delayMs: 500
+      backoffMultiplier: 2
+      maxDelayMs: 15000
+  input:
+    type: httpPolling
+    endpoint: https://api.example.com/data
+    retry:
+      maxAttempts: 3
+  output:
+    type: httpRequest
+    endpoint: https://api.example.com/ingest
+    method: POST
+    onError: skip
+```
+
+#### Troubleshooting common errors
+
+| Scenario | Cause | Action |
+|----------|--------|--------|
+| `connection refused` | Target unreachable | Check URL, firewall, network |
+| `401` / `403` | Bad or missing credentials | Verify `authentication` in config |
+| `429` | Rate limiting | Increase `delayMs`, reduce frequency, or use backoff |
+| `500` / `502` / `503` | Upstream failures | Retries apply; check target health |
+| `timeout` | Slow or stuck request | Increase `timeoutMs` or fix upstream |
 
 ### Pipeline Configuration Format
 
@@ -497,6 +580,135 @@ canectors validate ./configs/examples/05-pagination.yaml
 ```
 
 See [configs/example-connector.json](configs/example-connector.json) for a basic example, or browse [configs/examples/](configs/examples/) for comprehensive use case examples.
+
+## Error Handling and Retry Logic
+
+Canectors provides robust error handling with automatic retry logic for transient errors.
+
+### Error Categories
+
+Errors are automatically classified into categories:
+
+| Category | Description | Retryable | HTTP Status Codes |
+|----------|-------------|-----------|-------------------|
+| `network` | Network-related errors (timeout, connection refused, DNS) | Yes | N/A |
+| `authentication` | Authentication/authorization failures | No | 401, 403 |
+| `validation` | Request validation errors | No | 400, 422 |
+| `rate_limit` | Rate limiting (too many requests) | Yes | 429 |
+| `server` | Server-side errors | Yes | 500, 502, 503, 504 |
+| `not_found` | Resource not found | No | 404 |
+
+### Retry Configuration
+
+Configure retry behavior per module:
+
+```yaml
+input:
+  type: http-polling
+  config:
+    endpoint: "https://api.example.com/data"
+    retry:
+      maxAttempts: 3        # Maximum retry attempts (0 = no retry)
+      delayMs: 1000         # Initial delay between retries (ms)
+      backoffMultiplier: 2  # Exponential backoff multiplier
+      maxDelayMs: 30000     # Maximum delay cap (ms)
+      retryableStatusCodes: [429, 500, 502, 503, 504]  # Custom retry codes
+```
+
+**Default values:**
+- `maxAttempts`: 3
+- `delayMs`: 1000 (1 second)
+- `backoffMultiplier`: 2.0
+- `maxDelayMs`: 30000 (30 seconds)
+- `retryableStatusCodes`: [429, 500, 502, 503, 504]
+
+### Exponential Backoff
+
+Retry delay is calculated using exponential backoff:
+
+```
+delay = min(delayMs × (backoffMultiplier ^ attempt), maxDelayMs)
+```
+
+Example with default values:
+- Attempt 1: 1000ms (1s)
+- Attempt 2: 2000ms (2s)
+- Attempt 3: 4000ms (4s)
+- Attempt 4: 8000ms (8s) → capped at maxDelayMs if exceeded
+
+### Error Handling Strategies
+
+Configure how errors are handled with `onError`:
+
+```yaml
+output:
+  type: http-request
+  config:
+    endpoint: "https://api.example.com/data"
+    method: POST
+    onError: "skip"  # "fail" | "skip" | "log"
+```
+
+| Strategy | Behavior |
+|----------|----------|
+| `fail` | Stop execution immediately, return error (default) |
+| `skip` | Skip failed record, continue with next records |
+| `log` | Log error, continue execution |
+
+### Timeout Configuration
+
+Configure request timeouts:
+
+```yaml
+input:
+  type: http-polling
+  config:
+    endpoint: "https://api.example.com/data"
+    timeout: 30  # Timeout in seconds (default: 30)
+```
+
+Timeout errors are classified as `network` errors and are retryable.
+
+### Example: Complete Error Handling Configuration
+
+```yaml
+name: "robust-data-sync"
+description: "Pipeline with comprehensive error handling"
+
+input:
+  type: http-polling
+  config:
+    endpoint: "https://api.source.com/data"
+    timeout: 60
+    retry:
+      maxAttempts: 5
+      delayMs: 2000
+      backoffMultiplier: 2
+      maxDelayMs: 60000
+
+output:
+  type: http-request
+  config:
+    endpoint: "https://api.destination.com/data"
+    method: POST
+    timeout: 30
+    onError: "skip"
+    retry:
+      maxAttempts: 3
+      delayMs: 1000
+      backoffMultiplier: 2
+      maxDelayMs: 30000
+```
+
+### Troubleshooting Common Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `authentication error (status 401)` | Invalid or expired credentials | Check API key, token, or OAuth2 configuration |
+| `validation error (status 400)` | Invalid request format | Verify endpoint URL and request body format |
+| `server error (status 503)` | Service unavailable | Will auto-retry; check target API status |
+| `network error: timeout` | Request timeout | Increase timeout value or check network |
+| `rate_limit error (status 429)` | Too many requests | Will auto-retry with backoff; reduce request frequency |
 
 ## Development
 

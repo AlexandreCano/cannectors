@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/canectors/runtime/internal/auth"
+	"github.com/canectors/runtime/internal/errhandling"
 	"github.com/canectors/runtime/internal/logger"
 	"github.com/canectors/runtime/pkg/connector"
 )
@@ -23,6 +24,13 @@ const (
 	defaultTimeout     = 30 * time.Second
 	defaultUserAgent   = "Canectors-Runtime/1.0"
 	maxPaginationPages = 1000 // Prevent infinite loops
+)
+
+// Log message constants
+const (
+	logMsgPaginationStarted     = "pagination started"
+	logMsgPaginationPageFetched = "pagination page fetched"
+	logMsgPaginationCompleted   = "pagination completed"
 )
 
 // Error types for HTTP polling module
@@ -60,15 +68,17 @@ type PaginationConfig struct {
 }
 
 // HTTPPolling implements polling-based HTTP data fetching.
-// It supports HTTP GET requests with authentication and pagination.
+// It supports HTTP GET requests with authentication, pagination, and retry logic.
 type HTTPPolling struct {
-	endpoint    string
-	headers     map[string]string
-	timeout     time.Duration
-	dataField   string
-	pagination  *PaginationConfig
-	authHandler auth.Handler
-	client      *http.Client
+	endpoint      string
+	headers       map[string]string
+	timeout       time.Duration
+	dataField     string
+	pagination    *PaginationConfig
+	authHandler   auth.Handler
+	client        *http.Client
+	retryConfig   errhandling.RetryConfig
+	lastRetryInfo *connector.RetryInfo
 }
 
 // NewHTTPPollingFromConfig creates a new HTTP polling input module from configuration.
@@ -79,7 +89,7 @@ type HTTPPolling struct {
 //
 // Optional config fields:
 //   - headers: Custom HTTP headers (map[string]string)
-//   - timeout: Request timeout in seconds (float64, default 30)
+//   - timeoutMs: Request timeout in milliseconds (default 30000). Also accepts timeout in seconds (float64) for backward compatibility.
 //   - dataField: JSON field containing the array of records (for object responses)
 //   - pagination: Pagination configuration (map with type, params, etc.)
 func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, error) {
@@ -87,46 +97,21 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 		return nil, ErrNilConfig
 	}
 
-	// Extract endpoint (required)
-	endpoint, ok := config.Config["endpoint"].(string)
-	if !ok || endpoint == "" {
-		return nil, ErrMissingEndpoint
-	}
-
-	// Extract timeout (optional, default 30s)
-	timeout := defaultTimeout
-	if timeoutVal, ok := config.Config["timeout"].(float64); ok {
-		timeout = time.Duration(timeoutVal * float64(time.Second))
-	}
-
-	// Extract headers (optional)
-	headers := make(map[string]string)
-	if headersVal, ok := config.Config["headers"].(map[string]interface{}); ok {
-		for k, v := range headersVal {
-			if strVal, ok := v.(string); ok {
-				headers[k] = strVal
-			}
-		}
-	}
-
-	// Extract dataField (optional)
-	dataField, _ := config.Config["dataField"].(string)
-
-	// Extract pagination config (optional)
-	var pagination *PaginationConfig
-	if paginationVal, ok := config.Config["pagination"].(map[string]interface{}); ok {
-		pagination = parsePaginationConfig(paginationVal)
-	}
-
-	// Create HTTP client with configured timeout
-	client := &http.Client{
-		Timeout: timeout,
-	}
-
-	// Create authentication handler if configured
-	authHandler, err := auth.NewHandler(config.Authentication, client)
+	endpoint, err := extractEndpoint(config)
 	if err != nil {
-		return nil, fmt.Errorf("creating auth handler: %w", err)
+		return nil, err
+	}
+
+	timeout := extractTimeout(config)
+	headers := extractHeaders(config)
+	dataField := extractDataField(config)
+	pagination := extractPagination(config)
+	retryConfig := extractRetryConfig(config)
+
+	client := createHTTPClient(timeout)
+	authHandler, err := createAuthHandler(config, client)
+	if err != nil {
+		return nil, err
 	}
 
 	h := &HTTPPolling{
@@ -137,16 +122,106 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 		pagination:  pagination,
 		authHandler: authHandler,
 		client:      client,
+		retryConfig: retryConfig,
 	}
 
+	logModuleCreation(endpoint, timeout, authHandler, pagination, retryConfig)
+
+	return h, nil
+}
+
+// extractEndpoint extracts and validates the endpoint (required).
+func extractEndpoint(config *connector.ModuleConfig) (string, error) {
+	endpoint, ok := config.Config["endpoint"].(string)
+	if !ok || endpoint == "" {
+		return "", ErrMissingEndpoint
+	}
+	return endpoint, nil
+}
+
+// extractTimeout extracts timeout from config (timeoutMs or legacy timeout in seconds).
+func extractTimeout(config *connector.ModuleConfig) time.Duration {
+	if ms, ok := config.Config["timeoutMs"]; ok {
+		switch v := ms.(type) {
+		case float64:
+			if v > 0 {
+				return time.Duration(v) * time.Millisecond
+			}
+		case int:
+			if v > 0 {
+				return time.Duration(v) * time.Millisecond
+			}
+		}
+	}
+	if timeoutVal, ok := config.Config["timeout"].(float64); ok && timeoutVal > 0 {
+		return time.Duration(timeoutVal * float64(time.Second))
+	}
+	return defaultTimeout
+}
+
+// extractHeaders extracts headers from config.
+func extractHeaders(config *connector.ModuleConfig) map[string]string {
+	headers := make(map[string]string)
+	if headersVal, ok := config.Config["headers"].(map[string]interface{}); ok {
+		for k, v := range headersVal {
+			if strVal, ok := v.(string); ok {
+				headers[k] = strVal
+			}
+		}
+	}
+	return headers
+}
+
+// extractDataField extracts dataField from config.
+func extractDataField(config *connector.ModuleConfig) string {
+	dataField, _ := config.Config["dataField"].(string)
+	return dataField
+}
+
+// extractPagination extracts pagination config from config.
+func extractPagination(config *connector.ModuleConfig) *PaginationConfig {
+	if paginationVal, ok := config.Config["pagination"].(map[string]interface{}); ok {
+		return parsePaginationConfig(paginationVal)
+	}
+	return nil
+}
+
+// extractRetryConfig extracts retry configuration from config.
+func extractRetryConfig(config *connector.ModuleConfig) errhandling.RetryConfig {
+	if retryVal, ok := config.Config["retry"].(map[string]interface{}); ok {
+		return errhandling.ParseRetryConfig(retryVal)
+	}
+	return errhandling.DefaultRetryConfig()
+}
+
+// createHTTPClient creates an HTTP client with the configured timeout.
+func createHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
+	}
+}
+
+// createAuthHandler creates an authentication handler if configured.
+func createAuthHandler(config *connector.ModuleConfig, client *http.Client) (auth.Handler, error) {
+	if config.Authentication == nil {
+		return nil, nil
+	}
+	authHandler, err := auth.NewHandler(config.Authentication, client)
+	if err != nil {
+		return nil, fmt.Errorf("creating auth handler: %w", err)
+	}
+	return authHandler, nil
+}
+
+// logModuleCreation logs module creation details.
+func logModuleCreation(endpoint string, timeout time.Duration, authHandler auth.Handler, pagination *PaginationConfig, retryConfig errhandling.RetryConfig) {
 	logger.Debug("http polling module created",
 		"endpoint", endpoint,
 		"timeout", timeout.String(),
 		"has_auth", authHandler != nil,
 		"has_pagination", pagination != nil,
+		"retry_max_attempts", retryConfig.MaxAttempts,
 	)
-
-	return h, nil
 }
 
 // parsePaginationConfig extracts pagination configuration from map
@@ -248,13 +323,34 @@ func (h *HTTPPolling) Fetch() ([]map[string]interface{}, error) {
 // doRequest executes an HTTP GET request and returns the raw response body
 func (h *HTTPPolling) doRequest(ctx context.Context, endpoint string) ([]byte, error) {
 	requestStart := time.Now()
+	logRequestStart(endpoint)
 
-	logger.Debug("http request started",
-		"module_type", "httpPolling",
-		"endpoint", endpoint,
-		"method", http.MethodGet,
-	)
+	req, err := h.buildRequest(ctx, endpoint)
+	if err != nil {
+		return nil, err
+	}
 
+	resp, err := h.executeRequest(req, endpoint, requestStart)
+	if err != nil {
+		return nil, err
+	}
+	defer closeResponseBody(resp, endpoint)
+
+	body, err := readResponseBody(resp, endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := h.handleHTTPError(resp, body, endpoint, requestStart); err != nil {
+		return nil, err
+	}
+
+	logRequestSuccess(endpoint, resp.StatusCode, requestStart, len(body))
+	return body, nil
+}
+
+// buildRequest creates and configures the HTTP request.
+func (h *HTTPPolling) buildRequest(ctx context.Context, endpoint string) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		logger.Error("http request creation failed",
@@ -265,12 +361,12 @@ func (h *HTTPPolling) doRequest(ctx context.Context, endpoint string) ([]byte, e
 		return nil, fmt.Errorf("creating http request: %w", err)
 	}
 
-	req.Header.Set("User-Agent", defaultUserAgent)
+	setRequestHeaders(req)
 	for key, value := range h.headers {
 		req.Header.Set(key, value)
 	}
 
-	if err = h.applyAuthentication(ctx, req); err != nil {
+	if err := h.applyAuthentication(ctx, req); err != nil {
 		logger.Error("authentication failed",
 			"module_type", "httpPolling",
 			"endpoint", endpoint,
@@ -279,8 +375,18 @@ func (h *HTTPPolling) doRequest(ctx context.Context, endpoint string) ([]byte, e
 		return nil, fmt.Errorf("applying authentication: %w", err)
 	}
 
+	return req, nil
+}
+
+// setRequestHeaders sets default headers on the request.
+func setRequestHeaders(req *http.Request) {
+	req.Header.Set("User-Agent", defaultUserAgent)
+}
+
+// executeRequest executes the HTTP request and handles network errors.
+func (h *HTTPPolling) executeRequest(req *http.Request, endpoint string, startTime time.Time) (*http.Response, error) {
 	resp, err := h.client.Do(req)
-	requestDuration := time.Since(requestStart)
+	requestDuration := time.Since(startTime)
 
 	if err != nil {
 		logger.Error("http request failed",
@@ -290,17 +396,24 @@ func (h *HTTPPolling) doRequest(ctx context.Context, endpoint string) ([]byte, e
 			"duration", requestDuration,
 			"error", err.Error(),
 		)
-		return nil, fmt.Errorf("%w: %w", ErrHTTPRequest, err)
+		return nil, errhandling.ClassifyNetworkError(err)
 	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			logger.Warn("failed to close response body",
-				"endpoint", endpoint,
-				"error", closeErr.Error(),
-			)
-		}
-	}()
 
+	return resp, nil
+}
+
+// closeResponseBody safely closes the response body.
+func closeResponseBody(resp *http.Response, endpoint string) {
+	if closeErr := resp.Body.Close(); closeErr != nil {
+		logger.Warn("failed to close response body",
+			"endpoint", endpoint,
+			"error", closeErr.Error(),
+		)
+	}
+}
+
+// readResponseBody reads the response body.
+func readResponseBody(resp *http.Response, endpoint string) ([]byte, error) {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		logger.Error("response body read failed",
@@ -311,59 +424,165 @@ func (h *HTTPPolling) doRequest(ctx context.Context, endpoint string) ([]byte, e
 		)
 		return nil, fmt.Errorf("reading response body: %w", err)
 	}
+	return body, nil
+}
 
-	if resp.StatusCode >= 400 {
-		// Truncate response body for logging (max 500 chars)
-		bodySnippet := string(body)
-		if len(bodySnippet) > 500 {
-			bodySnippet = bodySnippet[:500] + "..."
-		}
-
-		logger.Error("http error response",
-			"module_type", "httpPolling",
-			"endpoint", endpoint,
-			"method", http.MethodGet,
-			"status_code", resp.StatusCode,
-			"status", resp.Status,
-			"duration", requestDuration,
-			"response_body", bodySnippet,
-		)
-
-		// If we get 401 Unauthorized with OAuth2 auth, invalidate the token
-		// to force refresh on next request (token may have been revoked server-side)
-		if resp.StatusCode == http.StatusUnauthorized && h.authHandler != nil {
-			if invalidator, ok := h.authHandler.(interface{ InvalidateToken() }); ok {
-				logger.Debug("401 Unauthorized with OAuth2, invalidating cached token",
-					"endpoint", endpoint,
-				)
-				invalidator.InvalidateToken()
-			}
-		}
-
-		return nil, &HTTPError{
-			StatusCode: resp.StatusCode,
-			Status:     resp.Status,
-			Endpoint:   endpoint,
-			Message:    string(body),
-		}
+// handleHTTPError handles HTTP error responses (status >= 400).
+func (h *HTTPPolling) handleHTTPError(resp *http.Response, body []byte, endpoint string, startTime time.Time) error {
+	if resp.StatusCode < 400 {
+		return nil
 	}
 
-	// Log successful response
-	logger.Debug("http request completed",
+	bodySnippet := truncateBodyForLogging(body)
+	requestDuration := time.Since(startTime)
+
+	logger.Error("http error response",
 		"module_type", "httpPolling",
 		"endpoint", endpoint,
 		"method", http.MethodGet,
 		"status_code", resp.StatusCode,
+		"status", resp.Status,
 		"duration", requestDuration,
-		"response_size", len(body),
+		"response_body", bodySnippet,
 	)
+
+	h.handleOAuth2Unauthorized(resp, endpoint)
+
+	classifiedErr := errhandling.ClassifyHTTPStatus(resp.StatusCode, bodySnippet)
+	classifiedErr.OriginalErr = &HTTPError{
+		StatusCode: resp.StatusCode,
+		Status:     resp.Status,
+		Endpoint:   endpoint,
+		Message:    string(body),
+	}
+	return classifiedErr
+}
+
+// truncateBodyForLogging truncates response body to max 500 chars for logging.
+func truncateBodyForLogging(body []byte) string {
+	bodySnippet := string(body)
+	if len(bodySnippet) > 500 {
+		return bodySnippet[:500] + "..."
+	}
+	return bodySnippet
+}
+
+// handleOAuth2Unauthorized handles 401 with OAuth2 by invalidating the token.
+func (h *HTTPPolling) handleOAuth2Unauthorized(resp *http.Response, endpoint string) {
+	if resp.StatusCode != http.StatusUnauthorized || h.authHandler == nil {
+		return
+	}
+
+	invalidator, ok := h.authHandler.(interface{ InvalidateToken() })
+	if !ok {
+		return
+	}
+
+	logger.Debug("401 Unauthorized with OAuth2, invalidating cached token",
+		"endpoint", endpoint,
+	)
+	invalidator.InvalidateToken()
+}
+
+// logRequestStart logs the start of an HTTP request.
+func logRequestStart(endpoint string) {
+	logger.Debug("http request started",
+		"module_type", "httpPolling",
+		"endpoint", endpoint,
+		"method", http.MethodGet,
+	)
+}
+
+// logRequestSuccess logs a successful HTTP request.
+func logRequestSuccess(endpoint string, statusCode int, startTime time.Time, bodySize int) {
+	logger.Debug("http request completed",
+		"module_type", "httpPolling",
+		"endpoint", endpoint,
+		"method", http.MethodGet,
+		"status_code", statusCode,
+		"duration", time.Since(startTime),
+		"response_size", bodySize,
+	)
+}
+
+// doRequestWithRetry executes an HTTP request with retry logic.
+// It uses the RetryExecutor to retry transient errors.
+func (h *HTTPPolling) doRequestWithRetry(ctx context.Context, endpoint string) ([]byte, error) {
+	executor := errhandling.NewRetryExecutor(h.retryConfig)
+
+	result, err := executor.ExecuteWithCallback(ctx,
+		func(ctx context.Context) (interface{}, error) {
+			return h.doRequest(ctx, endpoint)
+		},
+		func(attempt int, err error, nextDelay time.Duration) {
+			if err != nil && nextDelay > 0 {
+				logger.Info("retrying http request",
+					"module_type", "httpPolling",
+					"endpoint", endpoint,
+					"attempt", attempt+1,
+					"max_attempts", h.retryConfig.MaxAttempts+1,
+					"next_delay", nextDelay.String(),
+					"error", err.Error(),
+					"error_category", errhandling.GetErrorCategory(err),
+					"retryable", errhandling.IsRetryable(err),
+				)
+			}
+		},
+	)
+
+	info := executor.GetRetryInfo()
+	h.lastRetryInfo = retryInfoFromErrhandling(info)
+
+	if err != nil {
+		if info.RetryCount > 0 {
+			logger.Error("http request failed after retries",
+				"module_type", "httpPolling",
+				"endpoint", endpoint,
+				"total_attempts", info.TotalAttempts,
+				"total_duration", info.TotalDuration.String(),
+				"error", err.Error(),
+			)
+		}
+		return nil, err
+	}
+
+	body, ok := result.([]byte)
+	if !ok {
+		return nil, fmt.Errorf("unexpected result type from retry executor")
+	}
+
+	if info.RetryCount > 0 {
+		logger.Info("http request succeeded after retries",
+			"module_type", "httpPolling",
+			"endpoint", endpoint,
+			"total_attempts", info.TotalAttempts,
+			"retry_count", info.RetryCount,
+			"total_duration", info.TotalDuration.String(),
+		)
+	}
 
 	return body, nil
 }
 
+// GetRetryInfo returns retry information from the last Fetch request (RetryInfoProvider).
+func (h *HTTPPolling) GetRetryInfo() *connector.RetryInfo {
+	return h.lastRetryInfo
+}
+
+func retryInfoFromErrhandling(info errhandling.RetryInfo) *connector.RetryInfo {
+	out := &connector.RetryInfo{
+		TotalAttempts: info.TotalAttempts,
+		RetryCount:    info.RetryCount,
+	}
+	for _, d := range info.Delays {
+		out.RetryDelaysMs = append(out.RetryDelaysMs, d.Milliseconds())
+	}
+	return out
+}
+
 // fetchSingle executes a single HTTP GET request and returns the records
 func (h *HTTPPolling) fetchSingle(ctx context.Context, endpoint string) ([]map[string]interface{}, error) {
-	body, err := h.doRequest(ctx, endpoint)
+	body, err := h.doRequestWithRetry(ctx, endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -457,7 +676,7 @@ func (h *HTTPPolling) fetchPageBased(ctx context.Context) ([]map[string]interfac
 	var allRecords []map[string]interface{}
 	page := 1
 
-	logger.Debug("pagination started",
+	logger.Debug(logMsgPaginationStarted,
 		"module_type", "httpPolling",
 		"pagination_type", "page",
 		"page_param", h.pagination.PageParam,
@@ -476,7 +695,7 @@ func (h *HTTPPolling) fetchPageBased(ctx context.Context) ([]map[string]interfac
 			return nil, err
 		}
 
-		logger.Debug("pagination page fetched",
+		logger.Debug(logMsgPaginationPageFetched,
 			"module_type", "httpPolling",
 			"pagination_type", "page",
 			"current_page", page,
@@ -498,7 +717,7 @@ func (h *HTTPPolling) fetchPageBased(ctx context.Context) ([]map[string]interfac
 		page++
 	}
 
-	logger.Info("pagination completed",
+	logger.Info(logMsgPaginationCompleted,
 		"module_type", "httpPolling",
 		"pagination_type", "page",
 		"pages_fetched", page,
@@ -593,7 +812,7 @@ func (h *HTTPPolling) fetchOffsetBased(ctx context.Context) ([]map[string]interf
 	}
 	pageNum := 0
 
-	logger.Debug("pagination started",
+	logger.Debug(logMsgPaginationStarted,
 		"module_type", "httpPolling",
 		"pagination_type", "offset",
 		"offset_param", h.pagination.OffsetParam,
@@ -618,7 +837,7 @@ func (h *HTTPPolling) fetchOffsetBased(ctx context.Context) ([]map[string]interf
 			return nil, err
 		}
 
-		logger.Debug("pagination page fetched",
+		logger.Debug(logMsgPaginationPageFetched,
 			"module_type", "httpPolling",
 			"pagination_type", "offset",
 			"current_offset", offset,
@@ -641,7 +860,7 @@ func (h *HTTPPolling) fetchOffsetBased(ctx context.Context) ([]map[string]interf
 		offset += limit
 	}
 
-	logger.Info("pagination completed",
+	logger.Info(logMsgPaginationCompleted,
 		"module_type", "httpPolling",
 		"pagination_type", "offset",
 		"pages_fetched", pageNum,
@@ -672,7 +891,7 @@ func (h *HTTPPolling) fetchCursorBased(ctx context.Context) ([]map[string]interf
 	cursor := ""
 	iterations := 0
 
-	logger.Debug("pagination started",
+	logger.Debug(logMsgPaginationStarted,
 		"module_type", "httpPolling",
 		"pagination_type", "cursor",
 		"cursor_param", h.pagination.CursorParam,
@@ -697,7 +916,7 @@ func (h *HTTPPolling) fetchCursorBased(ctx context.Context) ([]map[string]interf
 			return nil, err
 		}
 
-		logger.Debug("pagination page fetched",
+		logger.Debug(logMsgPaginationPageFetched,
 			"module_type", "httpPolling",
 			"pagination_type", "cursor",
 			"iteration", iterations+1,
@@ -717,7 +936,7 @@ func (h *HTTPPolling) fetchCursorBased(ctx context.Context) ([]map[string]interf
 		iterations++
 	}
 
-	logger.Info("pagination completed",
+	logger.Info(logMsgPaginationCompleted,
 		"module_type", "httpPolling",
 		"pagination_type", "cursor",
 		"iterations", iterations+1,

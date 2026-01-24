@@ -1,5 +1,4 @@
 {
-  "schemaVersion": "1.1.0",
   "connector": {
     "name": 12345,
     "version": "1.0.0",

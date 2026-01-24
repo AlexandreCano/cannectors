@@ -1,20 +1,18 @@
 {
   "connector": {
-    "name": "test-connector",
+    "name": "test-connector-no-version",
     "version": "1.0.0",
-    "description": "A test connector for unit testing",
+    "description": "A test connector without schemaVersion field",
     "input": {
       "type": "httpPolling",
       "endpoint": "https://api.example.com/data",
-      "schedule": "*/5 * * * *",
-      "method": "GET"
+      "schedule": "*/5 * * * *"
     },
     "filters": [
       {
         "type": "mapping",
         "mappings": [
-          { "source": "id", "target": "externalId" },
-          { "source": "name", "target": "displayName" }
+          { "source": "id", "target": "externalId" }
         ]
       }
     ],

@@ -23,11 +23,6 @@ func TestParseJSONFile_ValidJSON(t *testing.T) {
 		t.Fatal("expected data to be non-nil")
 	}
 
-	// Check schemaVersion exists
-	if _, ok := result.Data["schemaVersion"]; !ok {
-		t.Error("expected schemaVersion field in parsed data")
-	}
-
 	// Check connector object exists
 	connector, ok := result.Data["connector"]
 	if !ok {
@@ -210,11 +205,6 @@ func TestParseYAMLFile_ValidYAML(t *testing.T) {
 		t.Fatal("expected data to be non-nil")
 	}
 
-	// Check schemaVersion exists
-	if _, ok := result.Data["schemaVersion"]; !ok {
-		t.Error("expected schemaVersion field in parsed data")
-	}
-
 	// Check connector object exists
 	connector, ok := result.Data["connector"]
 	if !ok {
@@ -376,8 +366,7 @@ func TestParseYAMLFile_PerformanceTypicalConfig(t *testing.T) {
 // generateLargeYAMLConfig creates a YAML config with approximately the given number of lines.
 func generateLargeYAMLConfig(lines int) string {
 	var sb strings.Builder
-	sb.WriteString(`schemaVersion: "1.1.0"
-connector:
+	sb.WriteString(`connector:
   name: large-test-connector
   version: "1.0.0"
   description: A large connector configuration for performance testing
@@ -500,7 +489,7 @@ func TestParseConfig_UnknownExtension(t *testing.T) {
 	// Create a temp file with unknown extension
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.txt")
-	content := `{"schemaVersion": "1.1.0", "connector": {"name": "test", "version": "1.0.0", "input": {"type": "httpPolling"}, "filters": [], "output": {"type": "httpRequest"}}}`
+	content := `{"connector": {"name": "test", "version": "1.0.0", "input": {"type": "httpPolling"}, "filters": [], "output": {"type": "httpRequest"}}}`
 	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
 	}
@@ -587,7 +576,7 @@ func TestDetectFormat(t *testing.T) {
 }
 
 func TestParseConfigString_JSON(t *testing.T) {
-	content := `{"schemaVersion": "1.1.0", "connector": {"name": "test", "version": "1.0.0", "input": {"type": "httpPolling", "endpoint": "http://example.com", "schedule": "* * * * *"}, "filters": [], "output": {"type": "httpRequest", "endpoint": "http://example.com", "method": "POST"}}}`
+	content := `{"connector": {"name": "test", "version": "1.0.0", "input": {"type": "httpPolling", "endpoint": "http://example.com", "schedule": "* * * * *"}, "filters": [], "output": {"type": "httpRequest", "endpoint": "http://example.com", "method": "POST"}}}`
 	result := ParseConfigString(content, "json")
 
 	if len(result.ParseErrors) > 0 {
@@ -600,8 +589,7 @@ func TestParseConfigString_JSON(t *testing.T) {
 }
 
 func TestParseConfigString_YAML(t *testing.T) {
-	content := `schemaVersion: "1.1.0"
-connector:
+	content := `connector:
   name: test
   version: "1.0.0"
   input:
@@ -641,7 +629,6 @@ func TestParseConfigString_AutoDetect(t *testing.T) {
 func generateLargeJSONConfig(lines int) string {
 	var sb strings.Builder
 	sb.WriteString(`{
-  "schemaVersion": "1.1.0",
   "connector": {
     "name": "large-test-connector",
     "version": "1.0.0",

@@ -4,7 +4,7 @@
   "title": "Canectors Pipeline Configuration Schema",
   "description": "Schema for defining declarative modular pipeline configurations. Supports Input → Filter → Output pattern with extensible module types.",
   "type": "object",
-  "required": ["schemaVersion", "connector"],
+  "required": ["connector"],
   "properties": {
     "schemaVersion": {
       "type": "string",

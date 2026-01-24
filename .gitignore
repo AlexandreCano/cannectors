@@ -52,3 +52,6 @@ __debug_bin*
 tmp/
 temp/
 *.tmp
+
+docs/
+.github/agents/

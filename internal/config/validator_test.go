@@ -20,6 +20,21 @@ func TestValidateConfig_ValidConfig(t *testing.T) {
 	}
 }
 
+func TestValidateConfig_ValidConfigWithoutSchemaVersion(t *testing.T) {
+	// Parse valid config without schemaVersion field
+	parseResult := ParseJSONFile("testdata/valid-config-no-schemaversion.json")
+	if !parseResult.IsValid() {
+		t.Fatalf("failed to parse valid config: %v", parseResult.Errors)
+	}
+
+	// Validate against schema - should pass (schemaVersion is now optional)
+	result := ValidateConfig(parseResult.Data)
+
+	if !result.Valid {
+		t.Errorf("expected valid config without schemaVersion, got errors: %v", result.Errors)
+	}
+}
+
 func TestValidateConfig_MissingRequiredField(t *testing.T) {
 	// Parse config missing required "filters" field
 	parseResult := ParseJSONFile("testdata/invalid-schema-missing-required.json")

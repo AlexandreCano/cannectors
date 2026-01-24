@@ -15,7 +15,6 @@ import (
 // The configuration is expected to have this structure:
 //
 //	{
-//	  "schemaVersion": "1.1.0",
 //	  "connector": {
 //	    "name": "...",
 //	    "version": "...",
@@ -24,6 +23,8 @@ import (
 //	    "output": {...}
 //	  }
 //	}
+//
+// Note: schemaVersion is optional and ignored if present (backward compatibility).
 func ConvertToPipeline(data map[string]interface{}) (*connector.Pipeline, error) {
 	if data == nil {
 		return nil, fmt.Errorf("configuration data is nil")

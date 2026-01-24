@@ -421,3 +421,59 @@ func TestConvertToPipeline_ExplicitID(t *testing.T) {
 		t.Errorf("Expected ID 'explicit-id', got '%s'", pipeline.ID)
 	}
 }
+
+func TestConvertToPipeline_WithAndWithoutSchemaVersion(t *testing.T) {
+	// Test that schemaVersion is optional and ignored (backward compatibility)
+	tests := []struct {
+		name string
+		data map[string]interface{}
+	}{
+		{
+			name: "without schemaVersion",
+			data: map[string]interface{}{
+				"connector": map[string]interface{}{
+					"name":    "test-no-schema-version",
+					"version": "1.0.0",
+					"input":   map[string]interface{}{"type": "httpPolling"},
+					"filters": []interface{}{},
+					"output":  map[string]interface{}{"type": "httpRequest"},
+				},
+			},
+		},
+		{
+			name: "with schemaVersion",
+			data: map[string]interface{}{
+				"schemaVersion": "1.1.0",
+				"connector": map[string]interface{}{
+					"name":    "test-with-schema-version",
+					"version": "1.0.0",
+					"input":   map[string]interface{}{"type": "httpPolling"},
+					"filters": []interface{}{},
+					"output":  map[string]interface{}{"type": "httpRequest"},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pipeline, err := ConvertToPipeline(tt.data)
+
+			if err != nil {
+				t.Fatalf("ConvertToPipeline() error = %v", err)
+			}
+
+			if pipeline == nil {
+				t.Fatal("ConvertToPipeline() returned nil pipeline")
+			}
+
+			// Both cases should produce valid pipelines
+			if pipeline.Input == nil {
+				t.Error("Expected non-nil input")
+			}
+			if pipeline.Output == nil {
+				t.Error("Expected non-nil output")
+			}
+		})
+	}
+}

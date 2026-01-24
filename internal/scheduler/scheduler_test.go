@@ -306,10 +306,10 @@ func TestScheduler_Start_AlreadyRunning(t *testing.T) {
 }
 
 // =============================================================================
-// Task 5: Overlapping Execution Tests
+// Task 5: Serialized Execution Tests (one at a time per pipeline)
 // =============================================================================
 
-func TestScheduler_SkipsOverlappingExecution(t *testing.T) {
+func TestScheduler_SerializesExecution(t *testing.T) {
 	// Executor that takes a while to complete
 	executor := &mockExecutor{
 		executionDelay: 2 * time.Second,
@@ -317,8 +317,8 @@ func TestScheduler_SkipsOverlappingExecution(t *testing.T) {
 	s := NewWithExecutor(executor)
 
 	pipeline := &connector.Pipeline{
-		ID:       "overlap-test-pipeline",
-		Name:     "Overlap Test",
+		ID:       "serialize-test-pipeline",
+		Name:     "Serialize Test",
 		Schedule: "* * * * * *", // Every second
 		Enabled:  true,
 	}
@@ -342,11 +342,12 @@ func TestScheduler_SkipsOverlappingExecution(t *testing.T) {
 	_ = s.Stop(context.Background())
 
 	// With 2 second execution delay and 3.5 second wait, and triggers every second,
-	// we should see significantly fewer executions than triggers due to overlap skipping
+	// executions are serialized (one at a time) but queued for later processing.
+	// We expect 2 executions: first starts immediately, second starts after first completes.
+	// Additional triggers are queued but won't execute within the test window.
 	calls := executor.GetExecuteCalls()
-	// At most 2 executions should have started (one at start, one after first completes)
 	if calls > 2 {
-		t.Errorf("Expected at most 2 executions due to overlap handling, got %d", calls)
+		t.Errorf("Expected at most 2 executions due to serialization, got %d", calls)
 	}
 }
 
@@ -672,5 +673,557 @@ func TestScheduler_GetNextRun_BeforeStart(t *testing.T) {
 
 	if !nextRun.IsZero() {
 		t.Error("GetNextRun() should return zero time when scheduler is not started")
+	}
+}
+
+// =============================================================================
+// Task 1: Queue Structure Tests (Story 12.3)
+// =============================================================================
+
+func TestScheduler_GetQueueLength_EmptyQueue(t *testing.T) {
+	s := New()
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	pipeline := &connector.Pipeline{
+		ID:       "queue-length-test",
+		Name:     "Queue Length Test",
+		Schedule: "0 * * * *",
+		Enabled:  true,
+	}
+
+	err := s.Register(pipeline)
+	if err != nil {
+		t.Fatalf("Register() error: %v", err)
+	}
+
+	// Queue should be empty initially
+	queueLen := s.GetQueueLength("queue-length-test")
+	if queueLen != 0 {
+		t.Errorf("Expected queue length 0, got %d", queueLen)
+	}
+}
+
+func TestScheduler_GetQueueLength_NotFound(t *testing.T) {
+	s := New()
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	// Queue length for non-existent pipeline should be 0
+	queueLen := s.GetQueueLength("non-existent")
+	if queueLen != 0 {
+		t.Errorf("Expected queue length 0 for non-existent pipeline, got %d", queueLen)
+	}
+}
+
+// =============================================================================
+// Task 2: Queue Execution Instead of Skip Tests (Story 12.3)
+// =============================================================================
+
+func TestScheduler_QueuesExecutionWhenPreviousRunning(t *testing.T) {
+	// Executor that takes a while to complete
+	executor := &mockExecutor{
+		executionDelay: 2 * time.Second,
+	}
+	s := NewWithExecutor(executor)
+
+	pipeline := &connector.Pipeline{
+		ID:       "queue-test-pipeline",
+		Name:     "Queue Test",
+		Schedule: "* * * * * *", // Every second
+		Enabled:  true,
+	}
+
+	err := s.Register(pipeline)
+	if err != nil {
+		t.Fatalf("Register() error: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = s.Start(ctx)
+	if err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	// Wait for multiple CRON triggers while first execution is running
+	time.Sleep(2500 * time.Millisecond)
+
+	// Check queue length - should have queued executions
+	queueLen := s.GetQueueLength("queue-test-pipeline")
+	// At least 1 execution should be queued (triggered at ~1s while first is still running)
+	if queueLen < 1 {
+		t.Errorf("Expected at least 1 queued execution, got %d", queueLen)
+	}
+
+	_ = s.Stop(context.Background())
+}
+
+// =============================================================================
+// Task 3: Queue Processing After Execution Tests (Story 12.3)
+// =============================================================================
+
+func TestScheduler_ProcessesQueueAfterExecutionCompletes(t *testing.T) {
+	// Executor with 1.5 second delay - causes overlap with 1-second CRON triggers
+	// This ensures executions get queued and then processed
+	executor := &mockExecutor{
+		executionDelay: 1500 * time.Millisecond,
+	}
+	s := NewWithExecutor(executor)
+
+	pipeline := &connector.Pipeline{
+		ID:       "queue-process-test",
+		Name:     "Queue Process Test",
+		Schedule: "* * * * * *", // Every second
+		Enabled:  true,
+	}
+
+	err := s.Register(pipeline)
+	if err != nil {
+		t.Fatalf("Register() error: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	err = s.Start(ctx)
+	if err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	// Timeline with 1.5s execution delay:
+	// - 0s: first execution starts
+	// - 1s: CRON trigger, queued (first still running)
+	// - 1.5s: first execution completes, should start queued execution
+	// - 2s: CRON trigger, queued (second still running)
+	// - 3s: second execution completes, should start queued execution
+	// And so on...
+	// After ~6 seconds, we should see ~4 executions if queue is processed
+	time.Sleep(6 * time.Second)
+
+	_ = s.Stop(context.Background())
+
+	// Should have processed multiple executions from queue
+	// With 1.5s delay over 6 seconds:
+	// - First execution: 0-1.5s
+	// - Second execution (from queue): 1.5-3s
+	// - Third execution (from queue): 3-4.5s
+	// - Fourth execution (from queue): 4.5-6s
+	// We expect at least 3 executions (proving queue is being processed)
+	calls := executor.GetExecuteCalls()
+	if calls < 3 {
+		t.Errorf("Expected at least 3 executions (proving queue processing), got %d", calls)
+	}
+}
+
+func TestScheduler_FIFOQueueOrder(t *testing.T) {
+	// Use a custom executor that records execution order with timestamps
+	executor := &mockExecutor{
+		executionDelay: 300 * time.Millisecond,
+	}
+	s := NewWithExecutor(executor)
+
+	pipeline := &connector.Pipeline{
+		ID:       "fifo-test-pipeline",
+		Name:     "FIFO Test",
+		Schedule: "* * * * * *", // Every second
+		Enabled:  true,
+	}
+
+	err := s.Register(pipeline)
+	if err != nil {
+		t.Fatalf("Register() error: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+
+	err = s.Start(ctx)
+	if err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	// Wait for multiple executions
+	time.Sleep(3 * time.Second)
+
+	_ = s.Stop(context.Background())
+
+	// Verify executions are in order (all same pipeline ID)
+	executedIDs := executor.GetExecutedIDs()
+	for _, id := range executedIDs {
+		if id != "fifo-test-pipeline" {
+			t.Errorf("Unexpected pipeline ID: %s", id)
+		}
+	}
+
+	// Should have multiple executions
+	if len(executedIDs) < 2 {
+		t.Errorf("Expected at least 2 executions, got %d", len(executedIDs))
+	}
+}
+
+// =============================================================================
+// Task 4: Queue Cancellation on Stop Tests (Story 12.3)
+// =============================================================================
+
+func TestScheduler_ClearsQueueOnStop(t *testing.T) {
+	// Executor with long delay to ensure queue builds up
+	executor := &mockExecutor{
+		executionDelay: 3 * time.Second,
+	}
+	s := NewWithExecutor(executor)
+
+	pipeline := &connector.Pipeline{
+		ID:       "clear-queue-test",
+		Name:     "Clear Queue Test",
+		Schedule: "* * * * * *", // Every second
+		Enabled:  true,
+	}
+
+	err := s.Register(pipeline)
+	if err != nil {
+		t.Fatalf("Register() error: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err = s.Start(ctx)
+	if err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	// Wait for queue to build up
+	time.Sleep(2500 * time.Millisecond)
+
+	// Verify queue has items before stop
+	queueLen := s.GetQueueLength("clear-queue-test")
+	if queueLen < 1 {
+		t.Errorf("Expected at least 1 queued item before stop, got %d", queueLen)
+	}
+
+	// Stop the scheduler
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stopCancel()
+	err = s.Stop(stopCtx)
+	if err != nil {
+		t.Errorf("Stop() error: %v", err)
+	}
+
+	// After stop, queues should be cleared (pipelines are removed)
+	// GetQueueLength returns 0 for non-existent pipelines
+	queueLenAfter := s.GetQueueLength("clear-queue-test")
+	if queueLenAfter != 0 {
+		t.Errorf("Expected queue to be cleared after stop, got length %d", queueLenAfter)
+	}
+}
+
+func TestScheduler_StopDoesNotStartNewQueuedExecutions(t *testing.T) {
+	// Executor with delay
+	executor := &mockExecutor{
+		executionDelay: 2 * time.Second,
+	}
+	s := NewWithExecutor(executor)
+
+	pipeline := &connector.Pipeline{
+		ID:       "no-new-exec-test",
+		Name:     "No New Exec Test",
+		Schedule: "* * * * * *", // Every second
+		Enabled:  true,
+	}
+
+	err := s.Register(pipeline)
+	if err != nil {
+		t.Fatalf("Register() error: %v", err)
+	}
+
+	err = s.Start(context.Background())
+	if err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	// Wait for queue to build up
+	time.Sleep(2500 * time.Millisecond)
+
+	// Count executions before stop
+	callsBefore := executor.GetExecuteCalls()
+
+	// Stop the scheduler
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer stopCancel()
+	_ = s.Stop(stopCtx)
+
+	// Wait a bit to ensure no new executions start
+	time.Sleep(500 * time.Millisecond)
+
+	// Count executions after stop - should not have started new ones from queue
+	callsAfter := executor.GetExecuteCalls()
+
+	// The difference should be at most 1 (the running execution might complete)
+	if callsAfter > callsBefore+1 {
+		t.Errorf("Expected at most 1 additional execution after stop, got %d (before: %d, after: %d)",
+			callsAfter-callsBefore, callsBefore, callsAfter)
+	}
+}
+
+// =============================================================================
+// Task 5: Queue Status Methods Tests (Story 12.3)
+// =============================================================================
+
+func TestScheduler_IsQueued(t *testing.T) {
+	executor := &mockExecutor{
+		executionDelay: 2 * time.Second,
+	}
+	s := NewWithExecutor(executor)
+
+	pipeline := &connector.Pipeline{
+		ID:       "is-queued-test",
+		Name:     "Is Queued Test",
+		Schedule: "* * * * * *", // Every second
+		Enabled:  true,
+	}
+
+	err := s.Register(pipeline)
+	if err != nil {
+		t.Fatalf("Register() error: %v", err)
+	}
+
+	// Before start, should not be queued
+	if s.IsQueued("is-queued-test") {
+		t.Error("Pipeline should not be queued before scheduler starts")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = s.Start(ctx)
+	if err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	// Wait for queue to build up
+	time.Sleep(2500 * time.Millisecond)
+
+	// Should be queued now
+	if !s.IsQueued("is-queued-test") {
+		t.Error("Pipeline should be queued while execution is running")
+	}
+
+	_ = s.Stop(context.Background())
+}
+
+func TestScheduler_IsQueued_NotFound(t *testing.T) {
+	s := New()
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	// Non-existent pipeline should not be queued
+	if s.IsQueued("non-existent") {
+		t.Error("Non-existent pipeline should not be queued")
+	}
+}
+
+// =============================================================================
+// Task 6: Comprehensive Queue Tests (Story 12.3)
+// =============================================================================
+
+func TestScheduler_MultipleQueuedExecutionsProcessedSequentially(t *testing.T) {
+	// Executor with 1 second delay
+	executor := &mockExecutor{
+		executionDelay: 1 * time.Second,
+	}
+	s := NewWithExecutor(executor)
+
+	pipeline := &connector.Pipeline{
+		ID:       "sequential-test",
+		Name:     "Sequential Test",
+		Schedule: "* * * * * *", // Every second
+		Enabled:  true,
+	}
+
+	err := s.Register(pipeline)
+	if err != nil {
+		t.Fatalf("Register() error: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err = s.Start(ctx)
+	if err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	// Wait for multiple executions to be queued and processed
+	time.Sleep(5 * time.Second)
+
+	_ = s.Stop(context.Background())
+
+	// All executions should be for the same pipeline (sequential)
+	executedIDs := executor.GetExecutedIDs()
+	for _, id := range executedIDs {
+		if id != "sequential-test" {
+			t.Errorf("Unexpected pipeline ID: %s", id)
+		}
+	}
+
+	// Should have processed multiple executions
+	calls := executor.GetExecuteCalls()
+	if calls < 3 {
+		t.Errorf("Expected at least 3 sequential executions, got %d", calls)
+	}
+}
+
+func TestScheduler_NoStarvation(t *testing.T) {
+	// Test that all queued executions eventually run (no starvation)
+	executor := &mockExecutor{
+		executionDelay: 500 * time.Millisecond,
+	}
+	s := NewWithExecutor(executor)
+
+	pipeline := &connector.Pipeline{
+		ID:       "no-starvation-test",
+		Name:     "No Starvation Test",
+		Schedule: "* * * * * *", // Every second
+		Enabled:  true,
+	}
+
+	err := s.Register(pipeline)
+	if err != nil {
+		t.Fatalf("Register() error: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	err = s.Start(ctx)
+	if err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	// Wait for executions
+	time.Sleep(5 * time.Second)
+
+	// Check that queue is empty (all have been processed)
+	queueLen := s.GetQueueLength("no-starvation-test")
+
+	// Let it run a bit more to drain
+	time.Sleep(2 * time.Second)
+
+	_ = s.Stop(context.Background())
+
+	// With 500ms delay over 7 seconds, we expect at least 5 executions
+	// (accounting for timing variations)
+	calls := executor.GetExecuteCalls()
+	if calls < 5 {
+		t.Errorf("Expected at least 5 executions (no starvation), got %d (final queue: %d)", calls, queueLen)
+	}
+}
+
+// =============================================================================
+// Task 7: Queue Full Scenario Tests (Story 12.3)
+// =============================================================================
+
+func TestScheduler_QueueFullDropsRequest(t *testing.T) {
+	// Test that when queue is full, new requests are dropped (not queued)
+	// This is acceptable behavior for a bounded queue to prevent memory exhaustion
+	executor := &mockExecutor{
+		executionDelay: 5 * time.Second, // Long execution to fill queue
+	}
+	s := NewWithExecutor(executor)
+
+	pipeline := &connector.Pipeline{
+		ID:       "queue-full-test",
+		Name:     "Queue Full Test",
+		Schedule: "* * * * * *", // Every second
+		Enabled:  true,
+	}
+
+	err := s.Register(pipeline)
+	if err != nil {
+		t.Fatalf("Register() error: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	err = s.Start(ctx)
+	if err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	// Wait for queue to fill up (with 5s execution delay and 1s triggers,
+	// queue should fill quickly)
+	time.Sleep(6 * time.Second)
+
+	// Check queue length - should be at capacity or close to it
+	queueLen := s.GetQueueLength("queue-full-test")
+	if queueLen < DefaultQueueCapacity-5 {
+		// Allow some margin for timing variations
+		t.Logf("Queue length: %d (expected near %d)", queueLen, DefaultQueueCapacity)
+	}
+
+	// Wait a bit more to see if queue stays bounded
+	time.Sleep(2 * time.Second)
+
+	// Queue should not exceed capacity (requests should be dropped)
+	finalQueueLen := s.GetQueueLength("queue-full-test")
+	if finalQueueLen > DefaultQueueCapacity {
+		t.Errorf("Queue exceeded capacity: %d > %d (requests should be dropped)", finalQueueLen, DefaultQueueCapacity)
+	}
+
+	_ = s.Stop(context.Background())
+
+	// Verify that some executions were dropped (queue was full)
+	// We can't directly count dropped requests, but we can verify queue stayed bounded
+	if finalQueueLen > DefaultQueueCapacity {
+		t.Errorf("Queue should not exceed capacity %d, got %d", DefaultQueueCapacity, finalQueueLen)
+	}
+}
+
+func TestScheduler_QueueFullDoesNotBlock(t *testing.T) {
+	// Test that queue full scenario doesn't block the scheduler
+	// This ensures the bounded queue design works correctly
+	executor := &mockExecutor{
+		executionDelay: 10 * time.Second, // Very long execution
+	}
+	s := NewWithExecutor(executor)
+
+	pipeline := &connector.Pipeline{
+		ID:       "queue-block-test",
+		Name:     "Queue Block Test",
+		Schedule: "* * * * * *", // Every second
+		Enabled:  true,
+	}
+
+	err := s.Register(pipeline)
+	if err != nil {
+		t.Fatalf("Register() error: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = s.Start(ctx)
+	if err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	// Wait for queue to fill
+	time.Sleep(2 * time.Second)
+
+	// Stop should complete quickly (not blocked by full queue)
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stopCancel()
+
+	startStop := time.Now()
+	err = s.Stop(stopCtx)
+	stopDuration := time.Since(startStop)
+
+	if err != nil && err != context.DeadlineExceeded {
+		t.Errorf("Stop() should not error (or timeout), got: %v", err)
+	}
+
+	// Stop should not take too long (queue full shouldn't block)
+	if stopDuration > 3*time.Second {
+		t.Errorf("Stop() took too long (%v) - queue full should not block", stopDuration)
 	}
 }

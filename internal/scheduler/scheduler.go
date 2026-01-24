@@ -56,6 +56,10 @@ var (
 	ErrNextRunNotReady = errors.New("next run time not yet calculated")
 )
 
+// DefaultQueueCapacity is the maximum number of pending executions that can be queued
+// per pipeline. This prevents unbounded memory growth while allowing reasonable backlog.
+const DefaultQueueCapacity = 100
+
 // Executor defines the interface for pipeline execution.
 // This allows dependency injection for testing.
 type Executor interface {
@@ -68,6 +72,11 @@ type registeredPipeline struct {
 	entryID  cron.EntryID
 	running  bool
 	mu       sync.Mutex
+
+	// queue holds pending execution requests when an execution is already running.
+	// Uses a channel-based approach for thread-safe FIFO queue.
+	// Capacity is bounded to prevent unbounded memory growth.
+	queue chan struct{}
 }
 
 // Scheduler manages scheduled pipeline executions using CRON expressions.
@@ -205,9 +214,10 @@ func (s *Scheduler) Register(pipeline *connector.Pipeline) error {
 		)
 	}
 
-	// Create registered pipeline entry
+	// Create registered pipeline entry with execution queue
 	reg := &registeredPipeline{
 		pipeline: pipeline,
+		queue:    make(chan struct{}, DefaultQueueCapacity),
 	}
 
 	// Add CRON job
@@ -346,8 +356,36 @@ func (s *Scheduler) Stop(ctx context.Context) error {
 		return ctx.Err()
 	}
 
-	// Clear all pipelines
+	// Clear all pipelines and drain queues
 	s.mu.Lock()
+	for pipelineID, reg := range s.pipelines {
+		// Drain the queue for this pipeline
+		// Protect queue access with pipeline mutex
+		reg.mu.Lock()
+		queueLen := len(reg.queue)
+		if queueLen > 0 {
+			// Drain all queued items using non-blocking receive
+			drained := 0
+		drainLoop:
+			for {
+				select {
+				case <-reg.queue:
+					drained++
+				default:
+					break drainLoop
+				}
+			}
+			reg.mu.Unlock()
+			if drained > 0 {
+				logger.Info("queued executions canceled",
+					slog.String("pipeline_id", pipelineID),
+					slog.Int("canceled_count", drained),
+				)
+			}
+		} else {
+			reg.mu.Unlock()
+		}
+	}
 	s.pipelines = make(map[string]*registeredPipeline)
 	s.mu.Unlock()
 
@@ -410,27 +448,122 @@ func (s *Scheduler) executePipeline(reg *registeredPipeline) {
 }
 
 // tryStartExecution attempts to mark the pipeline as running.
-// Returns false if the pipeline is already running (overlap).
+// If already running, queues the execution request and returns false.
+// Returns true if execution can start immediately.
 func (s *Scheduler) tryStartExecution(reg *registeredPipeline) bool {
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
 
 	if reg.running {
-		logger.Warn("skipping overlapping execution",
-			slog.String("pipeline_id", reg.pipeline.ID),
-			slog.String("pipeline_name", reg.pipeline.Name),
-		)
+		// Queue the execution request instead of skipping
+		// Note: If queue is full, we drop the request to prevent unbounded memory growth.
+		// This is acceptable behavior for a bounded queue - the alternative would be blocking
+		// which could cause deadlocks if the executor itself is blocked.
+		select {
+		case reg.queue <- struct{}{}:
+			// Capture queue length while holding the mutex for accurate logging
+			queueLen := len(reg.queue)
+			logger.Info("execution queued",
+				slog.String("pipeline_id", reg.pipeline.ID),
+				slog.String("pipeline_name", reg.pipeline.Name),
+				slog.Int("queue_position", queueLen),
+			)
+		default:
+			// Queue is full - log warning and drop the request
+			// This prevents unbounded memory growth and is acceptable for a bounded queue.
+			// In production, consider monitoring queue capacity and adjusting DefaultQueueCapacity
+			// if this warning appears frequently.
+			logger.Warn("execution queue full, dropping request",
+				slog.String("pipeline_id", reg.pipeline.ID),
+				slog.String("pipeline_name", reg.pipeline.Name),
+				slog.Int("queue_capacity", DefaultQueueCapacity),
+				slog.String("reason", "bounded queue prevents memory exhaustion"),
+			)
+		}
 		return false
 	}
 	reg.running = true
 	return true
 }
 
-// finishExecution marks the pipeline as no longer running.
+// finishExecution marks the pipeline as no longer running and processes queued executions.
 func (s *Scheduler) finishExecution(reg *registeredPipeline) {
 	reg.mu.Lock()
-	reg.running = false
-	reg.mu.Unlock()
+
+	// Check if there are queued executions
+	select {
+	case <-reg.queue:
+		// Found a queued execution - capture queue length while holding mutex
+		// then keep running flag true and release lock before starting the queued execution
+		remainingQueue := len(reg.queue)
+		reg.mu.Unlock()
+
+		logger.Info("processing queued execution",
+			slog.String("pipeline_id", reg.pipeline.ID),
+			slog.String("pipeline_name", reg.pipeline.Name),
+			slog.Int("remaining_queue", remainingQueue),
+		)
+
+		// Execute the queued request (this will call finishExecution again when done)
+		s.executeQueuedPipeline(reg)
+		return
+	default:
+		// No queued executions - mark as not running
+		reg.running = false
+		reg.mu.Unlock()
+	}
+}
+
+// executeQueuedPipeline runs a queued pipeline execution.
+// This is called from finishExecution when there are queued items.
+func (s *Scheduler) executeQueuedPipeline(reg *registeredPipeline) {
+	// Atomically check if started and add to WaitGroup while holding the lock.
+	// This ensures Stop() cannot complete wg.Wait() before we've registered this execution.
+	s.mu.RLock()
+	if !s.started {
+		s.mu.RUnlock()
+		// Scheduler stopped - mark as not running and drain queue
+		reg.mu.Lock()
+		reg.running = false
+		reg.mu.Unlock()
+		return
+	}
+	s.wg.Add(1)
+	ctx := s.ctx
+	s.mu.RUnlock()
+
+	defer s.wg.Done()
+
+	// Copy pipeline reference
+	pipeline := reg.pipeline
+	startTime := time.Now()
+
+	logger.Info("queued pipeline execution starting",
+		slog.String("pipeline_id", pipeline.ID),
+		slog.String("pipeline_name", pipeline.Name),
+		slog.Time("scheduled_time", startTime),
+	)
+
+	// Check if context is canceled
+	if ctx != nil {
+		select {
+		case <-ctx.Done():
+			logger.Info("queued pipeline execution canceled",
+				slog.String("pipeline_id", pipeline.ID),
+				slog.String("pipeline_name", pipeline.Name),
+			)
+			s.finishExecution(reg)
+			return
+		default:
+			// Continue execution
+		}
+	}
+
+	// Execute pipeline
+	s.doExecutePipeline(pipeline, startTime)
+
+	// Process next queued item (if any)
+	s.finishExecution(reg)
 }
 
 // doExecutePipeline performs the actual pipeline execution.
@@ -513,6 +646,31 @@ func (s *Scheduler) GetPipelineIDs() []string {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+// GetQueueLength returns the number of pending executions in the queue for a pipeline.
+// Returns 0 if the pipeline is not found.
+func (s *Scheduler) GetQueueLength(pipelineID string) int {
+	s.mu.RLock()
+	reg, ok := s.pipelines[pipelineID]
+	s.mu.RUnlock()
+
+	if !ok {
+		return 0
+	}
+
+	// Protect queue length read with pipeline mutex to avoid race conditions
+	reg.mu.Lock()
+	queueLen := len(reg.queue)
+	reg.mu.Unlock()
+
+	return queueLen
+}
+
+// IsQueued returns true if the pipeline has pending executions in its queue.
+// Returns false if the pipeline is not found or has an empty queue.
+func (s *Scheduler) IsQueued(pipelineID string) bool {
+	return s.GetQueueLength(pipelineID) > 0
 }
 
 // GetNextRun returns the next scheduled run time for a pipeline.

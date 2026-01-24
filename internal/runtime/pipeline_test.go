@@ -3,6 +3,7 @@ package runtime
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -32,7 +33,7 @@ func NewMockInputModule(data []map[string]interface{}, err error) *MockInputModu
 	return &MockInputModule{data: data, err: err}
 }
 
-func (m *MockInputModule) Fetch() ([]map[string]interface{}, error) {
+func (m *MockInputModule) Fetch(_ context.Context) ([]map[string]interface{}, error) {
 	m.fetchCalled = true
 	if m.err != nil {
 		return nil, m.err
@@ -63,7 +64,7 @@ func NewMockFilterModuleWithError(err error) *MockFilterModule {
 	return &MockFilterModule{err: err}
 }
 
-func (m *MockFilterModule) Process(records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (m *MockFilterModule) Process(_ context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
 	m.processCalled = true
 	m.recordsReceived = records
 	if m.err != nil {
@@ -90,7 +91,7 @@ func NewMockOutputModule(err error) *MockOutputModule {
 	return &MockOutputModule{err: err}
 }
 
-func (m *MockOutputModule) Send(records []map[string]interface{}) (int, error) {
+func (m *MockOutputModule) Send(_ context.Context, records []map[string]interface{}) (int, error) {
 	m.sendCalled = true
 	if m.err != nil {
 		return 0, m.err
@@ -1031,7 +1032,7 @@ func NewMockPreviewableOutputModule(previewResponses []output.RequestPreview) *M
 	}
 }
 
-func (m *MockPreviewableOutputModule) Send(records []map[string]interface{}) (int, error) {
+func (m *MockPreviewableOutputModule) Send(_ context.Context, records []map[string]interface{}) (int, error) {
 	m.sendCalled = true
 	if m.err != nil {
 		return 0, m.err
@@ -1984,7 +1985,7 @@ type MockPreviewableOutputModuleWithOpts struct {
 	receivedOpts     *output.PreviewOptions
 }
 
-func (m *MockPreviewableOutputModuleWithOpts) Send(records []map[string]interface{}) (int, error) {
+func (m *MockPreviewableOutputModuleWithOpts) Send(_ context.Context, records []map[string]interface{}) (int, error) {
 	return len(records), nil
 }
 

@@ -2,6 +2,7 @@
 package filter
 
 import (
+	"context"
 	"errors"
 	"testing"
 )
@@ -89,7 +90,7 @@ func TestConditionBasicEquality(t *testing.T) {
 			}
 
 			records := []map[string]interface{}{tt.record}
-			result, err := cond.Process(records)
+			result, err := cond.Process(context.Background(), records)
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -199,7 +200,7 @@ func TestConditionNumericComparisons(t *testing.T) {
 			}
 
 			records := []map[string]interface{}{tt.record}
-			result, err := cond.Process(records)
+			result, err := cond.Process(context.Background(), records)
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -297,7 +298,7 @@ func TestConditionLogicalOperators(t *testing.T) {
 			}
 
 			records := []map[string]interface{}{tt.record}
-			result, err := cond.Process(records)
+			result, err := cond.Process(context.Background(), records)
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -367,7 +368,7 @@ func TestConditionNestedFieldAccess(t *testing.T) {
 			}
 
 			records := []map[string]interface{}{tt.record}
-			result, err := cond.Process(records)
+			result, err := cond.Process(context.Background(), records)
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -436,7 +437,7 @@ func TestConditionArrayAccess(t *testing.T) {
 			}
 
 			records := []map[string]interface{}{tt.record}
-			result, err := cond.Process(records)
+			result, err := cond.Process(context.Background(), records)
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -471,7 +472,7 @@ func TestConditionMultipleRecords(t *testing.T) {
 		{"id": 5, "status": "active"},
 	}
 
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -502,7 +503,7 @@ func TestConditionEmptyInput(t *testing.T) {
 	}
 
 	// Test with nil
-	result, err := cond.Process(nil)
+	result, err := cond.Process(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("Process(nil) error = %v", err)
 	}
@@ -511,7 +512,7 @@ func TestConditionEmptyInput(t *testing.T) {
 	}
 
 	// Test with empty slice
-	result, err = cond.Process([]map[string]interface{}{})
+	result, err = cond.Process(context.Background(), []map[string]interface{}{})
 	if err != nil {
 		t.Fatalf("Process([]) error = %v", err)
 	}
@@ -543,7 +544,7 @@ func TestConditionDefaultLang(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"status": "active"}}
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -572,7 +573,7 @@ func TestConditionOnTrueContinue(t *testing.T) {
 		{"id": 1, "status": "active"},
 	}
 
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -598,7 +599,7 @@ func TestConditionOnTrueSkip(t *testing.T) {
 		{"id": 2, "status": "inactive"},
 	}
 
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -629,7 +630,7 @@ func TestConditionOnFalseContinue(t *testing.T) {
 		{"id": 2, "status": "inactive"},
 	}
 
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -656,7 +657,7 @@ func TestConditionOnFalseSkip(t *testing.T) {
 		{"id": 2, "status": "inactive"},
 	}
 
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -688,7 +689,7 @@ func TestConditionDefaultRouting(t *testing.T) {
 		{"id": 4, "qty": 100}, // true -> continue
 	}
 
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -750,7 +751,7 @@ func TestConditionNullValueHandling(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			result, err := cond.Process([]map[string]interface{}{tt.record})
+			result, err := cond.Process(context.Background(), []map[string]interface{}{tt.record})
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -804,7 +805,7 @@ func TestConditionTypeMismatchHandling(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			result, err := cond.Process([]map[string]interface{}{tt.record})
+			result, err := cond.Process(context.Background(), []map[string]interface{}{tt.record})
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -844,7 +845,7 @@ func TestConditionNestedThenMapping(t *testing.T) {
 		{"id": 1, "name": "Alice", "status": "active"},
 	}
 
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -889,7 +890,7 @@ func TestConditionNestedElseMapping(t *testing.T) {
 		{"id": 2, "status": "inactive"},
 	}
 
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -935,7 +936,7 @@ func TestConditionNestedBothThenElse(t *testing.T) {
 		{"id": 2, "name": "Bob", "tier": "standard"},
 	}
 
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -983,7 +984,7 @@ func TestConditionNestedRecursiveCondition(t *testing.T) {
 		{"id": 3, "level": 10}, // level > 0: true -> then (level > 5: true -> continue)
 	}
 
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -1019,7 +1020,7 @@ func TestConditionNestedPriorityOverOnTrue(t *testing.T) {
 		{"id": 1, "status": "active"},
 	}
 
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -1055,7 +1056,7 @@ func TestConditionNestedPriorityOverOnFalse(t *testing.T) {
 		{"id": 1, "status": "inactive"},
 	}
 
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -1091,7 +1092,7 @@ func TestConditionNestedModuleReturnsEmpty(t *testing.T) {
 		{"id": 1, "level": 10}, // level > 0: true -> then (level > 100: false -> skip)
 	}
 
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -1169,7 +1170,7 @@ func TestConditionParenthesesGrouping(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			result, err := cond.Process([]map[string]interface{}{tt.record})
+			result, err := cond.Process(context.Background(), []map[string]interface{}{tt.record})
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -1250,7 +1251,7 @@ func TestConditionStringOperations(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			result, err := cond.Process([]map[string]interface{}{tt.record})
+			result, err := cond.Process(context.Background(), []map[string]interface{}{tt.record})
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -1318,7 +1319,7 @@ func TestConditionDeepNestedFieldAccess(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			result, err := cond.Process([]map[string]interface{}{tt.record})
+			result, err := cond.Process(context.Background(), []map[string]interface{}{tt.record})
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -1348,7 +1349,7 @@ func TestConditionLangSimple(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"status": "active"}}
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -1425,7 +1426,7 @@ func TestConditionLangDefaultIsSimple(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"value": 15}}
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -1529,7 +1530,7 @@ func TestConditionOnErrorFail(t *testing.T) {
 		{"data": "test"},
 	}
 
-	_, err = cond.Process(records)
+	_, err = cond.Process(context.Background(), records)
 	if err == nil {
 		t.Error("expected error with onError='fail', got nil")
 	}
@@ -1553,7 +1554,7 @@ func TestConditionOnErrorSkip(t *testing.T) {
 		{"value": map[string]interface{}{"nested": 1}}, // Will cause error, should be skipped
 	}
 
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -1581,7 +1582,7 @@ func TestConditionOnErrorLog(t *testing.T) {
 		{"value": map[string]interface{}{"nested": 1}}, // Will cause error, should be logged and skipped
 	}
 
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -1606,7 +1607,7 @@ func TestConditionInvalidOnErrorDefaultsToFail(t *testing.T) {
 		{"data": "test"},
 	}
 
-	_, err = cond.Process(records)
+	_, err = cond.Process(context.Background(), records)
 	if err == nil {
 		t.Error("expected error with invalid onError (default to fail), got nil")
 	}
@@ -1656,7 +1657,7 @@ func TestConditionErrorDetails(t *testing.T) {
 		{"value": 1}, // int doesn't have methods, will cause error
 	}
 
-	_, err = cond.Process(records)
+	_, err = cond.Process(context.Background(), records)
 	if err == nil {
 		t.Fatal("Process() expected error, got nil")
 	}
@@ -1726,7 +1727,7 @@ func TestConditionToBoolConversion(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			result, err := cond.Process([]map[string]interface{}{tt.record})
+			result, err := cond.Process(context.Background(), []map[string]interface{}{tt.record})
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -1771,7 +1772,7 @@ func TestConditionInvalidOnTrueOnFalse(t *testing.T) {
 				{"value": -5}, // false condition
 			}
 
-			result, err := cond.Process(records)
+			result, err := cond.Process(context.Background(), records)
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -1816,7 +1817,7 @@ func TestConditionDefaultOnErrorIsFail(t *testing.T) {
 
 	// With AllowUndefinedVariables, missing top-level fields return nil
 	// nil == 'value' is false, so record should be filtered out
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1857,7 +1858,7 @@ func TestConditionOutputFormat(t *testing.T) {
 		{"id": 1, "status": "active", "data": map[string]interface{}{"nested": "value"}},
 	}
 
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -1911,12 +1912,12 @@ func TestConditionChainWithMapping(t *testing.T) {
 	}
 
 	// Chain: records → mapping → condition
-	mapped, err := mapper.Process(records)
+	mapped, err := mapper.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("mapper.Process() error = %v", err)
 	}
 
-	filtered, err := cond.Process(mapped)
+	filtered, err := cond.Process(context.Background(), mapped)
 	if err != nil {
 		t.Fatalf("cond.Process() error = %v", err)
 	}
@@ -1941,7 +1942,7 @@ func TestConditionEmptyConditionBehavior(t *testing.T) {
 	}
 
 	// Empty input should return empty output
-	result, err := cond.Process([]map[string]interface{}{})
+	result, err := cond.Process(context.Background(), []map[string]interface{}{})
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -1968,7 +1969,7 @@ func TestConditionPreservesRecordOrder(t *testing.T) {
 		{"id": 5, "keep": true},
 	}
 
-	result, err := cond.Process(records)
+	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -2008,7 +2009,7 @@ func TestConditionDeterministicSameInputSameOutput(t *testing.T) {
 
 	// Run multiple times and verify same results
 	for run := 0; run < 10; run++ {
-		result, err := cond.Process(records)
+		result, err := cond.Process(context.Background(), records)
 		if err != nil {
 			t.Fatalf("Process() error on run %d = %v", run, err)
 		}
@@ -2060,7 +2061,7 @@ func TestConditionDeterministicEvaluationConsistency(t *testing.T) {
 			// Evaluate the same record 100 times
 			var firstResult []map[string]interface{}
 			for i := 0; i < 100; i++ {
-				result, err := cond.Process([]map[string]interface{}{record})
+				result, err := cond.Process(context.Background(), []map[string]interface{}{record})
 				if err != nil {
 					t.Fatalf("Process() error on iteration %d = %v", i, err)
 				}
@@ -2131,7 +2132,7 @@ func TestConditionDeterministicRoutingConsistency(t *testing.T) {
 
 			// Run 50 times to verify consistency
 			for i := 0; i < 50; i++ {
-				result, err := cond.Process([]map[string]interface{}{tt.record})
+				result, err := cond.Process(context.Background(), []map[string]interface{}{tt.record})
 				if err != nil {
 					t.Fatalf("Process() error on iteration %d = %v", i, err)
 				}
@@ -2162,7 +2163,7 @@ func TestConditionNoTimeDependent(t *testing.T) {
 	// results might vary
 	results := make([]int, 1000)
 	for i := 0; i < 1000; i++ {
-		result, err := cond.Process([]map[string]interface{}{record})
+		result, err := cond.Process(context.Background(), []map[string]interface{}{record})
 		if err != nil {
 			t.Fatalf("Process() error = %v", err)
 		}

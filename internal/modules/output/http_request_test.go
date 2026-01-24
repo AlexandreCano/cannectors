@@ -2,6 +2,7 @@
 package output
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -179,7 +180,7 @@ func TestHTTPRequest_Send_SingleRecord(t *testing.T) {
 		{"name": "test", "value": 123},
 	}
 
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -229,7 +230,7 @@ func TestHTTPRequest_Send_MultipleRecords(t *testing.T) {
 		{"id": 3, "name": "third"},
 	}
 
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -266,7 +267,7 @@ func TestHTTPRequest_Send_EmptyRecords(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	sent, err := module.Send([]map[string]interface{}{})
+	sent, err := module.Send(context.Background(), []map[string]interface{}{})
 	if err != nil {
 		t.Fatalf("expected no error for empty records, got %v", err)
 	}
@@ -295,7 +296,7 @@ func TestHTTPRequest_Send_NilRecords(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	sent, err := module.Send(nil)
+	sent, err := module.Send(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("expected no error for nil records, got %v", err)
 	}
@@ -326,7 +327,7 @@ func TestHTTPRequest_Send_SingleRecordMode(t *testing.T) {
 		{"id": 2, "name": "second"},
 	}
 
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -372,7 +373,7 @@ func TestHTTPRequest_Send_CustomHeaders(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -413,7 +414,7 @@ func TestHTTPRequest_Send_DifferentMethods(t *testing.T) {
 			}
 
 			records := []map[string]interface{}{{"test": "data"}}
-			_, err = module.Send(records)
+			_, err = module.Send(context.Background(), records)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -457,7 +458,7 @@ func TestHTTPRequest_Send_NestedObjects(t *testing.T) {
 		},
 	}
 
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -536,7 +537,7 @@ func TestHTTPRequest_Send_ContentTypeJSON(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -603,7 +604,7 @@ func TestHTTPRequest_Send_APIKeyAuth_Header(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -642,7 +643,7 @@ func TestHTTPRequest_Send_APIKeyAuth_Query(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -679,7 +680,7 @@ func TestHTTPRequest_Send_BearerAuth(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -718,7 +719,7 @@ func TestHTTPRequest_Send_BasicAuth(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -773,7 +774,7 @@ func TestHTTPRequest_Send_OAuth2Auth(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -824,7 +825,7 @@ func TestHTTPRequest_Send_OAuth2Auth_TokenCaching(t *testing.T) {
 	// Send multiple requests
 	for i := 0; i < 3; i++ {
 		records := []map[string]interface{}{{"test": "data"}}
-		_, err = module.Send(records)
+		_, err = module.Send(context.Background(), records)
 		if err != nil {
 			t.Fatalf("request %d: expected no error, got %v", i, err)
 		}
@@ -944,7 +945,7 @@ func TestHTTPRequest_Send_NoAuth(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error without auth, got %v", err)
 	}
@@ -1011,7 +1012,7 @@ func TestHTTPRequest_Send_PathParameterSubstitution(t *testing.T) {
 		},
 	}
 
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -1056,7 +1057,7 @@ func TestHTTPRequest_Send_PathParameterWithNilMap(t *testing.T) {
 		},
 	}
 
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error (nil map should be handled), got %v", err)
 	}
@@ -1094,7 +1095,7 @@ func TestHTTPRequest_Send_QueryParameters(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -1138,7 +1139,7 @@ func TestHTTPRequest_Send_QueryParametersFromRecordData(t *testing.T) {
 		{"status": "pending", "type": "admin", "name": "John"},
 	}
 
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -1186,7 +1187,7 @@ func TestHTTPRequest_Send_HeadersFromRecordData(t *testing.T) {
 		},
 	}
 
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -1225,7 +1226,7 @@ func TestHTTPRequest_Send_JSONArrayFormat(t *testing.T) {
 		{"id": 2, "name": "second"},
 	}
 
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -1266,7 +1267,7 @@ func TestHTTPRequest_Send_JSONObjectFormat(t *testing.T) {
 		{"id": 1, "name": "test"},
 	}
 
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -1323,7 +1324,7 @@ func TestHTTPRequest_Send_ComplexNestedData(t *testing.T) {
 		},
 	}
 
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -1383,7 +1384,7 @@ func TestHTTPRequest_Send_SpecialCharactersInData(t *testing.T) {
 		},
 	}
 
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -1424,7 +1425,7 @@ func TestHTTPRequest_Send_SpecialCharactersInQueryParams(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -1480,7 +1481,7 @@ func TestHTTPRequest_Send_SpecialCharactersInPathParams(t *testing.T) {
 		},
 	}
 
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -1550,7 +1551,7 @@ func TestHTTPRequest_Send_Success200(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error for 200, got %v", err)
 	}
@@ -1574,7 +1575,7 @@ func TestHTTPRequest_Send_Success201(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error for 201, got %v", err)
 	}
@@ -1598,7 +1599,7 @@ func TestHTTPRequest_Send_Success204(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error for 204, got %v", err)
 	}
@@ -1622,7 +1623,7 @@ func TestHTTPRequest_Send_ClientError400(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 400 status")
 	}
@@ -1652,7 +1653,7 @@ func TestHTTPRequest_Send_ClientError401(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 401 status")
 	}
@@ -1681,7 +1682,7 @@ func TestHTTPRequest_Send_ClientError404(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 404 status")
 	}
@@ -1710,7 +1711,7 @@ func TestHTTPRequest_Send_ClientError422(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 422 status")
 	}
@@ -1746,7 +1747,7 @@ func TestHTTPRequest_Send_ServerError500(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 500 status")
 	}
@@ -1778,7 +1779,7 @@ func TestHTTPRequest_Send_ServerError503(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 503 status")
 	}
@@ -1811,7 +1812,7 @@ func TestHTTPRequest_Send_CustomSuccessCodes(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error for custom success code 202, got %v", err)
 	}
@@ -1839,7 +1840,7 @@ func TestHTTPRequest_Send_CustomSuccessCodes_Reject(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 200 when only 201 is configured as success")
 	}
@@ -1860,7 +1861,7 @@ func TestHTTPRequest_Send_HTTPErrorDetails(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 400 status")
 	}
@@ -1954,7 +1955,7 @@ func TestHTTPRequest_Send_RetryOn5xx(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error after retries, got %v", err)
 	}
@@ -1989,7 +1990,7 @@ func TestHTTPRequest_Send_RetryExhausted(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error after exhausting retries")
 	}
@@ -2028,7 +2029,7 @@ func TestHTTPRequest_Send_NoRetryOn4xx(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 400 status")
 	}
@@ -2056,7 +2057,7 @@ func TestHTTPRequest_Send_OnErrorFail(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error with onError=fail")
 	}
@@ -2097,7 +2098,7 @@ func TestHTTPRequest_Send_OnErrorSkip_SingleRecordMode(t *testing.T) {
 		{"id": 3, "name": "third"},  // Will succeed
 	}
 
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error with onError=skip, got %v", err)
 	}
@@ -2142,7 +2143,7 @@ func TestHTTPRequest_Send_OnErrorLog_SingleRecordMode(t *testing.T) {
 		{"id": 3, "name": "third"},
 	}
 
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error with onError=log, got %v", err)
 	}
@@ -2172,7 +2173,7 @@ func TestHTTPRequest_Send_DefaultRetryConfig(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error with default retry, got %v", err)
 	}
@@ -2234,7 +2235,7 @@ func TestHTTPRequest_Send_ReturnsCorrectCount_AllSuccess(t *testing.T) {
 		{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}, {"id": 5},
 	}
 
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -2276,7 +2277,7 @@ func TestHTTPRequest_Send_ReturnsCorrectCount_PartialFailure(t *testing.T) {
 		{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}, {"id": 5},
 	}
 
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error with onError=skip, got %v", err)
 	}
@@ -2298,7 +2299,7 @@ func TestHTTPRequest_Send_ReturnsZeroOnEmpty(t *testing.T) {
 	}
 
 	// Empty records
-	sent, err := module.Send([]map[string]interface{}{})
+	sent, err := module.Send(context.Background(), []map[string]interface{}{})
 	if err != nil {
 		t.Fatalf("expected no error for empty, got %v", err)
 	}
@@ -2307,7 +2308,7 @@ func TestHTTPRequest_Send_ReturnsZeroOnEmpty(t *testing.T) {
 	}
 
 	// Nil records
-	sent, err = module.Send(nil)
+	sent, err = module.Send(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("expected no error for nil, got %v", err)
 	}
@@ -2332,7 +2333,7 @@ func TestHTTPRequest_Send_ErrorContainsResponseDetails(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"email": "invalid"}}
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 
 	// Verify count
 	if sent != 0 {
@@ -2379,7 +2380,7 @@ func TestHTTPRequest_Send_BatchMode_CorrectCount(t *testing.T) {
 		{"id": 1}, {"id": 2}, {"id": 3},
 	}
 
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -2417,7 +2418,7 @@ func TestHTTPRequest_Send_SingleRecordMode_CorrectCount(t *testing.T) {
 		{"id": 1}, {"id": 2}, {"id": 3},
 	}
 
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -2459,7 +2460,7 @@ func TestHTTPRequest_Deterministic_SameInputSameOutput(t *testing.T) {
 			{"id": 2, "name": "Bob", "active": false},
 		}
 
-		_, err = module.Send(records)
+		_, err = module.Send(context.Background(), records)
 		if err != nil {
 			t.Fatalf("run %d: Send failed: %v", run, err)
 		}
@@ -2511,7 +2512,7 @@ func TestHTTPRequest_Deterministic_JSONSerialization(t *testing.T) {
 	// Send multiple times
 	var bodies []string
 	for i := 0; i < 3; i++ {
-		_, err = module.Send(records)
+		_, err = module.Send(context.Background(), records)
 		if err != nil {
 			t.Fatalf("Send %d failed: %v", i, err)
 		}
@@ -2556,7 +2557,7 @@ func TestHTTPRequest_Deterministic_AuthHeaders(t *testing.T) {
 		}
 
 		records := []map[string]interface{}{{"test": "data"}}
-		_, err = module.Send(records)
+		_, err = module.Send(context.Background(), records)
 		if err != nil {
 			t.Fatalf("run %d: Send failed: %v", run, err)
 		}
@@ -2600,7 +2601,7 @@ func TestHTTPRequest_Deterministic_PathParams(t *testing.T) {
 			{"id": "user-123", "name": "Alice"},
 		}
 
-		_, err = module.Send(records)
+		_, err = module.Send(context.Background(), records)
 		if err != nil {
 			t.Fatalf("run %d: Send failed: %v", run, err)
 		}
@@ -2637,7 +2638,7 @@ func TestHTTPRequest_Deterministic_ErrorHandling(t *testing.T) {
 		}
 
 		records := []map[string]interface{}{{"test": "data"}}
-		_, err = module.Send(records)
+		_, err = module.Send(context.Background(), records)
 		if err == nil {
 			t.Fatalf("run %d: expected error", run)
 		}
@@ -2675,7 +2676,7 @@ func TestHTTPRequest_NoRandomBehavior(t *testing.T) {
 		{"id": 1, "value": "test"},
 	}
 
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}

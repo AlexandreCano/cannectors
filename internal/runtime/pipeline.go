@@ -3,6 +3,7 @@
 package runtime
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -98,7 +99,7 @@ func NewExecutorWithModules(
 
 // executeFilters runs all filter modules in sequence on the given records.
 // Returns the filtered records and any error that occurred.
-func (e *Executor) executeFilters(pipelineID string, records []map[string]interface{}) filterResult {
+func (e *Executor) executeFilters(ctx context.Context, pipelineID string, records []map[string]interface{}) filterResult {
 	currentRecords := records
 	for i, filterModule := range e.filterModules {
 		if filterModule == nil {
@@ -120,7 +121,7 @@ func (e *Executor) executeFilters(pipelineID string, records []map[string]interf
 
 		filterStartTime := time.Now()
 		var err error
-		currentRecords, err = filterModule.Process(currentRecords)
+		currentRecords, err = filterModule.Process(ctx, currentRecords)
 		filterDuration := time.Since(filterStartTime)
 
 		if err != nil {
@@ -147,7 +148,7 @@ func (e *Executor) executeFilters(pipelineID string, records []map[string]interf
 
 // executeOutput runs the output module on the given records.
 // In dry-run mode, calls preview if available and returns the record count without actually sending.
-func (e *Executor) executeOutput(pipelineID string, records []map[string]interface{}) outputResult {
+func (e *Executor) executeOutput(ctx context.Context, pipelineID string, records []map[string]interface{}) outputResult {
 	if e.dryRun {
 		logger.Debug("dry-run mode: skipping output module",
 			slog.String("pipeline_id", pipelineID),
@@ -163,7 +164,7 @@ func (e *Executor) executeOutput(pipelineID string, records []map[string]interfa
 	)
 
 	outputStartTime := time.Now()
-	recordsSent, err := e.outputModule.Send(records)
+	recordsSent, err := e.outputModule.Send(ctx, records)
 	outputDuration := time.Since(outputStartTime)
 
 	if err != nil {
@@ -265,8 +266,10 @@ type stageTimings struct {
 	outputDuration time.Duration
 }
 
-// Execute runs a pipeline configuration.
+// Execute runs a pipeline configuration with a background context.
 // It processes data through Input → Filters → Output modules.
+//
+// For cancellation support, use ExecuteWithContext instead.
 //
 // Execution flow:
 //  1. Validate pipeline configuration
@@ -277,6 +280,21 @@ type stageTimings struct {
 //
 // Returns both result and error for comprehensive error handling.
 func (e *Executor) Execute(pipeline *connector.Pipeline) (*connector.ExecutionResult, error) {
+	return e.ExecuteWithContext(context.Background(), pipeline)
+}
+
+// ExecuteWithContext runs a pipeline configuration with the given context.
+// The context can be used to cancel long-running operations.
+//
+// Execution flow:
+//  1. Validate pipeline configuration
+//  2. Execute Input module to fetch data
+//  3. Execute Filter modules in sequence (if any)
+//  4. Execute Output module to send data (unless dry-run mode)
+//  5. Return ExecutionResult with status and metrics
+//
+// Returns both result and error for comprehensive error handling.
+func (e *Executor) ExecuteWithContext(ctx context.Context, pipeline *connector.Pipeline) (*connector.ExecutionResult, error) {
 	startedAt := time.Now()
 	result := e.newErrorResult(startedAt)
 	var timings stageTimings
@@ -315,7 +333,7 @@ func (e *Executor) Execute(pipeline *connector.Pipeline) (*connector.ExecutionRe
 	}
 
 	// Execute Input module (returns duration measured inside)
-	records, inputDuration, err := e.executeInput(pipeline, result)
+	records, inputDuration, err := e.executeInput(ctx, pipeline, result)
 	timings.inputDuration = inputDuration
 	if err != nil {
 		// Log execution end on input failure
@@ -325,7 +343,7 @@ func (e *Executor) Execute(pipeline *connector.Pipeline) (*connector.ExecutionRe
 	}
 
 	// Execute Filter modules (returns duration measured inside)
-	filteredRecords, filterDuration, err := e.executeFiltersWithResult(pipeline, records, result)
+	filteredRecords, filterDuration, err := e.executeFiltersWithResult(ctx, pipeline, records, result)
 	timings.filterDuration = filterDuration
 	if err != nil {
 		// Log execution end on filter failure
@@ -340,7 +358,7 @@ func (e *Executor) Execute(pipeline *connector.Pipeline) (*connector.ExecutionRe
 	}
 
 	// Execute Output module (returns duration measured inside)
-	outputDuration, err := e.executeOutputWithResult(pipeline, filteredRecords, result)
+	outputDuration, err := e.executeOutputWithResult(ctx, pipeline, filteredRecords, result)
 	timings.outputDuration = outputDuration
 	if err != nil {
 		// Log execution end on output failure
@@ -425,7 +443,7 @@ func (e *Executor) closeModule(pipelineID, moduleName string, m moduleCloser) {
 }
 
 // executeInput executes the input module and returns fetched records and duration.
-func (e *Executor) executeInput(pipeline *connector.Pipeline, result *connector.ExecutionResult) ([]map[string]interface{}, time.Duration, error) {
+func (e *Executor) executeInput(ctx context.Context, pipeline *connector.Pipeline, result *connector.ExecutionResult) ([]map[string]interface{}, time.Duration, error) {
 	// Log stage start
 	stageCtx := logger.ExecutionContext{
 		PipelineID:   pipeline.ID,
@@ -436,7 +454,7 @@ func (e *Executor) executeInput(pipeline *connector.Pipeline, result *connector.
 	logger.LogStageStart(stageCtx)
 
 	inputStartTime := time.Now()
-	records, err := e.inputModule.Fetch()
+	records, err := e.inputModule.Fetch(ctx)
 	inputDuration := time.Since(inputStartTime)
 
 	if err != nil {
@@ -461,7 +479,7 @@ func (e *Executor) executeInput(pipeline *connector.Pipeline, result *connector.
 
 // executeFiltersWithResult executes filter modules and updates result on error.
 // Returns filtered records, duration, and error.
-func (e *Executor) executeFiltersWithResult(pipeline *connector.Pipeline, records []map[string]interface{}, result *connector.ExecutionResult) ([]map[string]interface{}, time.Duration, error) {
+func (e *Executor) executeFiltersWithResult(ctx context.Context, pipeline *connector.Pipeline, records []map[string]interface{}, result *connector.ExecutionResult) ([]map[string]interface{}, time.Duration, error) {
 	// Log stage start
 	stageCtx := logger.ExecutionContext{
 		PipelineID:   pipeline.ID,
@@ -472,7 +490,7 @@ func (e *Executor) executeFiltersWithResult(pipeline *connector.Pipeline, record
 	logger.LogStageStart(stageCtx)
 
 	filterStartTime := time.Now()
-	filterRes := e.executeFilters(pipeline.ID, records)
+	filterRes := e.executeFilters(ctx, pipeline.ID, records)
 	filterDuration := time.Since(filterStartTime)
 
 	if filterRes.err != nil {
@@ -495,7 +513,7 @@ func (e *Executor) executeFiltersWithResult(pipeline *connector.Pipeline, record
 
 // executeOutputWithResult executes the output module and updates result.
 // Returns duration and error.
-func (e *Executor) executeOutputWithResult(pipeline *connector.Pipeline, records []map[string]interface{}, result *connector.ExecutionResult) (time.Duration, error) {
+func (e *Executor) executeOutputWithResult(ctx context.Context, pipeline *connector.Pipeline, records []map[string]interface{}, result *connector.ExecutionResult) (time.Duration, error) {
 	// Log stage start
 	stageCtx := logger.ExecutionContext{
 		PipelineID:   pipeline.ID,
@@ -506,7 +524,7 @@ func (e *Executor) executeOutputWithResult(pipeline *connector.Pipeline, records
 	logger.LogStageStart(stageCtx)
 
 	outputStartTime := time.Now()
-	outputRes := e.executeOutput(pipeline.ID, records)
+	outputRes := e.executeOutput(ctx, pipeline.ID, records)
 	outputDuration := time.Since(outputStartTime)
 
 	if outputRes.err != nil {
@@ -575,7 +593,14 @@ func (e *Executor) finalizeSuccessWithMetrics(result *connector.ExecutionResult,
 
 // ExecuteWithRecords runs a pipeline configuration using pre-fetched records.
 // This is intended for push-based inputs (e.g., webhooks) that already have data.
+// Uses a background context. For cancellation support, use ExecuteWithRecordsContext.
 func (e *Executor) ExecuteWithRecords(pipeline *connector.Pipeline, records []map[string]interface{}) (*connector.ExecutionResult, error) {
+	return e.ExecuteWithRecordsContext(context.Background(), pipeline, records)
+}
+
+// ExecuteWithRecordsContext runs a pipeline configuration using pre-fetched records with context.
+// This is intended for push-based inputs (e.g., webhooks) that already have data.
+func (e *Executor) ExecuteWithRecordsContext(ctx context.Context, pipeline *connector.Pipeline, records []map[string]interface{}) (*connector.ExecutionResult, error) {
 	startedAt := time.Now()
 
 	result := &connector.ExecutionResult{
@@ -626,7 +651,7 @@ func (e *Executor) ExecuteWithRecords(pipeline *connector.Pipeline, records []ma
 
 	// Step 1: Skip input module, use provided records
 	// Step 2: Execute Filter modules in sequence
-	filterRes := e.executeFilters(pipeline.ID, records)
+	filterRes := e.executeFilters(ctx, pipeline.ID, records)
 	if filterRes.err != nil {
 		result.CompletedAt = time.Now()
 		result.Error = buildExecutionError(ErrCodeFilterFailed, "filter", filterRes.err)
@@ -641,7 +666,7 @@ func (e *Executor) ExecuteWithRecords(pipeline *connector.Pipeline, records []ma
 	}
 
 	// Step 4: Execute Output module (skip in dry-run mode)
-	outputRes := e.executeOutput(pipeline.ID, filterRes.records)
+	outputRes := e.executeOutput(ctx, pipeline.ID, filterRes.records)
 	if outputRes.err != nil {
 		result.CompletedAt = time.Now()
 		result.RecordsProcessed = outputRes.recordsSent

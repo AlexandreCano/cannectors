@@ -340,7 +340,7 @@ func (l *rateLimiter) Stop() {
 // Use Start() with a callback handler instead.
 //
 // Returns ErrNotImplemented as webhooks use callback-based pattern.
-func (w *Webhook) Fetch() ([]map[string]interface{}, error) {
+func (w *Webhook) Fetch(_ context.Context) ([]map[string]interface{}, error) {
 	return nil, ErrNotImplemented
 }
 

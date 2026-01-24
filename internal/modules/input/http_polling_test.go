@@ -2,6 +2,7 @@
 package input
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -47,7 +48,7 @@ func TestHTTPPolling_Fetch_SuccessfulGET(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	records, err := polling.Fetch()
+	records, err := polling.Fetch(context.Background())
 
 	// Verify
 	if err != nil {
@@ -87,7 +88,7 @@ func TestHTTPPolling_Fetch_JSONArrayResponse(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	records, err := polling.Fetch()
+	records, err := polling.Fetch(context.Background())
 
 	if err != nil {
 		t.Fatalf("Fetch() returned error: %v", err)
@@ -128,7 +129,7 @@ func TestHTTPPolling_Fetch_JSONObjectWithArrayField(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	records, err := polling.Fetch()
+	records, err := polling.Fetch(context.Background())
 
 	if err != nil {
 		t.Fatalf("Fetch() returned error: %v", err)
@@ -158,7 +159,7 @@ func TestHTTPPolling_Fetch_EmptyResponse(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	records, err := polling.Fetch()
+	records, err := polling.Fetch(context.Background())
 
 	if err != nil {
 		t.Fatalf("Fetch() returned error: %v", err)
@@ -196,7 +197,7 @@ func TestHTTPPolling_Fetch_CustomHeaders(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	_, err = polling.Fetch()
+	_, err = polling.Fetch(context.Background())
 	if err != nil {
 		t.Fatalf("Fetch() returned error: %v", err)
 	}
@@ -229,7 +230,7 @@ func TestHTTPPolling_Fetch_ConfigurableTimeout(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	_, err = polling.Fetch()
+	_, err = polling.Fetch(context.Background())
 
 	if err == nil {
 		t.Error("expected timeout error, got nil")
@@ -293,7 +294,7 @@ func TestHTTPPolling_Fetch_APIKeyHeader(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	_, err = polling.Fetch()
+	_, err = polling.Fetch(context.Background())
 	if err != nil {
 		t.Fatalf("Fetch() returned error: %v", err)
 	}
@@ -335,7 +336,7 @@ func TestHTTPPolling_Fetch_APIKeyQuery(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	_, err = polling.Fetch()
+	_, err = polling.Fetch(context.Background())
 	if err != nil {
 		t.Fatalf("Fetch() returned error: %v", err)
 	}
@@ -396,7 +397,7 @@ func TestHTTPPolling_Fetch_OAuth2ClientCredentials(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	_, err = polling.Fetch()
+	_, err = polling.Fetch(context.Background())
 	if err != nil {
 		t.Fatalf("Fetch() returned error: %v", err)
 	}
@@ -436,7 +437,7 @@ func TestHTTPPolling_Fetch_BearerToken(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	_, err = polling.Fetch()
+	_, err = polling.Fetch(context.Background())
 	if err != nil {
 		t.Fatalf("Fetch() returned error: %v", err)
 	}
@@ -478,7 +479,7 @@ func TestHTTPPolling_Fetch_BasicAuth(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	_, err = polling.Fetch()
+	_, err = polling.Fetch(context.Background())
 	if err != nil {
 		t.Fatalf("Fetch() returned error: %v", err)
 	}
@@ -524,7 +525,7 @@ func TestHTTPPolling_Fetch_AuthenticationError(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	_, err = polling.Fetch()
+	_, err = polling.Fetch(context.Background())
 
 	if err == nil {
 		t.Error("expected authentication error, got nil")
@@ -587,7 +588,7 @@ func TestHTTPPolling_Fetch_PageBasedPagination(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	records, err := polling.Fetch()
+	records, err := polling.Fetch(context.Background())
 
 	if err != nil {
 		t.Fatalf("Fetch() returned error: %v", err)
@@ -654,7 +655,7 @@ func TestHTTPPolling_Fetch_OffsetBasedPagination(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	records, err := polling.Fetch()
+	records, err := polling.Fetch(context.Background())
 
 	if err != nil {
 		t.Fatalf("Fetch() returned error: %v", err)
@@ -711,7 +712,7 @@ func TestHTTPPolling_Fetch_CursorBasedPagination(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	records, err := polling.Fetch()
+	records, err := polling.Fetch(context.Background())
 
 	if err != nil {
 		t.Fatalf("Fetch() returned error: %v", err)
@@ -749,7 +750,7 @@ func TestHTTPPolling_Fetch_HTTPError400(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	_, err = polling.Fetch()
+	_, err = polling.Fetch(context.Background())
 
 	if err == nil {
 		t.Error("expected error for HTTP 400, got nil")
@@ -775,7 +776,7 @@ func TestHTTPPolling_Fetch_HTTPError401(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	_, err = polling.Fetch()
+	_, err = polling.Fetch(context.Background())
 
 	if err == nil {
 		t.Error("expected error for HTTP 401, got nil")
@@ -801,7 +802,7 @@ func TestHTTPPolling_Fetch_HTTPError403(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	_, err = polling.Fetch()
+	_, err = polling.Fetch(context.Background())
 
 	if err == nil {
 		t.Error("expected error for HTTP 403, got nil")
@@ -827,7 +828,7 @@ func TestHTTPPolling_Fetch_HTTPError404(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	_, err = polling.Fetch()
+	_, err = polling.Fetch(context.Background())
 
 	if err == nil {
 		t.Error("expected error for HTTP 404, got nil")
@@ -853,7 +854,7 @@ func TestHTTPPolling_Fetch_HTTPError500(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	_, err = polling.Fetch()
+	_, err = polling.Fetch(context.Background())
 
 	if err == nil {
 		t.Error("expected error for HTTP 500, got nil")
@@ -875,7 +876,7 @@ func TestHTTPPolling_Fetch_NetworkError(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	_, err = polling.Fetch()
+	_, err = polling.Fetch(context.Background())
 
 	if err == nil {
 		t.Error("expected network error, got nil")
@@ -902,7 +903,7 @@ func TestHTTPPolling_Fetch_JSONParseError(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	_, err = polling.Fetch()
+	_, err = polling.Fetch(context.Background())
 
 	if err == nil {
 		t.Error("expected JSON parse error, got nil")
@@ -941,7 +942,7 @@ func TestHTTPPolling_Fetch_DeterministicOutput(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 		}
-		results[i], err = polling.Fetch()
+		results[i], err = polling.Fetch(context.Background())
 		if err != nil {
 			t.Fatalf("Fetch() %d returned error: %v", i, err)
 		}
@@ -1001,7 +1002,7 @@ func TestHTTPPolling_Fetch_DeterministicPaginationOrder(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 		}
-		records, err := polling.Fetch()
+		records, err := polling.Fetch(context.Background())
 		if err != nil {
 			t.Fatalf("Fetch() %d returned error: %v", i, err)
 		}
@@ -1069,7 +1070,7 @@ func TestHTTPPolling_Fetch_LargeDataset(t *testing.T) {
 	}
 
 	start := time.Now()
-	records, err := polling.Fetch()
+	records, err := polling.Fetch(context.Background())
 	duration := time.Since(start)
 
 	if err != nil {
@@ -1121,7 +1122,7 @@ func TestHTTPPolling_IntegrationWithExecutor(t *testing.T) {
 	_ = module // module cannot be nil if NewHTTPPollingFromConfig succeeded
 
 	// Execute Fetch (simulating what Executor would do)
-	records, err := module.Fetch()
+	records, err := module.Fetch(context.Background())
 	if err != nil {
 		t.Fatalf("Fetch() failed: %v", err)
 	}
@@ -1206,7 +1207,7 @@ func TestHTTPPolling_IntegrationWithPaginatedData(t *testing.T) {
 	}
 
 	// Fetch all paginated data
-	records, err := polling.Fetch()
+	records, err := polling.Fetch(context.Background())
 	if err != nil {
 		t.Fatalf("Fetch() failed: %v", err)
 	}
@@ -1266,7 +1267,7 @@ func TestHTTPPolling_IntegrationWithAuthentication(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
 	}
 
-	records, err := polling.Fetch()
+	records, err := polling.Fetch(context.Background())
 	if err != nil {
 		t.Fatalf("Fetch() with auth failed: %v", err)
 	}
@@ -1285,7 +1286,7 @@ func TestHTTPPolling_IntegrationWithAuthentication(t *testing.T) {
 
 	pollingNoAuth, _ := NewHTTPPollingFromConfig(configNoAuth)
 
-	_, err = pollingNoAuth.Fetch()
+	_, err = pollingNoAuth.Fetch(context.Background())
 	if err == nil {
 		t.Error("Fetch() without auth should fail")
 	}

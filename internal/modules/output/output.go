@@ -4,11 +4,14 @@
 // This package implements Epic 3: Module Execution - Output modules.
 package output
 
+import "context"
+
 // Module represents an output module that sends data to a destination.
 type Module interface {
 	// Send transmits records to the destination system.
+	// The context can be used to cancel long-running operations.
 	// Returns the number of records successfully sent and any error.
-	Send(records []map[string]interface{}) (int, error)
+	Send(ctx context.Context, records []map[string]interface{}) (int, error)
 
 	// Close releases any resources held by the module.
 	Close() error

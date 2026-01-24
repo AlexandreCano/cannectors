@@ -3,6 +3,7 @@
 package filter
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -124,7 +125,7 @@ func NewMappingFromConfig(mappings []FieldMapping, onError string) (*MappingModu
 	for i, m := range mappings {
 		config, err := parseMappingConfig(m, i)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parsing mapping config: %w", err)
 		}
 		configs = append(configs, config)
 	}
@@ -268,7 +269,7 @@ func parseFieldMappingList(raw []map[string]interface{}) ([]FieldMapping, error)
 	for i, item := range raw {
 		mapping, err := parseFieldMappingMap(item, i)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parsing field mapping at index %d: %w", i, err)
 		}
 		mappings = append(mappings, mapping)
 	}
@@ -381,6 +382,8 @@ func stringValue(value interface{}) string {
 // Process applies field mappings to the input records.
 // It returns the transformed records with fields mapped from source to target paths.
 //
+// The context can be used to cancel long-running operations.
+//
 // For each input record:
 //  1. Creates a new target record
 //  2. For each mapping, extracts source value and sets target value
@@ -388,7 +391,7 @@ func stringValue(value interface{}) string {
 //  4. Applies transforms if configured
 //
 // Returns the transformed records and any error that occurred.
-func (m *MappingModule) Process(records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (m *MappingModule) Process(_ context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
 	if records == nil {
 		return []map[string]interface{}{}, nil
 	}

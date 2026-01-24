@@ -36,15 +36,15 @@ func ConvertToPipeline(data map[string]interface{}) (*connector.Pipeline, error)
 
 	pipeline := newPipeline()
 	if err := extractPipelineMetadata(pipeline, connectorData); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("extracting pipeline metadata: %w", err)
 	}
 
 	if err := extractModules(pipeline, connectorData); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("extracting modules: %w", err)
 	}
 
 	extractDefaultsAndErrorHandling(pipeline, connectorData)
-	resolveAndInjectErrorHandling(pipeline)
+	applyErrorHandling(pipeline)
 
 	return pipeline, nil
 }
@@ -302,9 +302,9 @@ func buildRetryFromLegacy(eh *connector.ErrorHandling, data map[string]interface
 	return retry
 }
 
-// resolveAndInjectErrorHandling resolves retry/onError/timeoutMs per module (module > defaults > errorHandling)
+// applyErrorHandling resolves retry/onError/timeoutMs per module (module > defaults > errorHandling)
 // and injects resolved values into each module's Config so modules read them directly.
-func resolveAndInjectErrorHandling(p *connector.Pipeline) {
+func applyErrorHandling(p *connector.Pipeline) {
 	resolve := func(m *connector.ModuleConfig) {
 		if m == nil || m.Config == nil {
 			return

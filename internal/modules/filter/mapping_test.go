@@ -2,6 +2,7 @@
 package filter
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -292,7 +293,7 @@ func TestMapping_Process_BasicMappings(t *testing.T) {
 				t.Fatalf("NewMappingFromConfig() error = %v", err)
 			}
 
-			got, err := mapper.Process(tt.input)
+			got, err := mapper.Process(context.Background(), tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("Process() expected error, got nil")
@@ -415,7 +416,7 @@ func TestMapping_Process_NestedPaths(t *testing.T) {
 				t.Fatalf("NewMappingFromConfig() error = %v", err)
 			}
 
-			got, err := mapper.Process(tt.input)
+			got, err := mapper.Process(context.Background(), tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("Process() expected error, got nil")
@@ -575,7 +576,7 @@ func TestMapping_Process_ArrayIndexing(t *testing.T) {
 				t.Fatalf("NewMappingFromConfig() error = %v", err)
 			}
 
-			got, err := mapper.Process(tt.input)
+			got, err := mapper.Process(context.Background(), tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("Process() expected error, got nil")
@@ -651,7 +652,7 @@ func TestMapping_Process_MissingIntermediatePaths(t *testing.T) {
 				t.Fatalf("NewMappingFromConfig() error = %v", err)
 			}
 
-			got, err := mapper.Process(tt.input)
+			got, err := mapper.Process(context.Background(), tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("Process() expected error, got nil")
@@ -812,7 +813,7 @@ func TestMapping_Process_OnMissing(t *testing.T) {
 				t.Fatalf("NewMappingFromConfig() error = %v", err)
 			}
 
-			got, err := mapper.Process(tt.input)
+			got, err := mapper.Process(context.Background(), tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("Process() expected error, got nil")
@@ -889,7 +890,7 @@ func TestMapping_Process_OnError(t *testing.T) {
 				t.Fatalf("NewMappingFromConfig() error = %v", err)
 			}
 
-			got, err := mapper.Process(tt.input)
+			got, err := mapper.Process(context.Background(), tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("Process() expected error, got nil")
@@ -1201,7 +1202,7 @@ func TestMapping_Process_Transforms(t *testing.T) {
 				t.Fatalf("NewMappingFromConfig() error = %v", err)
 			}
 
-			got, err := mapper.Process(tt.input)
+			got, err := mapper.Process(context.Background(), tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("Process() expected error, got nil")
@@ -1321,7 +1322,7 @@ func TestMapping_Process_TypePreservation(t *testing.T) {
 				t.Fatalf("NewMappingFromConfig() error = %v", err)
 			}
 
-			result, err := mapper.Process(tt.input)
+			result, err := mapper.Process(context.Background(), tt.input)
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -1385,7 +1386,7 @@ func TestMappingModule_IntegrationScenarios(t *testing.T) {
 		}
 
 		// Process records (as pipeline executor would)
-		result, err := mapper.Process(inputRecords)
+		result, err := mapper.Process(context.Background(), inputRecords)
 		if err != nil {
 			t.Fatalf("Process() failed: %v", err)
 		}
@@ -1448,7 +1449,7 @@ func TestMappingModule_IntegrationScenarios(t *testing.T) {
 		mapper, _ := NewMappingFromConfig(mappings, "fail")
 
 		// Empty input
-		result, err := mapper.Process([]map[string]interface{}{})
+		result, err := mapper.Process(context.Background(), []map[string]interface{}{})
 		if err != nil {
 			t.Fatalf("Process() failed on empty input: %v", err)
 		}
@@ -1457,7 +1458,7 @@ func TestMappingModule_IntegrationScenarios(t *testing.T) {
 		}
 
 		// Nil input
-		result, err = mapper.Process(nil)
+		result, err = mapper.Process(context.Background(), nil)
 		if err != nil {
 			t.Fatalf("Process() failed on nil input: %v", err)
 		}
@@ -1478,7 +1479,7 @@ func TestMappingModule_IntegrationScenarios(t *testing.T) {
 			{"data": "test"},
 		}
 
-		result, err := mapper.Process(input)
+		result, err := mapper.Process(context.Background(), input)
 		if err != nil {
 			t.Fatalf("Process() failed: %v", err)
 		}
@@ -1515,7 +1516,7 @@ func TestMapping_Deterministic(t *testing.T) {
 		// Run multiple times
 		var results [][]map[string]interface{}
 		for i := 0; i < 10; i++ {
-			result, err := mapper.Process(input)
+			result, err := mapper.Process(context.Background(), input)
 			if err != nil {
 				t.Fatalf("Run %d failed: %v", i, err)
 			}
@@ -1549,7 +1550,7 @@ func TestMapping_Deterministic(t *testing.T) {
 
 		// Run multiple times
 		for i := 0; i < 10; i++ {
-			result, err := mapper.Process(input)
+			result, err := mapper.Process(context.Background(), input)
 			if err != nil {
 				t.Fatalf("Run %d failed: %v", i, err)
 			}
@@ -1574,7 +1575,7 @@ func TestMapping_Deterministic(t *testing.T) {
 		mapper, _ := NewMappingFromConfig(mappings, "fail")
 
 		for i := 0; i < 10; i++ {
-			result, err := mapper.Process(input)
+			result, err := mapper.Process(context.Background(), input)
 			if err != nil {
 				t.Fatalf("Run %d failed: %v", i, err)
 			}
@@ -1597,7 +1598,7 @@ func TestMapping_Deterministic(t *testing.T) {
 
 		// Same error should occur every time
 		for i := 0; i < 5; i++ {
-			_, err := mapper.Process(input)
+			_, err := mapper.Process(context.Background(), input)
 			if err == nil {
 				t.Errorf("Run %d: expected error, got nil", i)
 			}
@@ -1627,7 +1628,7 @@ func TestMapping_Deterministic(t *testing.T) {
 
 		// Run multiple times and verify structure is identical
 		for i := 0; i < 10; i++ {
-			result, err := mapper.Process(input)
+			result, err := mapper.Process(context.Background(), input)
 			if err != nil {
 				t.Fatalf("Run %d failed: %v", i, err)
 			}
@@ -1661,7 +1662,7 @@ func TestMappingModule_Interface(t *testing.T) {
 	records := []map[string]interface{}{
 		{"test": "data"},
 	}
-	_, _ = mapper.Process(records)
+	_, _ = mapper.Process(context.Background(), records)
 }
 
 // TestMapping_Process_ErrorContext tests that errors include proper context.
@@ -1691,7 +1692,7 @@ func TestMapping_Process_ErrorContext(t *testing.T) {
 				t.Fatalf("NewMappingFromConfig() error = %v", err)
 			}
 
-			_, err = mapper.Process(tt.input)
+			_, err = mapper.Process(context.Background(), tt.input)
 			if err == nil {
 				t.Errorf("Process() expected error, got nil")
 				return
@@ -1798,7 +1799,7 @@ func TestMapping_Process_TransformErrors(t *testing.T) {
 				t.Fatalf("NewMappingFromConfig() error = %v", err)
 			}
 
-			got, err := mapper.Process(tt.input)
+			got, err := mapper.Process(context.Background(), tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("Process() expected error, got nil")

@@ -75,7 +75,7 @@ development_status:
   # Epic 12: CLI Runtime Refinements (Minor Corrections)
   epic-12: in progress
   12-1-remove-schemaversion-field: done
-  12-2-close-input-module-after-input-execution: backlog
+  12-2-close-input-module-after-input-execution: done
   12-3-queue-execution-when-previous-still-running: backlog
   12-4-treat-unknown-errors-as-retryable: backlog
   12-5-move-schedule-configuration-to-input-level: backlog

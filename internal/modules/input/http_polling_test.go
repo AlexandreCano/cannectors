@@ -1291,3 +1291,45 @@ func TestHTTPPolling_IntegrationWithAuthentication(t *testing.T) {
 		t.Error("Fetch() without auth should fail")
 	}
 }
+
+// TestHTTPPolling_Close_ReleasesConnections tests that Close() releases HTTP connection pool resources.
+func TestHTTPPolling_Close_ReleasesConnections(t *testing.T) {
+	// Setup: Create test server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+			{"id": float64(1), "name": "item1"},
+		})
+	}))
+	defer server.Close()
+
+	// Create module configuration
+	config := &connector.ModuleConfig{
+		Type: "http-polling",
+		Config: map[string]interface{}{
+			"endpoint": server.URL,
+		},
+	}
+
+	// Create module
+	polling, err := NewHTTPPollingFromConfig(config)
+	if err != nil {
+		t.Fatalf("NewHTTPPollingFromConfig failed: %v", err)
+	}
+
+	// Execute a fetch to create connections
+	_, err = polling.Fetch(context.Background())
+	if err != nil {
+		t.Fatalf("Fetch() failed: %v", err)
+	}
+
+	// Close should release connections without error
+	if err := polling.Close(); err != nil {
+		t.Errorf("Close() returned error: %v", err)
+	}
+
+	// Verify Close() can be called multiple times safely (idempotent)
+	if err := polling.Close(); err != nil {
+		t.Errorf("Close() returned error on second call: %v", err)
+	}
+}

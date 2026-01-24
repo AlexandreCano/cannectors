@@ -27,6 +27,8 @@ type MockInputModule struct {
 	data        []map[string]interface{}
 	err         error
 	fetchCalled bool
+	closed      bool
+	closeErr    error
 }
 
 func NewMockInputModule(data []map[string]interface{}, err error) *MockInputModule {
@@ -42,7 +44,8 @@ func (m *MockInputModule) Fetch(_ context.Context) ([]map[string]interface{}, er
 }
 
 func (m *MockInputModule) Close() error {
-	return nil
+	m.closed = true
+	return m.closeErr
 }
 
 // Verify MockInputModule implements input.Module
@@ -1009,6 +1012,235 @@ func TestExecutor_Execute_ClosesOutputModuleOnOutputError(t *testing.T) {
 		t.Error("Output module Close() was NOT called after output error")
 	}
 }
+
+// =============================================================================
+// Story 12.2: Input Module Cleanup Tests - Close After Input Execution
+// =============================================================================
+
+func TestExecutor_Execute_ClosesInputModuleAfterInputExecution(t *testing.T) {
+	// Verify that input module is closed after successful input execution
+	inputData := []map[string]interface{}{
+		{"id": "1", "name": "Test"},
+	}
+	mockInput := NewMockInputModule(inputData, nil)
+	mockOutput := NewMockOutputModule(nil)
+
+	pipeline := &connector.Pipeline{
+		ID:      "close-input-after-exec",
+		Name:    "Close Input After Execution Test",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, nil, mockOutput, false)
+
+	// Act
+	_, err := executor.Execute(pipeline)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+
+	if !mockInput.closed {
+		t.Error("Input module Close() was NOT called after input execution")
+	}
+}
+
+func TestExecutor_Execute_ClosesInputModuleOnInputError(t *testing.T) {
+	// Verify that input module is closed even when input execution fails
+	inputErr := errors.New("failed to fetch data")
+	mockInput := NewMockInputModule(nil, inputErr)
+	mockOutput := NewMockOutputModule(nil)
+
+	pipeline := &connector.Pipeline{
+		ID:      "close-input-on-error",
+		Name:    "Close Input On Error Test",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, nil, mockOutput, false)
+
+	// Act
+	_, err := executor.Execute(pipeline)
+
+	// Assert - expect error from input
+	if err == nil {
+		t.Fatal("Execute() should return error when input fails")
+	}
+
+	// Input module should still be closed even on error
+	if !mockInput.closed {
+		t.Error("Input module Close() was NOT called after input error - resources may leak")
+	}
+}
+
+// MockFilterModuleWithCloseCheck is a filter that records whether input was closed when filter runs
+type MockFilterModuleWithCloseCheck struct {
+	inputModule         *MockInputModule
+	inputClosedOnFilter bool
+	processCalled       bool
+}
+
+func (m *MockFilterModuleWithCloseCheck) Process(_ context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
+	m.processCalled = true
+	// Check if input was closed when filter starts processing
+	m.inputClosedOnFilter = m.inputModule.closed
+	return records, nil
+}
+
+func TestExecutor_Execute_ClosesInputModuleBeforeFilters(t *testing.T) {
+	// Verify that input module is closed BEFORE filter execution begins
+	inputData := []map[string]interface{}{
+		{"id": "1", "name": "Test"},
+	}
+	mockInput := NewMockInputModule(inputData, nil)
+
+	// Filter that checks if input was closed when it runs
+	filterWithCheck := &MockFilterModuleWithCloseCheck{inputModule: mockInput}
+	mockOutput := NewMockOutputModule(nil)
+
+	pipeline := &connector.Pipeline{
+		ID:      "close-input-before-filters",
+		Name:    "Close Input Before Filters Test",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, []filter.Module{filterWithCheck}, mockOutput, false)
+
+	// Act
+	_, err := executor.Execute(pipeline)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+
+	if !filterWithCheck.processCalled {
+		t.Fatal("Filter was not called")
+	}
+
+	if !filterWithCheck.inputClosedOnFilter {
+		t.Error("Input module was NOT closed before filter execution - resources held too long")
+	}
+}
+
+func TestExecutor_Execute_InputClosedButRecordsStillAvailable(t *testing.T) {
+	// Verify that after input module is closed, records are still available for filters and output
+	inputData := []map[string]interface{}{
+		{"id": "1", "name": "Test 1"},
+		{"id": "2", "name": "Test 2"},
+	}
+	mockInput := NewMockInputModule(inputData, nil)
+
+	// Filter that verifies it receives the correct records
+	var recordsReceivedByFilter []map[string]interface{}
+	verifyFilter := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
+		recordsReceivedByFilter = records
+		return records, nil
+	})
+
+	mockOutput := NewMockOutputModule(nil)
+
+	pipeline := &connector.Pipeline{
+		ID:      "records-after-input-close",
+		Name:    "Records Available After Input Close Test",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, []filter.Module{verifyFilter}, mockOutput, false)
+
+	// Act
+	result, err := executor.Execute(pipeline)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+
+	// Input should be closed
+	if !mockInput.closed {
+		t.Error("Input module should be closed")
+	}
+
+	// Filter should have received the records
+	if len(recordsReceivedByFilter) != 2 {
+		t.Errorf("Filter should receive 2 records, got %d", len(recordsReceivedByFilter))
+	}
+
+	// Output should have received the records
+	if len(mockOutput.sentRecords) != 2 {
+		t.Errorf("Output should receive 2 records, got %d", len(mockOutput.sentRecords))
+	}
+
+	// Result should show successful processing
+	if result.RecordsProcessed != 2 {
+		t.Errorf("Expected 2 records processed, got %d", result.RecordsProcessed)
+	}
+}
+
+func TestExecutor_Execute_NoDoubleCloseOnInputModule(t *testing.T) {
+	// Verify that input module is not closed twice (no double-close)
+	inputData := []map[string]interface{}{
+		{"id": "1", "name": "Test"},
+	}
+
+	closeCount := 0
+	mockInput := &MockInputModuleWithCloseCount{
+		data:       inputData,
+		closeCount: &closeCount,
+	}
+	mockOutput := NewMockOutputModule(nil)
+
+	pipeline := &connector.Pipeline{
+		ID:      "no-double-close",
+		Name:    "No Double Close Test",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	executor := NewExecutorWithModules(mockInput, nil, mockOutput, false)
+
+	// Act
+	_, err := executor.Execute(pipeline)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("Execute() returned unexpected error: %v", err)
+	}
+
+	if closeCount != 1 {
+		t.Errorf("Input module Close() was called %d times, expected exactly 1", closeCount)
+	}
+}
+
+// MockInputModuleWithCloseCount tracks how many times Close() is called
+type MockInputModuleWithCloseCount struct {
+	data       []map[string]interface{}
+	err        error
+	closeCount *int
+}
+
+func (m *MockInputModuleWithCloseCount) Fetch(_ context.Context) ([]map[string]interface{}, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.data, nil
+}
+
+func (m *MockInputModuleWithCloseCount) Close() error {
+	*m.closeCount++
+	return nil
+}
+
+// Verify MockInputModuleWithCloseCount implements input.Module
+var _ input.Module = (*MockInputModuleWithCloseCount)(nil)
+
+// Verify MockFilterModuleWithCloseCheck implements filter.Module
+var _ filter.Module = (*MockFilterModuleWithCloseCheck)(nil)
 
 // =============================================================================
 // Story 4.2: Dry-Run Mode - Task 2: Executor Dry-Run Preview Tests

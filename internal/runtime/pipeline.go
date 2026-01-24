@@ -293,6 +293,14 @@ func (e *Executor) Execute(pipeline *connector.Pipeline) (*connector.ExecutionRe
 //  4. Execute Output module to send data (unless dry-run mode)
 //  5. Return ExecutionResult with status and metrics
 //
+// Resource Management:
+//   - Input module: Closed immediately after input execution completes (even on error).
+//     This releases network resources (HTTP connections, connection pools) promptly,
+//     before filter and output execution begins. Fetched records remain in memory.
+//     HTTP Polling modules release idle connections from their connection pools.
+//   - Output module: Closed at end of execution (via defer).
+//   - Filter modules: Stateless, no cleanup needed.
+//
 // Returns both result and error for comprehensive error handling.
 func (e *Executor) ExecuteWithContext(ctx context.Context, pipeline *connector.Pipeline) (*connector.ExecutionResult, error) {
 	startedAt := time.Now()
@@ -324,10 +332,7 @@ func (e *Executor) ExecuteWithContext(ctx context.Context, pipeline *connector.P
 	}
 	logger.LogExecutionStart(execCtx)
 
-	// Setup module cleanup (must be in Execute for defers to work)
-	if e.inputModule != nil {
-		defer e.closeModule(pipeline.ID, "input", e.inputModule)
-	}
+	// Setup output module cleanup (deferred to end of execution)
 	if e.outputModule != nil {
 		defer e.closeModule(pipeline.ID, "output", e.outputModule)
 	}
@@ -335,6 +340,16 @@ func (e *Executor) ExecuteWithContext(ctx context.Context, pipeline *connector.P
 	// Execute Input module (returns duration measured inside)
 	records, inputDuration, err := e.executeInput(ctx, pipeline, result)
 	timings.inputDuration = inputDuration
+
+	// Close input module immediately after input execution completes.
+	// This releases network resources (HTTP connections, connection pools) promptly,
+	// before filter and output execution begins. Fetched records remain in memory.
+	// For HTTP Polling modules, this closes idle connections in the connection pool.
+	if e.inputModule != nil {
+		e.closeModule(pipeline.ID, "input", e.inputModule)
+		e.inputModule = nil // Prevent double-close
+	}
+
 	if err != nil {
 		// Log execution end on input failure
 		totalDuration := time.Since(startedAt)
@@ -600,6 +615,9 @@ func (e *Executor) ExecuteWithRecords(pipeline *connector.Pipeline, records []ma
 
 // ExecuteWithRecordsContext runs a pipeline configuration using pre-fetched records with context.
 // This is intended for push-based inputs (e.g., webhooks) that already have data.
+//
+// Note: This method does NOT use or cleanup input modules. Records are provided directly,
+// so no input module resources need to be managed. Only the output module is cleaned up.
 func (e *Executor) ExecuteWithRecordsContext(ctx context.Context, pipeline *connector.Pipeline, records []map[string]interface{}) (*connector.ExecutionResult, error) {
 	startedAt := time.Now()
 

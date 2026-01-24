@@ -123,7 +123,7 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 
 	endpoint, method, timeout, err := extractBasicConfig(config.Config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("extracting basic config: %w", err)
 	}
 
 	headers := extractHeaders(config.Config)
@@ -305,12 +305,14 @@ func createHTTPClient(timeout time.Duration) *http.Client {
 // Send transmits records to the destination via HTTP.
 // Returns the number of records successfully sent and any error encountered.
 //
+// The context can be used to cancel long-running operations.
+//
 // Behavior depends on request.bodyFrom configuration:
 //   - "records" (default): Sends all records in a single request as JSON array
 //   - "record": Sends one request per record, body is single JSON object
 //
 // Empty or nil records return success with 0 sent.
-func (h *HTTPRequestModule) Send(records []map[string]interface{}) (int, error) {
+func (h *HTTPRequestModule) Send(ctx context.Context, records []map[string]interface{}) (int, error) {
 	startTime := time.Now()
 
 	// Handle empty/nil records gracefully
@@ -331,7 +333,6 @@ func (h *HTTPRequestModule) Send(records []map[string]interface{}) (int, error) 
 		slog.Bool("has_auth", h.authHandler != nil),
 	)
 
-	ctx := context.Background()
 	var sent int
 	var err error
 

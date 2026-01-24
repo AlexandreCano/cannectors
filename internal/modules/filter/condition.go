@@ -3,6 +3,7 @@
 package filter
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -167,13 +168,13 @@ func newConditionFromConfigWithDepth(config ConditionConfig, depth int) (*Condit
 	// Validate and normalize expression
 	expression, err := validateExpression(config.Expression)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validating expression: %w", err)
 	}
 
 	// Normalize and validate configuration values
 	lang, err := normalizeLang(config.Lang)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalizing language: %w", err)
 	}
 
 	onTrue := normalizeOnCondition(config.OnTrue, OnConditionContinue)
@@ -183,13 +184,13 @@ func newConditionFromConfigWithDepth(config ConditionConfig, depth int) (*Condit
 	// Compile expression
 	program, err := compileExpression(expression)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("compiling expression: %w", err)
 	}
 
 	// Create nested modules
 	thenModule, elseModule, err := createNestedModules(config.Then, config.Else, depth+1)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating nested modules: %w", err)
 	}
 
 	logModuleInitialization(config.Expression, lang, onTrue, onFalse, onError, thenModule, elseModule)
@@ -332,13 +333,17 @@ func createNestedModuleWithDepth(config *NestedModuleConfig, depth int) (Module,
 	case "mapping":
 		mappings, err := ParseFieldMappings(config.Mappings)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parsing field mappings: %w", err)
 		}
 		onError := config.OnError
 		if onError == "" {
 			onError = OnErrorFail
 		}
-		return NewMappingFromConfig(mappings, onError)
+		module, err := NewMappingFromConfig(mappings, onError)
+		if err != nil {
+			return nil, fmt.Errorf("creating mapping module: %w", err)
+		}
+		return module, nil
 
 	case "condition":
 		// Validate expression length for nested conditions too
@@ -412,6 +417,9 @@ func (c *ConditionModule) handleNestedModuleError(err error, recordIdx int) erro
 }
 
 // Process filters records based on the condition expression.
+//
+// The context can be used to cancel long-running operations.
+//
 // For each record:
 //  1. Evaluates the condition expression using expr library
 //  2. If true and 'then' module exists: execute 'then' module
@@ -420,7 +428,7 @@ func (c *ConditionModule) handleNestedModuleError(err error, recordIdx int) erro
 //  5. If false and no 'else' module: apply onFalse behavior
 //
 // Returns the filtered/routed records and any error that occurred.
-func (c *ConditionModule) Process(records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (c *ConditionModule) Process(ctx context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
 	if records == nil {
 		return []map[string]interface{}{}, nil
 	}
@@ -485,7 +493,7 @@ func (c *ConditionModule) Process(records []map[string]interface{}) ([]map[strin
 		}
 
 		// Process based on condition result
-		processedRecords, err := c.processConditionResult(conditionResult, record)
+		processedRecords, err := c.processConditionResult(ctx, conditionResult, record)
 		if err != nil {
 			errorCount++
 			if handleErr := c.handleNestedModuleError(err, recordIdx); handleErr != nil {
@@ -523,12 +531,12 @@ func (c *ConditionModule) Process(records []map[string]interface{}) ([]map[strin
 }
 
 // processConditionResult handles the result of condition evaluation for a single record.
-func (c *ConditionModule) processConditionResult(conditionTrue bool, record map[string]interface{}) ([]map[string]interface{}, error) {
+func (c *ConditionModule) processConditionResult(ctx context.Context, conditionTrue bool, record map[string]interface{}) ([]map[string]interface{}, error) {
 	if conditionTrue {
 		// Condition is true
 		if c.thenModule != nil {
 			// Execute 'then' module
-			return c.thenModule.Process([]map[string]interface{}{record})
+			return c.thenModule.Process(ctx, []map[string]interface{}{record})
 		}
 		// Apply onTrue behavior
 		if c.onTrue == OnConditionContinue {
@@ -541,7 +549,7 @@ func (c *ConditionModule) processConditionResult(conditionTrue bool, record map[
 	// Condition is false
 	if c.elseModule != nil {
 		// Execute 'else' module
-		return c.elseModule.Process([]map[string]interface{}{record})
+		return c.elseModule.Process(ctx, []map[string]interface{}{record})
 	}
 	// Apply onFalse behavior
 	if c.onFalse == OnConditionContinue {

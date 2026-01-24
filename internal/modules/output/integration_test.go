@@ -2,6 +2,7 @@
 package output
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -107,7 +108,7 @@ func TestHTTPRequestModule_PipelineIntegration_SimpleFlow(t *testing.T) {
 		{"id": 2, "name": "Bob", "email": "bob@example.com"},
 	}
 
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
@@ -154,7 +155,7 @@ func TestHTTPRequestModule_PipelineIntegration_EmptyRecords(t *testing.T) {
 	}
 
 	// Send empty records (e.g., after filtering removed all records)
-	sent, err := module.Send([]map[string]interface{}{})
+	sent, err := module.Send(context.Background(), []map[string]interface{}{})
 	if err != nil {
 		t.Fatalf("Send with empty records should not fail: %v", err)
 	}
@@ -196,7 +197,7 @@ func TestHTTPRequestModule_PipelineIntegration_WithFiltering(t *testing.T) {
 		{"target_id": "usr_001", "full_name": "ALICE SMITH", "active": true},
 	}
 
-	sent, err := module.Send(filteredRecords)
+	sent, err := module.Send(context.Background(), filteredRecords)
 	if err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
@@ -239,7 +240,7 @@ func TestHTTPRequestModule_PipelineIntegration_MultipleCallsReusesModule(t *test
 	batch3 := []map[string]interface{}{{"batch": 3}}
 
 	for i, batch := range [][]map[string]interface{}{batch1, batch2, batch3} {
-		sent, err := module.Send(batch)
+		sent, err := module.Send(context.Background(), batch)
 		if err != nil {
 			t.Fatalf("Send batch %d failed: %v", i+1, err)
 		}
@@ -283,7 +284,7 @@ func TestHTTPRequestModule_PipelineIntegration_WithAuthentication(t *testing.T) 
 	}
 
 	records := []map[string]interface{}{{"secure": "data"}}
-	_, err = module.Send(records)
+	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
@@ -323,7 +324,7 @@ func TestHTTPRequestModule_PipelineIntegration_ErrorHandling(t *testing.T) {
 	}
 
 	records := []map[string]interface{}{{"test": "data"}}
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 
 	// Error should be returned to pipeline executor
 	if err == nil {
@@ -367,7 +368,7 @@ func TestHTTPRequestModule_PipelineIntegration_LargeDataSet(t *testing.T) {
 		}
 	}
 
-	sent, err := module.Send(records)
+	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Send large dataset failed: %v", err)
 	}

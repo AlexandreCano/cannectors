@@ -1315,7 +1315,7 @@ func TestWebhook_Fetch_NotImplemented(t *testing.T) {
 	}
 
 	// Webhooks are push-based, Fetch() should return an error or empty result
-	data, err := w.Fetch()
+	data, err := w.Fetch(context.Background())
 	if err != ErrNotImplemented {
 		t.Errorf("Webhook.Fetch() error = %v, want %v (webhooks use callback pattern)", err, ErrNotImplemented)
 	}

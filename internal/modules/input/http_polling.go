@@ -269,11 +269,12 @@ func parsePaginationConfig(config map[string]interface{}) *PaginationConfig {
 // It executes HTTP GET requests to the configured endpoint, handles authentication,
 // and aggregates paginated results into a single slice of records.
 //
+// The context can be used to cancel long-running operations.
+//
 // Returns:
 //   - []map[string]interface{}: The fetched records
 //   - error: Any error encountered during fetching
-func (h *HTTPPolling) Fetch() ([]map[string]interface{}, error) {
-	ctx := context.Background()
+func (h *HTTPPolling) Fetch(ctx context.Context) ([]map[string]interface{}, error) {
 	startTime := time.Now()
 
 	// Log fetch start with configuration summary

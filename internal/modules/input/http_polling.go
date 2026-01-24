@@ -997,8 +997,15 @@ func (h *HTTPPolling) buildPaginatedURLMulti(params map[string]string) (string, 
 // Close releases any resources held by the HTTP polling module.
 // Closes idle connections in the HTTP client's connection pool to release network resources.
 func (h *HTTPPolling) Close() error {
-	if h.client != nil && h.client.Transport != nil {
-		if transport, ok := h.client.Transport.(*http.Transport); ok {
+	if h.client != nil {
+		// When h.client.Transport is nil, http.Client uses http.DefaultTransport internally.
+		// To ensure we still close idle connections, fall back to http.DefaultTransport.
+		rt := h.client.Transport
+		if rt == nil {
+			rt = http.DefaultTransport
+		}
+
+		if transport, ok := rt.(*http.Transport); ok {
 			transport.CloseIdleConnections()
 		}
 	}

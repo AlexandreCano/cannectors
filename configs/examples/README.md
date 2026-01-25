@@ -145,6 +145,20 @@ canectors run --dry-run ./configs/examples/13-scheduled.yaml
 - Graceful shutdown on SIGINT/SIGTERM
 - Logs all scheduled executions with timestamps
 
+#### 14-webhook.json / 14-webhook.yaml
+Webhook input example (event-driven, no schedule).
+
+**Features:**
+- Webhook input (`path`) – receives data via HTTP POST
+- No CRON schedule (schedule is not allowed for webhook)
+- Compare with 13-scheduled (httpPolling requires schedule)
+
+**Usage:**
+```bash
+canectors validate ./configs/examples/14-webhook.yaml
+canectors run --dry-run ./configs/examples/14-webhook.yaml
+```
+
 ## Using the Examples
 
 ### Validate an Example
@@ -237,4 +251,4 @@ export API_KEY="your-api-key-here"
 - Replace with your actual API endpoints
 - Credentials are shown as environment variables - in production, use secure credential management
 - Timeouts are specified in seconds (Input) or milliseconds (Output)
-- Schedules use CRON expression format (optional)
+- Schedules use CRON expression format: **required** for polling input types (e.g. httpPolling), **not allowed** for event-driven types (e.g. webhook)

@@ -84,8 +84,10 @@ func TestConvertToPipeline_ValidConfig(t *testing.T) {
 		t.Errorf("Expected output type 'httpRequest', got '%s'", pipeline.Output.Type)
 	}
 
-	if pipeline.Schedule != "*/5 * * * *" {
-		t.Errorf("Expected schedule '*/5 * * * *', got '%s'", pipeline.Schedule)
+	// Schedule should be in input config, not pipeline level
+	schedule, ok := pipeline.Input.Config["schedule"].(string)
+	if !ok || schedule != "*/5 * * * *" {
+		t.Errorf("Expected schedule '*/5 * * * *' in input config, got '%v'", pipeline.Input.Config["schedule"])
 	}
 
 	if !pipeline.Enabled {
@@ -376,6 +378,60 @@ func TestConvertToPipeline_MultipleFilters(t *testing.T) {
 		if pipeline.Filters[i].Type != expected {
 			t.Errorf("Filter %d: expected type '%s', got '%s'", i, expected, pipeline.Filters[i].Type)
 		}
+	}
+}
+
+func TestConvertToPipeline_ScheduleInInputConfig(t *testing.T) {
+	// Test that schedule defined at input level is stored in input config
+	data := map[string]interface{}{
+		"connector": map[string]interface{}{
+			"name":    "test-schedule-in-input",
+			"version": "1.0.0",
+			"input": map[string]interface{}{
+				"type":     "httpPolling",
+				"endpoint": "https://api.example.com",
+				"schedule": "*/5 * * * *",
+			},
+			"filters": []interface{}{},
+			"output":  map[string]interface{}{"type": "httpRequest"},
+		},
+	}
+
+	pipeline, err := ConvertToPipeline(data)
+	if err != nil {
+		t.Fatalf("ConvertToPipeline() error = %v", err)
+	}
+
+	// Schedule should be in input config
+	schedule, ok := pipeline.Input.Config["schedule"].(string)
+	if !ok || schedule != "*/5 * * * *" {
+		t.Errorf("Expected schedule '*/5 * * * *' in input config, got '%v'", pipeline.Input.Config["schedule"])
+	}
+}
+
+func TestConvertToPipeline_WebhookWithoutSchedule(t *testing.T) {
+	// Test that webhook input type works without schedule
+	data := map[string]interface{}{
+		"connector": map[string]interface{}{
+			"name":    "test-webhook",
+			"version": "1.0.0",
+			"input": map[string]interface{}{
+				"type": "webhook",
+				"path": "/webhook",
+			},
+			"filters": []interface{}{},
+			"output":  map[string]interface{}{"type": "httpRequest"},
+		},
+	}
+
+	pipeline, err := ConvertToPipeline(data)
+	if err != nil {
+		t.Fatalf("ConvertToPipeline() error = %v", err)
+	}
+
+	// Webhook should not have schedule
+	if _, hasSchedule := pipeline.Input.Config["schedule"]; hasSchedule {
+		t.Error("Webhook input should not have schedule")
 	}
 }
 

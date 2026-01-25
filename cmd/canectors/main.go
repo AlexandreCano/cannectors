@@ -121,12 +121,12 @@ var runCmd = &cobra.Command{
 The configuration file is first validated against the schema.
 If validation fails, the pipeline will not be executed.
 
-If the configuration includes a 'schedule' field with a CRON expression,
+If the input module includes a 'schedule' field with a CRON expression,
 the pipeline runs on a recurring schedule until interrupted (Ctrl+C).
-Without a schedule, the pipeline executes once and exits.
+Without a schedule in the input module, the pipeline executes once and exits.
 
-CRON Schedule (optional):
-  If your config includes "schedule": "*/5 * * * *", the pipeline runs every 5 minutes.
+CRON Schedule (input module level):
+  If the input module includes "schedule": "*/5 * * * *", the pipeline runs every 5 minutes.
   Standard format: minute hour day month weekday
   Extended format: second minute hour day month weekday
 
@@ -143,7 +143,7 @@ Examples:
   canectors run config.json                    # Run once
   canectors run --verbose pipeline.yaml        # Run once with verbose output
   canectors run --dry-run config.json          # Dry-run mode
-  canectors run scheduled-pipeline.yaml        # Run on CRON schedule (if schedule field present)`,
+  canectors run scheduled-pipeline.yaml        # Run on CRON schedule (if input module has schedule)`,
 	Args: cobra.ExactArgs(1),
 	Run:  runPipeline,
 }
@@ -232,8 +232,10 @@ func runPipeline(_ *cobra.Command, args []string) {
 		}
 	}
 
-	if pipeline.Schedule != "" {
-		runScheduledPipeline(pipeline)
+	// Check if pipeline has a schedule in input module config
+	schedule := scheduler.GetScheduleFromInput(pipeline)
+	if schedule != "" {
+		runScheduledPipeline(pipeline, schedule)
 		return
 	}
 
@@ -275,8 +277,8 @@ func runPipelineOnce(pipeline *connector.Pipeline) {
 	os.Exit(ExitSuccess)
 }
 
-func runScheduledPipeline(pipeline *connector.Pipeline) {
-	if err := scheduler.ValidateCronExpression(pipeline.Schedule); err != nil {
+func runScheduledPipeline(pipeline *connector.Pipeline, schedule string) {
+	if err := scheduler.ValidateCronExpression(schedule); err != nil {
 		fmt.Fprintf(os.Stderr, "✗ Invalid CRON expression: %v\n", err)
 		os.Exit(ExitValidationError)
 	}
@@ -288,7 +290,7 @@ func runScheduledPipeline(pipeline *connector.Pipeline) {
 	}
 
 	if verbose {
-		fmt.Printf("  Schedule: %s\n", pipeline.Schedule)
+		fmt.Printf("  Schedule: %s\n", schedule)
 	}
 
 	executorAdapter := &PipelineExecutorAdapter{dryRun: dryRun}
@@ -311,7 +313,7 @@ func runScheduledPipeline(pipeline *connector.Pipeline) {
 			fmt.Println("🕐 Scheduler started")
 		}
 		fmt.Printf("  Pipeline: %s\n", pipeline.ID)
-		fmt.Printf("  Schedule: %s\n", pipeline.Schedule)
+		fmt.Printf("  Schedule: %s\n", schedule)
 
 		if nextRun, err := sched.GetNextRun(pipeline.ID); err == nil && !nextRun.IsZero() {
 			fmt.Printf("  Next run: %s\n", nextRun.Format(time.RFC3339))

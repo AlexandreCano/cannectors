@@ -135,10 +135,10 @@ func TestScheduler_Register_ValidPipeline(t *testing.T) {
 	defer func() { _ = s.Stop(context.Background()) }()
 
 	pipeline := &connector.Pipeline{
-		ID:       "test-pipeline-1",
-		Name:     "Test Pipeline",
-		Schedule: "*/5 * * * *",
-		Enabled:  true,
+		ID:      "test-pipeline-1",
+		Name:    "Test Pipeline",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "*/5 * * * *"}},
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -157,10 +157,10 @@ func TestScheduler_Register_DisabledPipeline(t *testing.T) {
 	defer func() { _ = s.Stop(context.Background()) }()
 
 	pipeline := &connector.Pipeline{
-		ID:       "disabled-pipeline",
-		Name:     "Disabled Pipeline",
-		Schedule: "*/5 * * * *",
-		Enabled:  false,
+		ID:      "disabled-pipeline",
+		Name:    "Disabled Pipeline",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "*/5 * * * *"}},
+		Enabled: false,
 	}
 
 	err := s.Register(pipeline)
@@ -174,10 +174,10 @@ func TestScheduler_Register_EmptySchedule(t *testing.T) {
 	defer func() { _ = s.Stop(context.Background()) }()
 
 	pipeline := &connector.Pipeline{
-		ID:       "no-schedule-pipeline",
-		Name:     "No Schedule Pipeline",
-		Schedule: "",
-		Enabled:  true,
+		ID:      "no-schedule-pipeline",
+		Name:    "No Schedule Pipeline",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": ""}},
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -191,10 +191,10 @@ func TestScheduler_Register_InvalidCronExpression(t *testing.T) {
 	defer func() { _ = s.Stop(context.Background()) }()
 
 	pipeline := &connector.Pipeline{
-		ID:       "invalid-cron-pipeline",
-		Name:     "Invalid CRON Pipeline",
-		Schedule: "not a valid cron",
-		Enabled:  true,
+		ID:      "invalid-cron-pipeline",
+		Name:    "Invalid CRON Pipeline",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "not a valid cron"}},
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -208,10 +208,10 @@ func TestScheduler_Register_DuplicatePipeline(t *testing.T) {
 	defer func() { _ = s.Stop(context.Background()) }()
 
 	pipeline := &connector.Pipeline{
-		ID:       "duplicate-pipeline",
-		Name:     "Pipeline v1",
-		Schedule: "*/5 * * * *",
-		Enabled:  true,
+		ID:      "duplicate-pipeline",
+		Name:    "Pipeline v1",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "*/5 * * * *"}},
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -221,10 +221,10 @@ func TestScheduler_Register_DuplicatePipeline(t *testing.T) {
 
 	// Register again with updated schedule - should update existing
 	pipelineV2 := &connector.Pipeline{
-		ID:       "duplicate-pipeline",
-		Name:     "Pipeline v2",
-		Schedule: "*/10 * * * *",
-		Enabled:  true,
+		ID:      "duplicate-pipeline",
+		Name:    "Pipeline v2",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "*/10 * * * *"}},
+		Enabled: true,
 	}
 
 	err = s.Register(pipelineV2)
@@ -252,10 +252,10 @@ func TestScheduler_Start_ExecutesPipelines(t *testing.T) {
 	s := NewWithExecutor(executor)
 
 	pipeline := &connector.Pipeline{
-		ID:       "exec-test-pipeline",
-		Name:     "Execution Test",
-		Schedule: "* * * * * *", // Every second (extended format)
-		Enabled:  true,
+		ID:      "exec-test-pipeline",
+		Name:    "Execution Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second (extended format)
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -286,10 +286,10 @@ func TestScheduler_Start_AlreadyRunning(t *testing.T) {
 	s := New()
 
 	pipeline := &connector.Pipeline{
-		ID:       "already-running-test",
-		Name:     "Already Running Test",
-		Schedule: "0 * * * *",
-		Enabled:  true,
+		ID:      "already-running-test",
+		Name:    "Already Running Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Enabled: true,
 	}
 
 	_ = s.Register(pipeline)
@@ -317,10 +317,10 @@ func TestScheduler_SerializesExecution(t *testing.T) {
 	s := NewWithExecutor(executor)
 
 	pipeline := &connector.Pipeline{
-		ID:       "serialize-test-pipeline",
-		Name:     "Serialize Test",
-		Schedule: "* * * * * *", // Every second
-		Enabled:  true,
+		ID:      "serialize-test-pipeline",
+		Name:    "Serialize Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -355,10 +355,10 @@ func TestScheduler_IsRunning(t *testing.T) {
 	s := New()
 
 	pipeline := &connector.Pipeline{
-		ID:       "is-running-test",
-		Name:     "Is Running Test",
-		Schedule: "0 * * * *",
-		Enabled:  true,
+		ID:      "is-running-test",
+		Name:    "Is Running Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Enabled: true,
 	}
 
 	_ = s.Register(pipeline)
@@ -386,10 +386,10 @@ func TestScheduler_Stop_GracefulShutdown(t *testing.T) {
 	s := NewWithExecutor(executor)
 
 	pipeline := &connector.Pipeline{
-		ID:       "stop-test-pipeline",
-		Name:     "Stop Test",
-		Schedule: "* * * * * *", // Every second
-		Enabled:  true,
+		ID:      "stop-test-pipeline",
+		Name:    "Stop Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -424,10 +424,10 @@ func TestScheduler_Stop_ClearsPipelines(t *testing.T) {
 	s := New()
 
 	pipeline := &connector.Pipeline{
-		ID:       "clear-test-pipeline",
-		Name:     "Clear Test",
-		Schedule: "0 * * * *",
-		Enabled:  true,
+		ID:      "clear-test-pipeline",
+		Name:    "Clear Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -467,10 +467,10 @@ func TestScheduler_Stop_WithTimeout(t *testing.T) {
 	s := NewWithExecutor(executor)
 
 	pipeline := &connector.Pipeline{
-		ID:       "timeout-test-pipeline",
-		Name:     "Timeout Test",
-		Schedule: "* * * * * *",
-		Enabled:  true,
+		ID:      "timeout-test-pipeline",
+		Name:    "Timeout Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}},
+		Enabled: true,
 	}
 
 	_ = s.Register(pipeline)
@@ -499,10 +499,10 @@ func TestScheduler_RegisterAfterStart(t *testing.T) {
 
 	// Start first with one pipeline
 	pipeline1 := &connector.Pipeline{
-		ID:       "initial-pipeline",
-		Name:     "Initial Pipeline",
-		Schedule: "0 * * * *",
-		Enabled:  true,
+		ID:      "initial-pipeline",
+		Name:    "Initial Pipeline",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Enabled: true,
 	}
 	_ = s.Register(pipeline1)
 	_ = s.Start(context.Background())
@@ -510,10 +510,10 @@ func TestScheduler_RegisterAfterStart(t *testing.T) {
 
 	// Register another pipeline while running
 	pipeline2 := &connector.Pipeline{
-		ID:       "dynamic-pipeline",
-		Name:     "Dynamic Pipeline",
-		Schedule: "* * * * * *", // Every second
-		Enabled:  true,
+		ID:      "dynamic-pipeline",
+		Name:    "Dynamic Pipeline",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline2)
@@ -533,10 +533,10 @@ func TestScheduler_Unregister(t *testing.T) {
 	s := New()
 
 	pipeline := &connector.Pipeline{
-		ID:       "unregister-test",
-		Name:     "Unregister Test",
-		Schedule: "0 * * * *",
-		Enabled:  true,
+		ID:      "unregister-test",
+		Name:    "Unregister Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Enabled: true,
 	}
 
 	_ = s.Register(pipeline)
@@ -573,15 +573,15 @@ func TestScheduler_PipelineCount(t *testing.T) {
 	}
 
 	_ = s.Register(&connector.Pipeline{
-		ID:       "count-test-1",
-		Schedule: "0 * * * *",
-		Enabled:  true,
+		ID:      "count-test-1",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Enabled: true,
 	})
 
 	_ = s.Register(&connector.Pipeline{
-		ID:       "count-test-2",
-		Schedule: "0 * * * *",
-		Enabled:  true,
+		ID:      "count-test-2",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Enabled: true,
 	})
 
 	if s.PipelineCount() != 2 {
@@ -594,15 +594,15 @@ func TestScheduler_GetPipelineIDs(t *testing.T) {
 	defer func() { _ = s.Stop(context.Background()) }()
 
 	_ = s.Register(&connector.Pipeline{
-		ID:       "id-test-a",
-		Schedule: "0 * * * *",
-		Enabled:  true,
+		ID:      "id-test-a",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Enabled: true,
 	})
 
 	_ = s.Register(&connector.Pipeline{
-		ID:       "id-test-b",
-		Schedule: "0 * * * *",
-		Enabled:  true,
+		ID:      "id-test-b",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Enabled: true,
 	})
 
 	ids := s.GetPipelineIDs()
@@ -654,10 +654,10 @@ func TestScheduler_GetNextRun_BeforeStart(t *testing.T) {
 	defer func() { _ = s.Stop(context.Background()) }()
 
 	pipeline := &connector.Pipeline{
-		ID:       "before-start-test",
-		Name:     "Before Start Test",
-		Schedule: "0 * * * *",
-		Enabled:  true,
+		ID:      "before-start-test",
+		Name:    "Before Start Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -685,10 +685,10 @@ func TestScheduler_GetQueueLength_EmptyQueue(t *testing.T) {
 	defer func() { _ = s.Stop(context.Background()) }()
 
 	pipeline := &connector.Pipeline{
-		ID:       "queue-length-test",
-		Name:     "Queue Length Test",
-		Schedule: "0 * * * *",
-		Enabled:  true,
+		ID:      "queue-length-test",
+		Name:    "Queue Length Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -726,10 +726,10 @@ func TestScheduler_QueuesExecutionWhenPreviousRunning(t *testing.T) {
 	s := NewWithExecutor(executor)
 
 	pipeline := &connector.Pipeline{
-		ID:       "queue-test-pipeline",
-		Name:     "Queue Test",
-		Schedule: "* * * * * *", // Every second
-		Enabled:  true,
+		ID:      "queue-test-pipeline",
+		Name:    "Queue Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -771,10 +771,10 @@ func TestScheduler_ProcessesQueueAfterExecutionCompletes(t *testing.T) {
 	s := NewWithExecutor(executor)
 
 	pipeline := &connector.Pipeline{
-		ID:       "queue-process-test",
-		Name:     "Queue Process Test",
-		Schedule: "* * * * * *", // Every second
-		Enabled:  true,
+		ID:      "queue-process-test",
+		Name:    "Queue Process Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -823,10 +823,10 @@ func TestScheduler_FIFOQueueOrder(t *testing.T) {
 	s := NewWithExecutor(executor)
 
 	pipeline := &connector.Pipeline{
-		ID:       "fifo-test-pipeline",
-		Name:     "FIFO Test",
-		Schedule: "* * * * * *", // Every second
-		Enabled:  true,
+		ID:      "fifo-test-pipeline",
+		Name:    "FIFO Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -873,10 +873,10 @@ func TestScheduler_ClearsQueueOnStop(t *testing.T) {
 	s := NewWithExecutor(executor)
 
 	pipeline := &connector.Pipeline{
-		ID:       "clear-queue-test",
-		Name:     "Clear Queue Test",
-		Schedule: "* * * * * *", // Every second
-		Enabled:  true,
+		ID:      "clear-queue-test",
+		Name:    "Clear Queue Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -925,10 +925,10 @@ func TestScheduler_StopDoesNotStartNewQueuedExecutions(t *testing.T) {
 	s := NewWithExecutor(executor)
 
 	pipeline := &connector.Pipeline{
-		ID:       "no-new-exec-test",
-		Name:     "No New Exec Test",
-		Schedule: "* * * * * *", // Every second
-		Enabled:  true,
+		ID:      "no-new-exec-test",
+		Name:    "No New Exec Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -976,10 +976,10 @@ func TestScheduler_IsQueued(t *testing.T) {
 	s := NewWithExecutor(executor)
 
 	pipeline := &connector.Pipeline{
-		ID:       "is-queued-test",
-		Name:     "Is Queued Test",
-		Schedule: "* * * * * *", // Every second
-		Enabled:  true,
+		ID:      "is-queued-test",
+		Name:    "Is Queued Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -1033,10 +1033,10 @@ func TestScheduler_MultipleQueuedExecutionsProcessedSequentially(t *testing.T) {
 	s := NewWithExecutor(executor)
 
 	pipeline := &connector.Pipeline{
-		ID:       "sequential-test",
-		Name:     "Sequential Test",
-		Schedule: "* * * * * *", // Every second
-		Enabled:  true,
+		ID:      "sequential-test",
+		Name:    "Sequential Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -1080,10 +1080,10 @@ func TestScheduler_NoStarvation(t *testing.T) {
 	s := NewWithExecutor(executor)
 
 	pipeline := &connector.Pipeline{
-		ID:       "no-starvation-test",
-		Name:     "No Starvation Test",
-		Schedule: "* * * * * *", // Every second
-		Enabled:  true,
+		ID:      "no-starvation-test",
+		Name:    "No Starvation Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -1131,10 +1131,10 @@ func TestScheduler_QueueFullDropsRequest(t *testing.T) {
 	s := NewWithExecutor(executor)
 
 	pipeline := &connector.Pipeline{
-		ID:       "queue-full-test",
-		Name:     "Queue Full Test",
-		Schedule: "* * * * * *", // Every second
-		Enabled:  true,
+		ID:      "queue-full-test",
+		Name:    "Queue Full Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -1188,10 +1188,10 @@ func TestScheduler_QueueFullDoesNotBlock(t *testing.T) {
 	s := NewWithExecutor(executor)
 
 	pipeline := &connector.Pipeline{
-		ID:       "queue-block-test",
-		Name:     "Queue Block Test",
-		Schedule: "* * * * * *", // Every second
-		Enabled:  true,
+		ID:      "queue-block-test",
+		Name:    "Queue Block Test",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Enabled: true,
 	}
 
 	err := s.Register(pipeline)
@@ -1225,5 +1225,160 @@ func TestScheduler_QueueFullDoesNotBlock(t *testing.T) {
 	// Stop should not take too long (queue full shouldn't block)
 	if stopDuration > 3*time.Second {
 		t.Errorf("Stop() took too long (%v) - queue full should not block", stopDuration)
+	}
+}
+
+// =============================================================================
+// Story 12.5 Tests: Schedule at Input Level
+// =============================================================================
+
+func TestScheduler_GetScheduleFromInput(t *testing.T) {
+	tests := []struct {
+		name     string
+		pipeline *connector.Pipeline
+		want     string
+	}{
+		{
+			name:     "nil pipeline",
+			pipeline: nil,
+			want:     "",
+		},
+		{
+			name:     "nil input",
+			pipeline: &connector.Pipeline{ID: "test"},
+			want:     "",
+		},
+		{
+			name: "nil config",
+			pipeline: &connector.Pipeline{
+				ID:    "test",
+				Input: &connector.ModuleConfig{Type: "httpPolling"},
+			},
+			want: "",
+		},
+		{
+			name: "no schedule in config",
+			pipeline: &connector.Pipeline{
+				ID: "test",
+				Input: &connector.ModuleConfig{
+					Type:   "httpPolling",
+					Config: map[string]interface{}{"endpoint": "https://example.com"},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "schedule in config",
+			pipeline: &connector.Pipeline{
+				ID: "test",
+				Input: &connector.ModuleConfig{
+					Type:   "httpPolling",
+					Config: map[string]interface{}{"schedule": "*/5 * * * *"},
+				},
+			},
+			want: "*/5 * * * *",
+		},
+		{
+			name: "schedule with other fields",
+			pipeline: &connector.Pipeline{
+				ID: "test",
+				Input: &connector.ModuleConfig{
+					Type: "httpPolling",
+					Config: map[string]interface{}{
+						"endpoint": "https://example.com",
+						"schedule": "0 * * * *",
+						"method":   "GET",
+					},
+				},
+			},
+			want: "0 * * * *",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GetScheduleFromInput(tt.pipeline)
+			if got != tt.want {
+				t.Errorf("GetScheduleFromInput() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestScheduler_Register_ScheduleFromInputConfig(t *testing.T) {
+	s := New()
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	pipeline := &connector.Pipeline{
+		ID:      "input-schedule-test",
+		Name:    "Input Schedule Test",
+		Enabled: true,
+		Input: &connector.ModuleConfig{
+			Type: "httpPolling",
+			Config: map[string]interface{}{
+				"endpoint": "https://example.com",
+				"schedule": "*/5 * * * *",
+			},
+		},
+	}
+
+	err := s.Register(pipeline)
+	if err != nil {
+		t.Errorf("Register() with schedule in input config should succeed: %v", err)
+	}
+
+	if !s.HasPipeline("input-schedule-test") {
+		t.Error("Pipeline should be registered")
+	}
+}
+
+func TestScheduler_Register_NoScheduleInInputConfig(t *testing.T) {
+	s := New()
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	pipeline := &connector.Pipeline{
+		ID:      "no-input-schedule-test",
+		Name:    "No Input Schedule Test",
+		Enabled: true,
+		Input: &connector.ModuleConfig{
+			Type: "httpPolling",
+			Config: map[string]interface{}{
+				"endpoint": "https://example.com",
+				// No schedule
+			},
+		},
+	}
+
+	err := s.Register(pipeline)
+	if err == nil {
+		t.Error("Register() without schedule in input config should fail")
+	}
+
+	if s.HasPipeline("no-input-schedule-test") {
+		t.Error("Pipeline should not be registered")
+	}
+}
+
+func TestScheduler_Register_WebhookWithoutSchedule(t *testing.T) {
+	s := New()
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	// Webhook input without schedule should fail to register (scheduler requires schedule)
+	// This is expected behavior - webhooks don't use scheduler
+	pipeline := &connector.Pipeline{
+		ID:      "webhook-no-schedule",
+		Name:    "Webhook No Schedule",
+		Enabled: true,
+		Input: &connector.ModuleConfig{
+			Type: "webhook",
+			Config: map[string]interface{}{
+				"path": "/webhook",
+			},
+		},
+	}
+
+	err := s.Register(pipeline)
+	if err == nil {
+		t.Error("Register() for webhook without schedule should fail - webhooks don't use scheduler")
 	}
 }

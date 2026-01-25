@@ -34,8 +34,8 @@ var (
 	// ErrPipelineDisabled is returned when attempting to register a disabled pipeline.
 	ErrPipelineDisabled = errors.New("pipeline is disabled")
 
-	// ErrEmptySchedule is returned when a pipeline has no schedule configured.
-	ErrEmptySchedule = errors.New("pipeline schedule is empty")
+	// ErrEmptySchedule is returned when a polling input module has no schedule configured.
+	ErrEmptySchedule = errors.New("polling input module schedule is empty")
 
 	// ErrInvalidCronExpression is returned when the CRON expression is invalid.
 	ErrInvalidCronExpression = errors.New("invalid CRON expression")
@@ -157,14 +157,30 @@ func ValidateCronExpression(expr string) error {
 	return nil
 }
 
+// GetScheduleFromInput extracts the schedule from the pipeline's input module config.
+// Returns empty string if no schedule is configured or if input/config is nil.
+func GetScheduleFromInput(pipeline *connector.Pipeline) string {
+	if pipeline == nil || pipeline.Input == nil || pipeline.Input.Config == nil {
+		return ""
+	}
+	if schedule, ok := pipeline.Input.Config["schedule"].(string); ok {
+		return schedule
+	}
+	return ""
+}
+
 // Register adds a pipeline to the scheduler.
-// The pipeline must be enabled and have a valid Schedule field.
+// The pipeline must be enabled and have a valid schedule in its input module config.
 // If a pipeline with the same ID is already registered, it will be updated.
+//
+// Schedule is read from pipeline.Input.Config["schedule"] (input module level).
+// Only polling input types (httpPolling, sql) support scheduled execution.
+// Event-driven input types (webhook, pubsub, kafka) do not support scheduling.
 //
 // Returns an error if:
 //   - Pipeline is nil
 //   - Pipeline is disabled (Enabled == false)
-//   - Pipeline has no schedule (Schedule == "")
+//   - Pipeline input module has no schedule configured
 //   - Pipeline has invalid CRON expression
 func (s *Scheduler) Register(pipeline *connector.Pipeline) error {
 	if pipeline == nil {
@@ -175,12 +191,14 @@ func (s *Scheduler) Register(pipeline *connector.Pipeline) error {
 		return fmt.Errorf("%w: pipeline %s is not enabled", ErrPipelineDisabled, pipeline.ID)
 	}
 
-	if pipeline.Schedule == "" {
-		return fmt.Errorf("%w: pipeline %s has no schedule", ErrEmptySchedule, pipeline.ID)
+	// Get schedule from input module config
+	schedule := GetScheduleFromInput(pipeline)
+	if schedule == "" {
+		return fmt.Errorf("%w: pipeline %s input module has no schedule", ErrEmptySchedule, pipeline.ID)
 	}
 
 	// Validate CRON expression
-	if err := ValidateCronExpression(pipeline.Schedule); err != nil {
+	if err := ValidateCronExpression(schedule); err != nil {
 		return fmt.Errorf("pipeline %s: %w", pipeline.ID, err)
 	}
 
@@ -210,7 +228,7 @@ func (s *Scheduler) Register(pipeline *connector.Pipeline) error {
 
 		logger.Info("updating existing pipeline in scheduler",
 			slog.String("pipeline_id", pipeline.ID),
-			slog.String("schedule", pipeline.Schedule),
+			slog.String("schedule", schedule),
 		)
 	}
 
@@ -221,7 +239,7 @@ func (s *Scheduler) Register(pipeline *connector.Pipeline) error {
 	}
 
 	// Add CRON job
-	entryID, err := s.cron.AddFunc(pipeline.Schedule, func() {
+	entryID, err := s.cron.AddFunc(schedule, func() {
 		s.executePipeline(reg)
 	})
 	if err != nil {
@@ -234,7 +252,7 @@ func (s *Scheduler) Register(pipeline *connector.Pipeline) error {
 	logger.Info("pipeline registered in scheduler",
 		slog.String("pipeline_id", pipeline.ID),
 		slog.String("pipeline_name", pipeline.Name),
-		slog.String("schedule", pipeline.Schedule),
+		slog.String("schedule", schedule),
 	)
 
 	return nil
@@ -421,11 +439,12 @@ func (s *Scheduler) executePipeline(reg *registeredPipeline) {
 	// Copy pipeline reference while we still have a valid reg
 	pipeline := reg.pipeline
 	startTime := time.Now()
+	schedule := GetScheduleFromInput(pipeline)
 
 	logger.Info("scheduled pipeline execution starting",
 		slog.String("pipeline_id", pipeline.ID),
 		slog.String("pipeline_name", pipeline.Name),
-		slog.String("schedule", pipeline.Schedule),
+		slog.String("schedule", schedule),
 		slog.Time("scheduled_time", startTime),
 	)
 

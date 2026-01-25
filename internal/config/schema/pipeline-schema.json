@@ -250,7 +250,7 @@
         },
         "schedule": {
           "type": "string",
-          "description": "CRON expression. Validated at runtime.",
+          "description": "CRON expression for polling input types. Required for httpPolling, not allowed for webhook. Validated at runtime.",
           "minLength": 9
         },
         "method": { "$ref": "#/$defs/httpMethod" },
@@ -271,7 +271,10 @@
         },
         {
           "if": { "properties": { "type": { "const": "webhook" } }, "required": ["type"] },
-          "then": { "required": ["path"] }
+          "then": {
+            "required": ["path"],
+            "not": { "required": ["schedule"] }
+          }
         }
       ]
     },

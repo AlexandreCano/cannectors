@@ -30,9 +30,6 @@ type Pipeline struct {
 	// Output defines the data destination module
 	Output *ModuleConfig `json:"output"`
 
-	// Schedule defines the CRON expression for periodic execution
-	Schedule string `json:"schedule,omitempty"`
-
 	// DryRunOptions configures dry-run mode behavior
 	DryRunOptions *DryRunOptions `json:"dryRunOptions,omitempty"`
 

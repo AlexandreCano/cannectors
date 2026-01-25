@@ -1,0 +1,19 @@
+{
+  "connector": {
+    "id": "webhook-example",
+    "name": "webhook-example",
+    "description": "Webhook input example - no schedule (event-driven)",
+    "version": "1.0.0",
+    "enabled": true,
+    "input": {
+      "type": "webhook",
+      "path": "/webhook"
+    },
+    "filters": [],
+    "output": {
+      "type": "httpRequest",
+      "endpoint": "https://api.destination.com/import",
+      "method": "POST"
+    }
+  }
+}

@@ -59,7 +59,7 @@ func newPipeline() *connector.Pipeline {
 	}
 }
 
-// extractPipelineMetadata extracts name, version, description, id, and schedule.
+// extractPipelineMetadata extracts name, version, description, and id.
 func extractPipelineMetadata(p *connector.Pipeline, connectorData map[string]interface{}) error {
 	name, ok := connectorData["name"].(string)
 	if !ok {
@@ -97,11 +97,6 @@ func extractModules(p *connector.Pipeline, connectorData map[string]interface{})
 		return fmt.Errorf("invalid input config: %w", err)
 	}
 	p.Input = inputConfig
-
-	// Extract schedule from input if present
-	if schedule, okSchedule := inputData["schedule"].(string); okSchedule {
-		p.Schedule = schedule
-	}
 
 	// Extract filters
 	if filtersData, okFilters := connectorData["filters"].([]interface{}); okFilters {

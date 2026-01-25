@@ -18,6 +18,7 @@ func TestPipelineJSONSerialization(t *testing.T) {
 			Type: "http-polling",
 			Config: map[string]interface{}{
 				"endpoint": "https://api.example.com/data",
+				"schedule": "*/5 * * * *",
 			},
 		},
 		Filters: []connector.ModuleConfig{
@@ -36,7 +37,6 @@ func TestPipelineJSONSerialization(t *testing.T) {
 				"endpoint": "https://api.dest.com/import",
 			},
 		},
-		Schedule: "*/5 * * * *",
 		ErrorHandling: &connector.ErrorHandling{
 			RetryCount: 3,
 			RetryDelay: 5000,

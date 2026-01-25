@@ -1,0 +1,28 @@
+# Example: Webhook Input (No Schedule)
+# Event-driven input: receives data via HTTP POST. No CRON schedule.
+# Schedule is NOT ALLOWED for webhook (event-driven) input types.
+#
+# Usage:
+#   canectors validate ./configs/examples/14-webhook.yaml
+#   canectors run --dry-run ./configs/examples/14-webhook.yaml
+#
+# Compare with 13-scheduled.yaml (httpPolling + schedule required).
+
+connector:
+  id: webhook-example
+  name: webhook-example
+  description: Webhook input example - no schedule (event-driven)
+  version: "1.0.0"
+  enabled: true
+
+  input:
+    type: webhook
+    path: /webhook
+    # No schedule: webhook is event-driven
+
+  filters: []
+
+  output:
+    type: httpRequest
+    endpoint: https://api.destination.com/import
+    method: POST

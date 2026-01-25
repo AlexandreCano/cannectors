@@ -146,3 +146,60 @@ func TestGetSchema_ReturnsSchema(t *testing.T) {
 		t.Error("expected embedded schema to be non-empty")
 	}
 }
+
+func TestValidateConfig_WebhookWithSchedule_Rejected(t *testing.T) {
+	// Webhook input must not have schedule (AC#2, #4). Schema rejects it.
+	data := map[string]interface{}{
+		"connector": map[string]interface{}{
+			"name":    "webhook-schedule-test",
+			"version": "1.0.0",
+			"input": map[string]interface{}{
+				"type":     "webhook",
+				"path":     "/webhook",
+				"schedule": "0 * * * *",
+			},
+			"filters": []interface{}{},
+			"output": map[string]interface{}{
+				"type":     "httpRequest",
+				"endpoint": "https://example.com",
+				"method":   "POST",
+			},
+		},
+	}
+	result := ValidateConfig(data)
+	if result.Valid {
+		t.Error("expected validation to fail for webhook input with schedule")
+	}
+	if len(result.Errors) == 0 {
+		t.Error("expected at least one validation error")
+	}
+}
+
+func TestValidateConfig_ConnectorLevelSchedule_Rejected(t *testing.T) {
+	// Schedule must not be at connector root; only in input module (polling types).
+	data := map[string]interface{}{
+		"connector": map[string]interface{}{
+			"name":     "connector-schedule-test",
+			"version":  "1.0.0",
+			"schedule": "0 * * * *",
+			"input": map[string]interface{}{
+				"type":     "httpPolling",
+				"endpoint": "https://example.com",
+				"schedule": "*/5 * * * *",
+			},
+			"filters": []interface{}{},
+			"output": map[string]interface{}{
+				"type":     "httpRequest",
+				"endpoint": "https://example.com",
+				"method":   "POST",
+			},
+		},
+	}
+	result := ValidateConfig(data)
+	if result.Valid {
+		t.Error("expected validation to fail for schedule at connector level")
+	}
+	if len(result.Errors) == 0 {
+		t.Error("expected at least one validation error")
+	}
+}

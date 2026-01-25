@@ -198,7 +198,14 @@ func resolveScriptSource(config ScriptConfig) (string, error) {
 		if err != nil {
 			return "", newScriptError(ErrCodeScriptFileReadFailed, fmt.Sprintf("failed to open script file %q: %v", config.ScriptFile, err), -1, "", err)
 		}
-		defer file.Close()
+		defer func() {
+			if closeErr := file.Close(); closeErr != nil {
+				logger.Warn("failed to close script file",
+					slog.String("file", config.ScriptFile),
+					slog.String("error", closeErr.Error()),
+				)
+			}
+		}()
 
 		// Use LimitReader to cap reading at MaxScriptLength+1 bytes
 		// If we read more than MaxScriptLength, the file is too large

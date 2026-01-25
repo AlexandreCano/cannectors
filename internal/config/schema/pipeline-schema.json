@@ -372,9 +372,18 @@
         {
           "if": { "properties": { "type": { "const": "script" } }, "required": ["type"] },
           "then": {
-            "anyOf": [
-              { "required": ["script"] },
-              { "required": ["scriptFile"] }
+            "allOf": [
+              {
+                "anyOf": [
+                  { "required": ["script"] },
+                  { "required": ["scriptFile"] }
+                ]
+              },
+              {
+                "not": {
+                  "required": ["script", "scriptFile"]
+                }
+              }
             ]
           }
         }

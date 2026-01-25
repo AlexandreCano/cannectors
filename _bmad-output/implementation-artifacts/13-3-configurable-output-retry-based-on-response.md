@@ -60,7 +60,7 @@ afin de distinguer erreurs transitoires et définitives et d’obtenir un retry 
   - [x] Ajouter `retryHintFromBody` (string, JSON path) dans la config retry
   - [x] En cas d’erreur HTTP avec body JSON : évaluer le chemin (lib standard ou simple lookup), valeur truthy → retryable, falsy → non retryable
   - [x] Si body non JSON ou chemin absent : ne pas changer la logique actuelle (status code seul)
-  - [ ] Intégrer dans la décision retry du loop (après status code) : body hint peut override “retryable par status” en “non retryable”
+  - [x] Intégrer dans la décision retry du loop (après status code) : body hint peut override “retryable par status” en “non retryable”
   - [x] Tests : body `{"retryable": true}` / `false`, `$.error.retry`, body non JSON
 
 - [x] Task 4: Documentation et checklist (AC: #5)

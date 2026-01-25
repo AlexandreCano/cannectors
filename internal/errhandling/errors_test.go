@@ -122,6 +122,9 @@ func TestClassifyHTTPStatus(t *testing.T) {
 		{"409 Conflict", 409, CategoryValidation, false, "client error"},
 		{"410 Gone", 410, CategoryValidation, false, "client error"},
 		{"415 Unsupported Media Type", 415, CategoryValidation, false, "client error"},
+
+		// Unknown HTTP status (default case) - retryable by default (AC #2)
+		{"200 OK (unknown)", 200, CategoryUnknown, true, "ok"},
 	}
 
 	for _, tt := range tests {
@@ -215,6 +218,9 @@ func TestClassifyNetworkError(t *testing.T) {
 		if err.Category != CategoryUnknown {
 			t.Errorf("Category = %v, want %v", err.Category, CategoryUnknown)
 		}
+		if !err.Retryable {
+			t.Error("Unknown network errors should be retryable by default (AC #3)")
+		}
 	})
 }
 
@@ -293,6 +299,9 @@ func TestClassifyError(t *testing.T) {
 		if result.Category != CategoryUnknown {
 			t.Errorf("Category = %v, want %v", result.Category, CategoryUnknown)
 		}
+		if !result.Retryable {
+			t.Error("Generic unknown errors should be retryable by default (AC #4)")
+		}
 	})
 }
 
@@ -310,6 +319,7 @@ func TestIsRetryable(t *testing.T) {
 		{"Context canceled", context.Canceled, false},
 		{"Wrapped retryable", fmt.Errorf("wrapped: %w", &ClassifiedError{Retryable: true}), true},
 		{"Wrapped non-retryable", fmt.Errorf("wrapped: %w", &ClassifiedError{Retryable: false}), false},
+		{"Unknown error via ClassifyError", errors.New("unknown"), true},
 	}
 
 	for _, tt := range tests {
@@ -445,6 +455,21 @@ func TestIsRetryableStatusCode_CustomCodes(t *testing.T) {
 				t.Errorf("IsRetryableStatusCode(%d, customCodes) = %v, want %v", tt.code, result, tt.retryable)
 			}
 		})
+	}
+}
+
+// TestUnknownErrors_NilRemainsNonRetryable verifies nil errors stay non-retryable (AC #1, regression).
+func TestUnknownErrors_NilRemainsNonRetryable(t *testing.T) {
+	if IsRetryable(nil) {
+		t.Error("IsRetryable(nil) = true, want false")
+	}
+	ce := ClassifyError(nil)
+	if ce.Retryable {
+		t.Error("ClassifyError(nil).Retryable = true, want false")
+	}
+	cn := ClassifyNetworkError(nil)
+	if cn.Retryable {
+		t.Error("ClassifyNetworkError(nil).Retryable = true, want false")
 	}
 }
 

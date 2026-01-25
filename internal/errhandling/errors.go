@@ -42,7 +42,7 @@ const (
 	CategoryNotFound ErrorCategory = "not_found"
 
 	// CategoryUnknown represents unclassified errors.
-	// Unknown errors should be treated cautiously.
+	// Unknown errors are retryable by default (transient more likely than permanent).
 	CategoryUnknown ErrorCategory = "unknown"
 )
 
@@ -88,6 +88,7 @@ func (e *ClassifiedError) Unwrap() error {
 //   - 429: Rate limit errors (retryable)
 //   - 5xx: Server errors (retryable)
 //   - Other 4xx: Validation errors (not retryable)
+//   - Unknown status codes: CategoryUnknown (retryable by default)
 func ClassifyHTTPStatus(statusCode int, message string) *ClassifiedError {
 	switch {
 	case statusCode == 401:
@@ -175,9 +176,10 @@ func ClassifyHTTPStatus(statusCode int, message string) *ClassifiedError {
 			Message:    "client error",
 		}
 	default:
+		// Unknown status codes are retryable by default (transient more likely than permanent).
 		return &ClassifiedError{
 			Category:   CategoryUnknown,
-			Retryable:  false,
+			Retryable:  true,
 			StatusCode: statusCode,
 			Message:    message,
 		}
@@ -192,7 +194,7 @@ func ClassifyHTTPStatus(statusCode int, message string) *ClassifiedError {
 //   - Connection refused: Network category (retryable)
 //   - DNS errors: Network category (retryable)
 //   - URL errors: Network category (retryable)
-//   - Unknown: Unknown category (not retryable by default)
+//   - Unknown: Unknown category (retryable by default)
 func ClassifyNetworkError(err error) *ClassifiedError {
 	if err == nil {
 		return &ClassifiedError{
@@ -275,10 +277,10 @@ func ClassifyNetworkError(err error) *ClassifiedError {
 		}
 	}
 
-	// Unknown network error
+	// Unknown network error - retryable by default (transient more likely than permanent).
 	return &ClassifiedError{
 		Category:    CategoryUnknown,
-		Retryable:   false,
+		Retryable:   true,
 		StatusCode:  0,
 		Message:     err.Error(),
 		OriginalErr: err,
@@ -287,6 +289,7 @@ func ClassifyNetworkError(err error) *ClassifiedError {
 
 // ClassifyError classifies any error into a ClassifiedError.
 // It handles already classified errors, HTTP errors, and network errors.
+// Unknown (unclassified) errors are retryable by default.
 func ClassifyError(err error) *ClassifiedError {
 	if err == nil {
 		return &ClassifiedError{
@@ -332,10 +335,10 @@ func ClassifyError(err error) *ClassifiedError {
 		return ClassifyNetworkError(err)
 	}
 
-	// Unknown error
+	// Unknown error - retryable by default (transient more likely than permanent).
 	return &ClassifiedError{
 		Category:    CategoryUnknown,
-		Retryable:   false,
+		Retryable:   true,
 		StatusCode:  0,
 		Message:     err.Error(),
 		OriginalErr: err,

@@ -2197,8 +2197,8 @@ func TestHTTPRequest_IsTransientError(t *testing.T) {
 		{403, false}, // Forbidden
 		{404, false}, // Not Found
 		{422, false}, // Unprocessable Entity
-		{200, false}, // OK (classified as unknown, not retryable)
-		{201, false}, // Created (classified as unknown, not retryable)
+		{200, true},  // OK (unknown status, retryable by default per 12-4)
+		{201, true},  // Created (unknown status, retryable by default per 12-4)
 	}
 
 	for _, tt := range tests {

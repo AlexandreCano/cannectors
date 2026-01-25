@@ -77,7 +77,7 @@ development_status:
   12-1-remove-schemaversion-field: done
   12-2-close-input-module-after-input-execution: done
   12-3-queue-execution-when-previous-still-running: done
-  12-4-treat-unknown-errors-as-retryable: backlog
+  12-4-treat-unknown-errors-as-retryable: review
   12-5-move-schedule-configuration-to-input-level: backlog
   epic-12-retrospective: optional
 

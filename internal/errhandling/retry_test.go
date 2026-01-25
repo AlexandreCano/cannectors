@@ -343,6 +343,67 @@ func TestRetryConfig_ShouldRetry(t *testing.T) {
 	}
 }
 
+// TestRetryConfig_IsStatusCodeRetryable tests the IsStatusCodeRetryable method (public API).
+func TestRetryConfig_IsStatusCodeRetryable(t *testing.T) {
+	tests := []struct {
+		name       string
+		config     RetryConfig
+		statusCode int
+		want       bool
+	}{
+		{
+			name:       "default codes - 429 retryable",
+			config:     DefaultRetryConfig(),
+			statusCode: 429,
+			want:       true,
+		},
+		{
+			name:       "default codes - 500 retryable",
+			config:     DefaultRetryConfig(),
+			statusCode: 500,
+			want:       true,
+		},
+		{
+			name:       "default codes - 400 not retryable",
+			config:     DefaultRetryConfig(),
+			statusCode: 400,
+			want:       false,
+		},
+		{
+			name: "custom codes - 408 retryable",
+			config: RetryConfig{
+				RetryableStatusCodes: []int{408, 429, 503},
+			},
+			statusCode: 408,
+			want:       true,
+		},
+		{
+			name: "custom codes - 500 not in list",
+			config: RetryConfig{
+				RetryableStatusCodes: []int{429, 503},
+			},
+			statusCode: 500,
+			want:       false,
+		},
+		{
+			name: "empty list - none retryable",
+			config: RetryConfig{
+				RetryableStatusCodes: []int{},
+			},
+			statusCode: 500,
+			want:       false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.config.IsStatusCodeRetryable(tt.statusCode)
+			if got != tt.want {
+				t.Errorf("IsStatusCodeRetryable(%d) = %v, want %v", tt.statusCode, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestRetryConfig_Disabled tests retry configuration with disabled retries.
 func TestRetryConfig_Disabled(t *testing.T) {
 	config := RetryConfig{
@@ -836,6 +897,37 @@ func TestRetryExecutor_RetryOnTransientError(t *testing.T) {
 	}
 }
 
+// TestRetryExecutor_RetryOnUnknownError tests that retry logic attempts retries for unknown errors (AC #5).
+func TestRetryExecutor_RetryOnUnknownError(t *testing.T) {
+	config := RetryConfig{
+		MaxAttempts:          3,
+		DelayMs:              10,
+		BackoffMultiplier:    1.0,
+		MaxDelayMs:           100,
+		RetryableStatusCodes: []int{500},
+	}
+	executor := NewRetryExecutor(config)
+
+	var callCount int32
+	result, err := executor.Execute(context.Background(), func(ctx context.Context) (interface{}, error) {
+		count := atomic.AddInt32(&callCount, 1)
+		if count < 3 {
+			return nil, errors.New("unknown transient error")
+		}
+		return "success after retries", nil
+	})
+
+	if err != nil {
+		t.Errorf("Execute() error = %v, want nil", err)
+	}
+	if result != "success after retries" {
+		t.Errorf("Execute() result = %v, want 'success after retries'", result)
+	}
+	if atomic.LoadInt32(&callCount) != 3 {
+		t.Errorf("Function called %d times, want 3 (retries for unknown errors)", callCount)
+	}
+}
+
 // TestRetryExecutor_NoRetryOnFatalError tests no retry on fatal errors.
 func TestRetryExecutor_NoRetryOnFatalError(t *testing.T) {
 	config := RetryConfig{
@@ -1047,5 +1139,150 @@ func TestRetryExecutor_RetryInfo(t *testing.T) {
 	}
 	if info.RetryCount != 2 {
 		t.Errorf("RetryCount = %d, want 2", info.RetryCount)
+	}
+}
+
+// TestRetryExecutor_ExecuteWithCallback_Success tests callback on immediate success.
+func TestRetryExecutor_ExecuteWithCallback_Success(t *testing.T) {
+	config := RetryConfig{
+		MaxAttempts:          3,
+		DelayMs:              10,
+		BackoffMultiplier:    1.0,
+		MaxDelayMs:           100,
+		RetryableStatusCodes: []int{500},
+	}
+	executor := NewRetryExecutor(config)
+
+	var calls []struct {
+		attempt int
+		err     error
+		delay   time.Duration
+	}
+	callback := func(attempt int, err error, nextDelay time.Duration) {
+		calls = append(calls, struct {
+			attempt int
+			err     error
+			delay   time.Duration
+		}{attempt, err, nextDelay})
+	}
+
+	result, err := executor.ExecuteWithCallback(context.Background(), func(ctx context.Context) (interface{}, error) {
+		return "ok", nil
+	}, callback)
+
+	if err != nil {
+		t.Errorf("ExecuteWithCallback() error = %v, want nil", err)
+	}
+	if result != "ok" {
+		t.Errorf("ExecuteWithCallback() result = %v, want ok", result)
+	}
+	if len(calls) != 1 {
+		t.Fatalf("callback called %d times, want 1", len(calls))
+	}
+	if calls[0].attempt != 0 || calls[0].err != nil || calls[0].delay != 0 {
+		t.Errorf("callback(0) = attempt=%d err=%v delay=%v, want attempt=0 err=nil delay=0", calls[0].attempt, calls[0].err, calls[0].delay)
+	}
+}
+
+// TestRetryExecutor_ExecuteWithCallback_RetryThenSuccess tests callback on retries then success.
+func TestRetryExecutor_ExecuteWithCallback_RetryThenSuccess(t *testing.T) {
+	config := RetryConfig{
+		MaxAttempts:          3,
+		DelayMs:              10,
+		BackoffMultiplier:    1.0,
+		MaxDelayMs:           100,
+		RetryableStatusCodes: []int{500},
+	}
+	executor := NewRetryExecutor(config)
+
+	var calls []struct {
+		attempt int
+		hasErr  bool
+		delay   time.Duration
+	}
+	callback := func(attempt int, err error, nextDelay time.Duration) {
+		calls = append(calls, struct {
+			attempt int
+			hasErr  bool
+			delay   time.Duration
+		}{attempt, err != nil, nextDelay})
+	}
+
+	var n int32
+	result, err := executor.ExecuteWithCallback(context.Background(), func(ctx context.Context) (interface{}, error) {
+		count := atomic.AddInt32(&n, 1)
+		if count < 3 {
+			return nil, NewServerError(500, "transient", nil)
+		}
+		return "done", nil
+	}, callback)
+
+	if err != nil {
+		t.Errorf("ExecuteWithCallback() error = %v, want nil", err)
+	}
+	if result != "done" {
+		t.Errorf("ExecuteWithCallback() result = %v, want done", result)
+	}
+	if len(calls) != 3 {
+		t.Fatalf("callback called %d times, want 3", len(calls))
+	}
+	for i := 0; i < 2; i++ {
+		if !calls[i].hasErr || calls[i].delay <= 0 {
+			t.Errorf("callback(%d): hasErr=%v delay=%v, want error with positive delay", i, calls[i].hasErr, calls[i].delay)
+		}
+	}
+	if calls[2].hasErr || calls[2].delay != 0 {
+		t.Errorf("callback(2): hasErr=%v delay=%v, want success with zero delay", calls[2].hasErr, calls[2].delay)
+	}
+}
+
+// TestRetryExecutor_ExecuteWithCallback_FatalError tests callback on non-retryable error (no retry).
+func TestRetryExecutor_ExecuteWithCallback_FatalError(t *testing.T) {
+	config := RetryConfig{
+		MaxAttempts:          3,
+		DelayMs:              10,
+		BackoffMultiplier:    1.0,
+		MaxDelayMs:           100,
+		RetryableStatusCodes: []int{500},
+	}
+	executor := NewRetryExecutor(config)
+
+	callCount := 0
+	callback := func(attempt int, err error, nextDelay time.Duration) {
+		callCount++
+		if err == nil {
+			t.Error("expected error in callback, got nil")
+		}
+		if nextDelay != 0 {
+			t.Errorf("expected zero delay on fatal error, got %v", nextDelay)
+		}
+	}
+
+	_, err := executor.ExecuteWithCallback(context.Background(), func(ctx context.Context) (interface{}, error) {
+		return nil, NewAuthenticationError(401, "unauthorized", nil)
+	}, callback)
+
+	if err == nil {
+		t.Error("ExecuteWithCallback() error = nil, want error")
+	}
+	if callCount != 1 {
+		t.Errorf("callback called %d times, want 1 (no retry on fatal)", callCount)
+	}
+}
+
+// TestRetryExecutor_ExecuteWithCallback_NilCallback tests that nil callback does not panic.
+func TestRetryExecutor_ExecuteWithCallback_NilCallback(t *testing.T) {
+	config := DefaultRetryConfig()
+	executor := NewRetryExecutor(config)
+
+	result, err := executor.ExecuteWithCallback(context.Background(), func(ctx context.Context) (interface{}, error) {
+		return "ok", nil
+	}, nil)
+
+	if err != nil {
+		t.Errorf("ExecuteWithCallback(..., nil) error = %v, want nil", err)
+	}
+	if result != "ok" {
+		t.Errorf("ExecuteWithCallback(..., nil) result = %v, want ok", result)
 	}
 }

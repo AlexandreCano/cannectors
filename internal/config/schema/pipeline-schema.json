@@ -110,7 +110,8 @@
         "errorHandling": {
           "$ref": "#/$defs/errorHandling",
           "description": "DEPRECATED: Use 'defaults' instead. Kept for backward compatibility."
-        }
+        },
+        "schedule": false
       },
       "additionalProperties": true
     },

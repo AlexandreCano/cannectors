@@ -189,15 +189,22 @@ Claude (Anthropic)
 - Enhanced godoc with usage examples for UseRetryAfterHeader and RetryHintFromBody
 - Added note on YAML vs Go naming in MODULE_EXTENSIBILITY.md
 
+**Additional Fixes (2026-01-25):**
+- Aligned AC #3 with implementation: changed from JSONPath (`$.retryable`) to expr expression (`body.retryable == true`)
+- Fixed Retry-After: 0 handling: modified parseRetryAfterValue to return (duration, bool) to distinguish valid 0 from invalid/absent
+- Updated waitForRetry to honor Retry-After: 0 (immediate retry) and past HTTP-dates
+- Added unit tests for HTTP-date parsing (RFC1123, RFC850, asctime formats) and Retry-After: 0
+- Added validation for retryHintFromBody expression length (MaxRetryHintExpressionLength = 10000) to prevent DoS
+
 ### File List
 
 **Modified:**
 - internal/errhandling/retry.go (RetryConfig: UseRetryAfterHeader, RetryHintFromBody; ParseRetryConfig; enhanced godoc with examples)
-- internal/modules/output/http_request.go (HTTPRequestModule: retryHintProgram; expr compilation; HTTPError: ResponseHeaders; retryLoop, isErrorRetryable, waitForRetry, evaluateRetryHintFromBody with warning logs)
-- internal/modules/output/http_request_test.go (tests for retryableStatusCodes, Retry-After, retryHintFromBody with expr)
+- internal/modules/output/http_request.go (HTTPRequestModule: retryHintProgram; expr compilation with length validation; HTTPError: ResponseHeaders; retryLoop, isErrorRetryable, waitForRetry honoring Retry-After: 0; evaluateRetryHintFromBody with warning logs; parseRetryAfterValue returns (duration, bool))
+- internal/modules/output/http_request_test.go (tests for retryableStatusCodes, Retry-After including HTTP-date formats and Retry-After: 0, retryHintFromBody with expr, expression length validation)
 - docs/MODULE_EXTENSIBILITY.md (Output Module Retry Configuration section with expr examples, YAML vs Go naming note)
 - internal/config/schema/pipeline-schema.json (added useRetryAfterHeader and retryHintFromBody to retryConfig schema)
 - configs/examples/15-retry-configuration.yaml (new example file)
 - configs/examples/15-retry-configuration.json (new example file)
 - configs/examples/README.md (added entry for 15-retry-configuration example)
-- _bmad-output/implementation-artifacts/13-3-configurable-output-retry-based-on-response.md (fixed checkboxes, updated File List)
+- _bmad-output/implementation-artifacts/13-3-configurable-output-retry-based-on-response.md (aligned AC #3 with expr implementation, fixed checkboxes, updated File List)

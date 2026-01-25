@@ -31,6 +31,9 @@ const (
 	defaultUserAgent   = "Canectors-Runtime/1.0"
 	defaultContentType = "application/json"
 	defaultBodyFrom    = "records" // batch mode by default
+	// MaxRetryHintExpressionLength is the maximum allowed length for retryHintFromBody expressions
+	// to prevent DoS attacks through extremely long expressions.
+	MaxRetryHintExpressionLength = 10000
 )
 
 // HTTP header names
@@ -156,6 +159,10 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 	// Compile retryHintFromBody expression if configured
 	var retryHintProgram *vm.Program
 	if retryConfig.RetryHintFromBody != "" {
+		// Validate expression length to prevent DoS
+		if len(retryConfig.RetryHintFromBody) > MaxRetryHintExpressionLength {
+			return nil, fmt.Errorf("retryHintFromBody expression length %d exceeds maximum %d", len(retryConfig.RetryHintFromBody), MaxRetryHintExpressionLength)
+		}
 		retryHintProgram, err = expr.Compile(retryConfig.RetryHintFromBody, expr.AllowUndefinedVariables(), expr.AsBool())
 		if err != nil {
 			return nil, fmt.Errorf("compiling retryHintFromBody expression: %w", err)
@@ -749,11 +756,14 @@ func (h *HTTPRequestModule) waitForRetry(attempt int, delaysMs *[]int64, endpoin
 
 	// Check for Retry-After header if enabled
 	if h.retry.UseRetryAfterHeader && lastErr != nil {
-		if retryAfterDuration := h.parseRetryAfterFromError(lastErr); retryAfterDuration > 0 {
-			// Cap at MaxDelayMs
+		if retryAfterDuration, valid := h.parseRetryAfterFromError(lastErr); valid {
+			// Cap at MaxDelayMs (but honor 0 for immediate retry)
 			maxDelay := time.Duration(h.retry.MaxDelayMs) * time.Millisecond
 			if retryAfterDuration > maxDelay {
 				retryAfterDuration = maxDelay
+			} else if retryAfterDuration < 0 {
+				// HTTP-date in the past or now → immediate retry
+				retryAfterDuration = 0
 			}
 			backoff = retryAfterDuration
 		}
@@ -774,28 +784,30 @@ func (h *HTTPRequestModule) waitForRetry(attempt int, delaysMs *[]int64, endpoin
 }
 
 // parseRetryAfterFromError extracts and parses the Retry-After header from an HTTPError.
-// Returns the duration to wait, or 0 if header is absent or invalid.
+// Returns the duration to wait and a boolean indicating if the header was valid.
 // Supports RFC 7231 formats: seconds (integer) or HTTP-date.
-func (h *HTTPRequestModule) parseRetryAfterFromError(err error) time.Duration {
+// The boolean allows distinguishing "valid but 0" (immediate retry) from "invalid/absent".
+func (h *HTTPRequestModule) parseRetryAfterFromError(err error) (time.Duration, bool) {
 	var httpErr *HTTPError
 	if !errors.As(err, &httpErr) {
-		return 0
+		return 0, false
 	}
 
 	retryAfter := httpErr.GetRetryAfter()
 	if retryAfter == "" {
-		return 0
+		return 0, false
 	}
 
 	return parseRetryAfterValue(retryAfter)
 }
 
 // parseRetryAfterValue parses a Retry-After header value.
-// Supports: seconds (e.g., "120") or HTTP-date (e.g., "Fri, 31 Dec 1999 23:59:59 GMT").
-func parseRetryAfterValue(value string) time.Duration {
+// Supports: seconds (e.g., "120", "0") or HTTP-date (e.g., "Fri, 31 Dec 1999 23:59:59 GMT").
+// Returns (duration, true) if valid (including 0 for immediate retry), (0, false) if invalid.
+func parseRetryAfterValue(value string) (time.Duration, bool) {
 	// Try parsing as integer (seconds)
 	if seconds, err := strconv.Atoi(value); err == nil && seconds >= 0 {
-		return time.Duration(seconds) * time.Second
+		return time.Duration(seconds) * time.Second, true
 	}
 
 	// Try parsing as HTTP-date (RFC 7231)
@@ -810,15 +822,12 @@ func parseRetryAfterValue(value string) time.Duration {
 	for _, format := range httpDateFormats {
 		if t, err := time.Parse(format, value); err == nil {
 			duration := time.Until(t)
-			if duration > 0 {
-				return duration
-			}
-			// Date in the past, treat as 0 (retry immediately)
-			return 0
+			// Return duration even if 0 or negative (valid header, immediate retry)
+			return duration, true
 		}
 	}
 
-	return 0 // Invalid format
+	return 0, false // Invalid format
 }
 
 // shouldRetryOAuth2 handles OAuth2 401 by invalidating token and retrying once.

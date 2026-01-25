@@ -141,6 +141,30 @@ func TestNewHTTPRequestFromConfig_InvalidMethod(t *testing.T) {
 	}
 }
 
+func TestNewHTTPRequestFromConfig_RetryHintFromBody_TooLong(t *testing.T) {
+	// Create an expression that exceeds MaxRetryHintExpressionLength
+	longExpression := strings.Repeat("body.field == true && ", 1000) + "body.field == true"
+	if len(longExpression) <= MaxRetryHintExpressionLength {
+		t.Fatalf("test expression too short: %d (need > %d)", len(longExpression), MaxRetryHintExpressionLength)
+	}
+
+	config := newModuleConfig(map[string]interface{}{
+		"endpoint": "https://api.example.com/data",
+		"method":   "POST",
+		"retry": map[string]interface{}{
+			"retryHintFromBody": longExpression,
+		},
+	})
+
+	_, err := NewHTTPRequestFromConfig(config)
+	if err == nil {
+		t.Fatal("expected error for retryHintFromBody expression exceeding maximum length")
+	}
+	if !strings.Contains(err.Error(), "exceeds maximum") {
+		t.Errorf("expected error message about exceeding maximum, got: %v", err)
+	}
+}
+
 func TestNewHTTPRequestFromConfig_SupportedMethods(t *testing.T) {
 	methods := []string{"POST", "PUT", "PATCH"}
 
@@ -3814,6 +3838,179 @@ func TestHTTPRequest_RetryAfter_AbsentHeader_UsesBackoff(t *testing.T) {
 	}
 	if sent != 1 {
 		t.Errorf("expected 1 record sent, got %d", sent)
+	}
+}
+
+func TestHTTPRequest_RetryAfter_ZeroSeconds_ImmediateRetry(t *testing.T) {
+	// Server returns 503 with Retry-After: 0 (immediate retry), then succeeds
+	ts := newTestServerWithRetryAfter([]int{503, 200}, "0")
+	defer ts.Close()
+
+	config := newModuleConfig(map[string]interface{}{
+		"endpoint": ts.URL + "/api/data",
+		"method":   "POST",
+		"retry": map[string]interface{}{
+			"maxAttempts":          float64(3),
+			"delayMs":              float64(5000), // High default delay
+			"backoffMultiplier":    float64(1.0),
+			"useRetryAfterHeader":  true,
+			"retryableStatusCodes": []interface{}{float64(503)},
+		},
+	})
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{{"test": "data"}}
+	startTime := time.Now()
+	sent, err := module.Send(context.Background(), records)
+	elapsed := time.Since(startTime)
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if sent != 1 {
+		t.Errorf("expected 1 record sent, got %d", sent)
+	}
+
+	// Delay should be ~0s (immediate retry from Retry-After: 0)
+	if elapsed > 1*time.Second {
+		t.Errorf("expected immediate retry (~0s from Retry-After: 0), but took %v", elapsed)
+	}
+}
+
+func TestHTTPRequest_RetryAfter_HTTPDate_RFC1123(t *testing.T) {
+	// Server returns 503 with Retry-After: HTTP-date (RFC1123 format), then succeeds
+	futureTime := time.Now().Add(2 * time.Second)
+	retryAfterDate := futureTime.Format(time.RFC1123)
+	ts := newTestServerWithRetryAfter([]int{503, 200}, retryAfterDate)
+	defer ts.Close()
+
+	config := newModuleConfig(map[string]interface{}{
+		"endpoint": ts.URL + "/api/data",
+		"method":   "POST",
+		"retry": map[string]interface{}{
+			"maxAttempts":          float64(3),
+			"delayMs":              float64(5000), // High default delay
+			"backoffMultiplier":    float64(1.0),
+			"useRetryAfterHeader":  true,
+			"retryableStatusCodes": []interface{}{float64(503)},
+		},
+	})
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{{"test": "data"}}
+	startTime := time.Now()
+	sent, err := module.Send(context.Background(), records)
+	elapsed := time.Since(startTime)
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if sent != 1 {
+		t.Errorf("expected 1 record sent, got %d", sent)
+	}
+
+	// Delay should be ~2s (from Retry-After HTTP-date), not 5s (from delayMs)
+	// Allow some tolerance for timing variations
+	if elapsed > 4*time.Second {
+		t.Errorf("expected delay ~2s from Retry-After HTTP-date, but took %v (likely used delayMs instead)", elapsed)
+	}
+	if elapsed < 1*time.Second {
+		t.Errorf("expected delay ~2s from Retry-After HTTP-date, but took only %v", elapsed)
+	}
+}
+
+func TestHTTPRequest_RetryAfter_HTTPDate_RFC850(t *testing.T) {
+	// Server returns 503 with Retry-After: HTTP-date (RFC850 format), then succeeds
+	futureTime := time.Now().Add(1 * time.Second)
+	retryAfterDate := futureTime.Format(time.RFC850)
+	ts := newTestServerWithRetryAfter([]int{503, 200}, retryAfterDate)
+	defer ts.Close()
+
+	config := newModuleConfig(map[string]interface{}{
+		"endpoint": ts.URL + "/api/data",
+		"method":   "POST",
+		"retry": map[string]interface{}{
+			"maxAttempts":          float64(3),
+			"delayMs":              float64(5000), // High default delay
+			"backoffMultiplier":    float64(1.0),
+			"useRetryAfterHeader":  true,
+			"retryableStatusCodes": []interface{}{float64(503)},
+		},
+	})
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{{"test": "data"}}
+	startTime := time.Now()
+	sent, err := module.Send(context.Background(), records)
+	elapsed := time.Since(startTime)
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if sent != 1 {
+		t.Errorf("expected 1 record sent, got %d", sent)
+	}
+
+	// Delay should be ~1s (from Retry-After HTTP-date)
+	if elapsed > 3*time.Second {
+		t.Errorf("expected delay ~1s from Retry-After HTTP-date (RFC850), but took %v", elapsed)
+	}
+	if elapsed < 500*time.Millisecond {
+		t.Errorf("expected delay ~1s from Retry-After HTTP-date (RFC850), but took only %v", elapsed)
+	}
+}
+
+func TestHTTPRequest_RetryAfter_HTTPDate_Past_ImmediateRetry(t *testing.T) {
+	// Server returns 503 with Retry-After: HTTP-date in the past, should retry immediately
+	pastTime := time.Now().Add(-5 * time.Second)
+	retryAfterDate := pastTime.Format(time.RFC1123)
+	ts := newTestServerWithRetryAfter([]int{503, 200}, retryAfterDate)
+	defer ts.Close()
+
+	config := newModuleConfig(map[string]interface{}{
+		"endpoint": ts.URL + "/api/data",
+		"method":   "POST",
+		"retry": map[string]interface{}{
+			"maxAttempts":          float64(3),
+			"delayMs":              float64(5000), // High default delay
+			"backoffMultiplier":    float64(1.0),
+			"useRetryAfterHeader":  true,
+			"retryableStatusCodes": []interface{}{float64(503)},
+		},
+	})
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{{"test": "data"}}
+	startTime := time.Now()
+	sent, err := module.Send(context.Background(), records)
+	elapsed := time.Since(startTime)
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if sent != 1 {
+		t.Errorf("expected 1 record sent, got %d", sent)
+	}
+
+	// Delay should be ~0s (immediate retry for past HTTP-date)
+	if elapsed > 1*time.Second {
+		t.Errorf("expected immediate retry (~0s for past HTTP-date), but took %v", elapsed)
 	}
 }
 

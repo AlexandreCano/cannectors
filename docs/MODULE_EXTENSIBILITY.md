@@ -23,6 +23,7 @@ package kafka
 
 import (
     "context"
+    "fmt"
     
     "github.com/canectors/runtime/internal/modules/input"
     "github.com/canectors/runtime/internal/registry"
@@ -42,18 +43,22 @@ type KafkaModule struct {
 }
 
 // NewKafkaModule creates a new Kafka input module from configuration
-func NewKafkaModule(cfg *connector.ModuleConfig) input.Module {
+func NewKafkaModule(cfg *connector.ModuleConfig) (input.Module, error) {
     if cfg == nil {
-        return nil
+        return nil, nil
     }
     
     brokers, _ := cfg.Config["brokers"].([]string)
     topic, _ := cfg.Config["topic"].(string)
     
+    if topic == "" {
+        return nil, fmt.Errorf("topic is required")
+    }
+    
     return &KafkaModule{
         brokers: brokers,
         topic:   topic,
-    }
+    }, nil
 }
 
 // Fetch implements input.Module
@@ -242,7 +247,9 @@ See [godoc for internal/registry](../internal/registry/registry.go) for the comp
 
 ```go
 // InputConstructor creates an input module from configuration
-type InputConstructor func(cfg *connector.ModuleConfig) input.Module
+// Returns an error if the configuration is invalid.
+// Return (nil, nil) if the configuration is nil.
+type InputConstructor func(cfg *connector.ModuleConfig) (input.Module, error)
 
 // FilterConstructor creates a filter module from configuration
 type FilterConstructor func(cfg connector.ModuleConfig, index int) (filter.Module, error)

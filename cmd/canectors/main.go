@@ -243,7 +243,11 @@ func runPipeline(_ *cobra.Command, args []string) {
 }
 
 func runPipelineOnce(pipeline *connector.Pipeline) {
-	inputModule := factory.CreateInputModule(pipeline.Input)
+	inputModule, err := factory.CreateInputModule(pipeline.Input)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Failed to create input module: %v\n", err)
+		os.Exit(ExitRuntimeError)
+	}
 	filterModules, err := factory.CreateFilterModules(pipeline.Filters)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "✗ Failed to create filter modules: %v\n", err)
@@ -360,7 +364,19 @@ type PipelineExecutorAdapter struct {
 
 // Execute runs a pipeline using the runtime executor.
 func (a *PipelineExecutorAdapter) Execute(pipeline *connector.Pipeline) (*connector.ExecutionResult, error) {
-	inputModule := factory.CreateInputModule(pipeline.Input)
+	inputModule, err := factory.CreateInputModule(pipeline.Input)
+	if err != nil {
+		return &connector.ExecutionResult{
+			PipelineID:  pipeline.ID,
+			Status:      "error",
+			StartedAt:   time.Now(),
+			CompletedAt: time.Now(),
+			Error: &connector.ExecutionError{
+				Code:    "INPUT_CREATION_FAILED",
+				Message: err.Error(),
+			},
+		}, err
+	}
 	filterModules, err := factory.CreateFilterModules(pipeline.Filters)
 	if err != nil {
 		return &connector.ExecutionResult{

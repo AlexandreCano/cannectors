@@ -14,9 +14,9 @@ func TestRegisterInput(t *testing.T) {
 	defer ClearRegistries()
 
 	called := false
-	constructor := func(cfg *connector.ModuleConfig) input.Module {
+	constructor := func(cfg *connector.ModuleConfig) (input.Module, error) {
 		called = true
-		return input.NewStub("test", "")
+		return input.NewStub("test", ""), nil
 	}
 
 	RegisterInput("testInput", constructor)
@@ -26,7 +26,7 @@ func TestRegisterInput(t *testing.T) {
 		t.Fatal("expected constructor, got nil")
 	}
 
-	got(nil)
+	_, _ = got(nil)
 	if !called {
 		t.Error("constructor was not called")
 	}
@@ -97,8 +97,8 @@ func TestListTypes(t *testing.T) {
 	ClearRegistries()
 	defer ClearRegistries()
 
-	RegisterInput("inputA", func(cfg *connector.ModuleConfig) input.Module { return nil })
-	RegisterInput("inputB", func(cfg *connector.ModuleConfig) input.Module { return nil })
+	RegisterInput("inputA", func(cfg *connector.ModuleConfig) (input.Module, error) { return nil, nil })
+	RegisterInput("inputB", func(cfg *connector.ModuleConfig) (input.Module, error) { return nil, nil })
 	RegisterFilter("filterA", func(cfg connector.ModuleConfig, index int) (filter.Module, error) { return nil, nil })
 	RegisterOutput("outputA", func(cfg *connector.ModuleConfig) (output.Module, error) { return nil, nil })
 
@@ -124,18 +124,18 @@ func TestOverwriteRegistration(t *testing.T) {
 
 	callCount := 0
 
-	RegisterInput("test", func(cfg *connector.ModuleConfig) input.Module {
+	RegisterInput("test", func(cfg *connector.ModuleConfig) (input.Module, error) {
 		callCount = 1
-		return nil
+		return nil, nil
 	})
 
-	RegisterInput("test", func(cfg *connector.ModuleConfig) input.Module {
+	RegisterInput("test", func(cfg *connector.ModuleConfig) (input.Module, error) {
 		callCount = 2
-		return nil
+		return nil, nil
 	})
 
 	got := GetInputConstructor("test")
-	got(nil)
+	_, _ = got(nil)
 
 	if callCount != 2 {
 		t.Error("expected second constructor to be called after overwrite")
@@ -143,7 +143,7 @@ func TestOverwriteRegistration(t *testing.T) {
 }
 
 func TestClearRegistries(t *testing.T) {
-	RegisterInput("test", func(cfg *connector.ModuleConfig) input.Module { return nil })
+	RegisterInput("test", func(cfg *connector.ModuleConfig) (input.Module, error) { return nil, nil })
 	RegisterFilter("test", func(cfg connector.ModuleConfig, index int) (filter.Module, error) { return nil, nil })
 	RegisterOutput("test", func(cfg *connector.ModuleConfig) (output.Module, error) { return nil, nil })
 

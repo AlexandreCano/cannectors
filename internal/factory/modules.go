@@ -36,9 +36,10 @@ func init() {
 // CreateInputModule creates an input module instance from configuration.
 // Uses the registry to look up the constructor by type.
 // Returns a stub module for unregistered types.
-func CreateInputModule(cfg *connector.ModuleConfig) input.Module {
+// Returns an error if the registered constructor fails or if configuration is invalid.
+func CreateInputModule(cfg *connector.ModuleConfig) (input.Module, error) {
 	if cfg == nil {
-		return nil
+		return nil, nil
 	}
 
 	constructor := registry.GetInputConstructor(cfg.Type)
@@ -48,7 +49,7 @@ func CreateInputModule(cfg *connector.ModuleConfig) input.Module {
 
 	// Fallback to stub for unknown types
 	endpoint, _ := cfg.Config["endpoint"].(string)
-	return input.NewStub(cfg.Type, endpoint)
+	return input.NewStub(cfg.Type, endpoint), nil
 }
 
 // CreateFilterModules creates filter module instances from configuration.

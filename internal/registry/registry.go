@@ -28,9 +28,12 @@
 //	    registry.RegisterInput("kafka", NewKafkaModule)
 //	}
 //
-//	func NewKafkaModule(cfg *connector.ModuleConfig) input.Module {
+//	func NewKafkaModule(cfg *connector.ModuleConfig) (input.Module, error) {
+//	    if cfg == nil {
+//	        return nil, nil
+//	    }
 //	    // Parse cfg.Config and return your implementation
-//	    return &KafkaModule{...}
+//	    return &KafkaModule{...}, nil
 //	}
 //
 // # Built-in Modules
@@ -56,8 +59,9 @@ import (
 
 // InputConstructor is a function that creates an input module from configuration.
 // The constructor receives the full ModuleConfig and returns an input.Module.
-// Return nil if the configuration is nil.
-type InputConstructor func(cfg *connector.ModuleConfig) input.Module
+// Returns an error if the configuration is invalid.
+// Return (nil, nil) if the configuration is nil.
+type InputConstructor func(cfg *connector.ModuleConfig) (input.Module, error)
 
 // FilterConstructor is a function that creates a filter module from configuration.
 // The constructor receives the ModuleConfig and the filter's index in the pipeline.

@@ -49,8 +49,21 @@ var (
 )
 
 // NestedModuleCreator is a function type that creates a filter module from a NestedModuleConfig.
-// This is set by the factory package to enable registry-based module creation in nested contexts.
-// If nil, nested modules will fall back to hardcoded behavior for built-in types.
+//
+// This package-level variable is initialized by the factory package in its init() function
+// to enable registry-based module creation in nested condition blocks (then/else).
+//
+// IMPORTANT: This creates an implicit dependency on the factory package. If factory is not
+// imported, NestedModuleCreator will be nil and nested modules will fall back to hardcoded
+// behavior for built-in types only (mapping, condition). Custom filter types registered
+// in the registry will NOT work in nested contexts if factory is not imported.
+//
+// This design avoids a circular dependency (factory -> filter -> registry, but filter needs
+// factory for nested modules). The dependency is explicit through this variable assignment.
+//
+// For testing or alternative usage patterns where factory is not imported, nested modules
+// will only support built-in types. To enable full registry support for nested modules,
+// ensure the factory package is imported (which happens automatically in normal usage).
 var NestedModuleCreator func(config *NestedModuleConfig, index int) (Module, error)
 
 // Supported expression languages

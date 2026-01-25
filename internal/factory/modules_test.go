@@ -1,6 +1,8 @@
 package factory
 
 import (
+	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/canectors/runtime/internal/modules/filter"
@@ -11,7 +13,10 @@ import (
 )
 
 func TestCreateInputModule_Nil(t *testing.T) {
-	got := CreateInputModule(nil)
+	got, err := CreateInputModule(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if got != nil {
 		t.Error("expected nil for nil config")
 	}
@@ -23,7 +28,10 @@ func TestCreateInputModule_Registered(t *testing.T) {
 		Config: map[string]interface{}{"endpoint": "https://example.com/api"},
 	}
 
-	got := CreateInputModule(cfg)
+	got, err := CreateInputModule(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if got == nil {
 		t.Fatal("expected non-nil module")
 	}
@@ -35,7 +43,10 @@ func TestCreateInputModule_Unknown(t *testing.T) {
 		Config: map[string]interface{}{"endpoint": "https://test.com"},
 	}
 
-	got := CreateInputModule(cfg)
+	got, err := CreateInputModule(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if got == nil {
 		t.Fatal("expected stub module for unknown type")
 	}
@@ -160,9 +171,9 @@ func TestCreateInputModule_CustomRegistered(t *testing.T) {
 	// Register a custom module for this test
 	customCalled := false
 	originalConstructor := registry.GetInputConstructor("customInput")
-	registry.RegisterInput("customInput", func(cfg *connector.ModuleConfig) input.Module {
+	registry.RegisterInput("customInput", func(cfg *connector.ModuleConfig) (input.Module, error) {
 		customCalled = true
-		return input.NewStub("customInput", "custom-endpoint")
+		return input.NewStub("customInput", "custom-endpoint"), nil
 	})
 	defer func() {
 		// Restore original constructor or clear if it was nil
@@ -171,8 +182,8 @@ func TestCreateInputModule_CustomRegistered(t *testing.T) {
 		} else {
 			// Clear the registration by overwriting with a stub that returns nil
 			// This is a workaround since there's no explicit unregister function
-			registry.RegisterInput("customInput", func(cfg *connector.ModuleConfig) input.Module {
-				return nil
+			registry.RegisterInput("customInput", func(cfg *connector.ModuleConfig) (input.Module, error) {
+				return nil, nil
 			})
 		}
 	}()
@@ -182,7 +193,10 @@ func TestCreateInputModule_CustomRegistered(t *testing.T) {
 		Config: map[string]interface{}{},
 	}
 
-	got := CreateInputModule(cfg)
+	got, err := CreateInputModule(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if !customCalled {
 		t.Error("custom constructor was not called")
 	}
@@ -199,25 +213,7 @@ func TestCreateInputModule_CustomRegistered(t *testing.T) {
 	}
 }
 
-func TestCreateInputModule_ErrorFallbackToStub(t *testing.T) {
-	// Register a module that intentionally fails
-	original := registry.GetInputConstructor("errorInput")
-	registry.RegisterInput("errorInput", func(cfg *connector.ModuleConfig) input.Module {
-		// Simulate a constructor that would return an error in real scenario
-		// Since InputConstructor doesn't return error, we return nil to simulate failure
-		// In practice, this would be caught by NewHTTPPollingFromConfig returning an error
-		return nil
-	})
-	defer func() {
-		if original != nil {
-			registry.RegisterInput("errorInput", original)
-		} else {
-			registry.RegisterInput("errorInput", func(cfg *connector.ModuleConfig) input.Module {
-				return nil
-			})
-		}
-	}()
-
+func TestCreateInputModule_ErrorReturnsError(t *testing.T) {
 	// Test with a module type that will fail during construction
 	// We'll use httpPolling with invalid config to trigger the error path
 	cfg := &connector.ModuleConfig{
@@ -228,18 +224,55 @@ func TestCreateInputModule_ErrorFallbackToStub(t *testing.T) {
 		},
 	}
 
-	got := CreateInputModule(cfg)
-	if got == nil {
-		t.Fatal("expected stub module when constructor fails")
+	got, err := CreateInputModule(cfg)
+	if err == nil {
+		t.Fatal("expected error when constructor fails")
+	}
+	// When constructor returns an error, the module should be nil
+	// (the error is propagated, not converted to stub)
+	// Note: In Go, an interface can have a nil value but non-nil type.
+	// We use reflection to check if the underlying value is actually nil.
+	if got != nil {
+		// Check if the underlying value is nil using reflection
+		rv := reflect.ValueOf(got)
+		if rv.Kind() == reflect.Ptr && !rv.IsNil() {
+			t.Errorf("expected nil module when constructor fails, got non-nil value: %v (type %T)", got, got)
+		}
+		// If it's a nil pointer, that's acceptable - the important part is that error was returned
+	}
+}
+
+func TestCreateInputModule_ConstructorError(t *testing.T) {
+	// Register a module that intentionally returns an error
+	original := registry.GetInputConstructor("errorInput")
+	testErr := fmt.Errorf("test error")
+	registry.RegisterInput("errorInput", func(cfg *connector.ModuleConfig) (input.Module, error) {
+		return nil, testErr
+	})
+	defer func() {
+		if original != nil {
+			registry.RegisterInput("errorInput", original)
+		} else {
+			registry.RegisterInput("errorInput", func(cfg *connector.ModuleConfig) (input.Module, error) {
+				return nil, nil
+			})
+		}
+	}()
+
+	cfg := &connector.ModuleConfig{
+		Type:   "errorInput",
+		Config: map[string]interface{}{},
 	}
 
-	// Should fall back to stub
-	stub, ok := got.(*input.StubModule)
-	if !ok {
-		t.Fatal("expected StubModule when constructor fails")
+	got, err := CreateInputModule(cfg)
+	if err == nil {
+		t.Fatal("expected error from constructor")
 	}
-	if stub.ModuleType != "httpPolling" {
-		t.Errorf("expected type 'httpPolling', got %s", stub.ModuleType)
+	if err != testErr {
+		t.Errorf("expected test error, got %v", err)
+	}
+	if got != nil {
+		t.Error("expected nil module when constructor returns error")
 	}
 }
 

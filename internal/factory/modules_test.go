@@ -159,13 +159,23 @@ func TestCreateOutputModule_Unknown(t *testing.T) {
 func TestCreateInputModule_CustomRegistered(t *testing.T) {
 	// Register a custom module for this test
 	customCalled := false
+	originalConstructor := registry.GetInputConstructor("customInput")
 	registry.RegisterInput("customInput", func(cfg *connector.ModuleConfig) input.Module {
 		customCalled = true
 		return input.NewStub("customInput", "custom-endpoint")
 	})
-	// Note: No cleanup needed - test isolation ensures this registration
-	// doesn't affect other tests. The registry is package-level but tests
-	// run sequentially, and built-in modules are re-registered on each init().
+	defer func() {
+		// Restore original constructor or clear if it was nil
+		if originalConstructor != nil {
+			registry.RegisterInput("customInput", originalConstructor)
+		} else {
+			// Clear the registration by overwriting with a stub that returns nil
+			// This is a workaround since there's no explicit unregister function
+			registry.RegisterInput("customInput", func(cfg *connector.ModuleConfig) input.Module {
+				return nil
+			})
+		}
+	}()
 
 	cfg := &connector.ModuleConfig{
 		Type:   "customInput",
@@ -186,6 +196,50 @@ func TestCreateInputModule_CustomRegistered(t *testing.T) {
 	}
 	if stub.ModuleType != "customInput" {
 		t.Errorf("expected type 'customInput', got %s", stub.ModuleType)
+	}
+}
+
+func TestCreateInputModule_ErrorFallbackToStub(t *testing.T) {
+	// Register a module that intentionally fails
+	original := registry.GetInputConstructor("errorInput")
+	registry.RegisterInput("errorInput", func(cfg *connector.ModuleConfig) input.Module {
+		// Simulate a constructor that would return an error in real scenario
+		// Since InputConstructor doesn't return error, we return nil to simulate failure
+		// In practice, this would be caught by NewHTTPPollingFromConfig returning an error
+		return nil
+	})
+	defer func() {
+		if original != nil {
+			registry.RegisterInput("errorInput", original)
+		} else {
+			registry.RegisterInput("errorInput", func(cfg *connector.ModuleConfig) input.Module {
+				return nil
+			})
+		}
+	}()
+
+	// Test with a module type that will fail during construction
+	// We'll use httpPolling with invalid config to trigger the error path
+	cfg := &connector.ModuleConfig{
+		Type: "httpPolling",
+		Config: map[string]interface{}{
+			// Missing required endpoint or invalid config that causes NewHTTPPollingFromConfig to error
+			"invalid": "config",
+		},
+	}
+
+	got := CreateInputModule(cfg)
+	if got == nil {
+		t.Fatal("expected stub module when constructor fails")
+	}
+
+	// Should fall back to stub
+	stub, ok := got.(*input.StubModule)
+	if !ok {
+		t.Fatal("expected StubModule when constructor fails")
+	}
+	if stub.ModuleType != "httpPolling" {
+		t.Errorf("expected type 'httpPolling', got %s", stub.ModuleType)
 	}
 }
 

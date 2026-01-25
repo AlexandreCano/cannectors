@@ -356,8 +356,10 @@ func createNestedModuleWithDepth(config *NestedModuleConfig, depth int) (Module,
 	}
 
 	// Use the factory's NestedModuleCreator if available (enables registry support)
+	// Note: For nested modules, we use 0 as the index since nested modules don't have
+	// a pipeline position. The index is primarily used for error logging context.
 	if NestedModuleCreator != nil {
-		return NestedModuleCreator(config, depth)
+		return NestedModuleCreator(config, 0)
 	}
 
 	// Fallback to hardcoded behavior for built-in types (backward compatibility)

@@ -4,7 +4,9 @@ package registry
 
 import (
 	"fmt"
+	"log/slog"
 
+	"github.com/canectors/runtime/internal/logger"
 	"github.com/canectors/runtime/internal/modules/filter"
 	"github.com/canectors/runtime/internal/modules/input"
 	"github.com/canectors/runtime/internal/modules/output"
@@ -27,8 +29,10 @@ func registerBuiltinInputModules() {
 		module, err := input.NewHTTPPollingFromConfig(cfg)
 		if err != nil {
 			// Log error but still return stub to allow pipeline to continue
-			// In production, this should be logged via the logger package
-			// For now, we fall back to stub to maintain backward compatibility
+			logger.Error("failed to create httpPolling module, falling back to stub",
+				slog.String("module_type", cfg.Type),
+				slog.String("error", err.Error()),
+			)
 			endpoint, _ := cfg.Config["endpoint"].(string)
 			return input.NewStub(cfg.Type, endpoint)
 		}
@@ -43,8 +47,10 @@ func registerBuiltinInputModules() {
 		module, err := input.NewWebhookFromConfig(cfg)
 		if err != nil {
 			// Log error but still return stub to allow pipeline to continue
-			// In production, this should be logged via the logger package
-			// For now, we fall back to stub to maintain backward compatibility
+			logger.Error("failed to create webhook module, falling back to stub",
+				slog.String("module_type", cfg.Type),
+				slog.String("error", err.Error()),
+			)
 			endpoint, _ := cfg.Config["endpoint"].(string)
 			return input.NewStub(cfg.Type, endpoint)
 		}

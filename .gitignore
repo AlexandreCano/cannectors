@@ -53,6 +53,5 @@ tmp/
 temp/
 *.tmp
 
-docs/
 .github/agents/
 .claude/

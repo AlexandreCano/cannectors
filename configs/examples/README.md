@@ -159,6 +159,31 @@ canectors validate ./configs/examples/14-webhook.yaml
 canectors run --dry-run ./configs/examples/14-webhook.yaml
 ```
 
+#### 15-retry-configuration.json / 15-retry-configuration.yaml
+Advanced retry configuration example (Story 13.3).
+
+**Features:**
+- Custom retryable status codes (`retryableStatusCodes`)
+- Retry-After header support (`useRetryAfterHeader: true`)
+- Body hint for retry decision (`retryHintFromBody` with expr expression)
+- Demonstrates all three new retry configuration options
+
+**Retry Configuration Options:**
+- `retryableStatusCodes`: Custom list of HTTP status codes that trigger retry (overrides defaults)
+- `useRetryAfterHeader`: Use Retry-After response header to determine delay (supports seconds or HTTP-date format)
+- `retryHintFromBody`: expr expression evaluated against JSON response body to determine retryability
+
+**Example Use Cases:**
+- Make 408 (Request Timeout) retryable while excluding 500
+- Respect server's Retry-After header for rate limiting
+- Use API response body hints (e.g., `{"error": {"code": "TEMPORARY"}}`) to determine retryability
+
+**Usage:**
+```bash
+canectors validate ./configs/examples/15-retry-configuration.yaml
+canectors run --dry-run ./configs/examples/15-retry-configuration.yaml
+```
+
 ## Using the Examples
 
 ### Validate an Example

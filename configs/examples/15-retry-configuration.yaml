@@ -1,0 +1,56 @@
+id: retry-configuration-example
+name: Retry Configuration Example
+description: Example demonstrating advanced retry configuration options for output modules
+version: "1.0.0"
+enabled: true
+
+input:
+  type: httpPolling
+  config:
+    endpoint: https://api.example.com/data
+    schedule: "*/5 * * * *" # Every 5 minutes
+    headers:
+      Accept: application/json
+
+filters: []
+
+output:
+  type: httpRequest
+  config:
+    endpoint: https://api.destination.com/v1/ingest
+    method: POST
+    headers:
+      Content-Type: application/json
+    
+    # Advanced retry configuration (Story 13.3)
+    retry:
+      # Basic retry settings
+      maxAttempts: 3
+      delayMs: 1000
+      backoffMultiplier: 2.0
+      maxDelayMs: 30000
+      
+      # Custom retryable status codes
+      # Only these codes will trigger retry (overrides defaults)
+      # Example: Make 408 (Request Timeout) retryable, exclude 500
+      retryableStatusCodes: [408, 429, 502, 503, 504]
+      
+      # Retry-After header support
+      # When enabled, uses Retry-After header from server response
+      # Supports seconds format (e.g., "120") or HTTP-date format
+      useRetryAfterHeader: true
+      
+      # Body hint for retry decision (expr expression)
+      # Evaluates expression against JSON response body
+      # The parsed JSON body is available as the "body" variable
+      # Returns true → retryable (if status code is in retryableStatusCodes)
+      # Returns false → NOT retryable (overrides status code)
+      retryHintFromBody: 'body.error.code != "PERMANENT"'
+      
+      # Example alternative expressions:
+      # retryHintFromBody: 'body.retryable == true'
+      # retryHintFromBody: 'body.error.code == "TEMPORARY" || body.error.code == "RATE_LIMIT"'
+  
+  authentication:
+    type: bearer
+    token: ${DEST_API_TOKEN}

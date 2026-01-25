@@ -85,7 +85,7 @@ development_status:
   epic-13: in-progress
   13-1-simplify-module-extensibility-open-source-friendly: done
   13-2-clarify-module-boundaries-without-heavy-encapsulation: done
-  13-3-configurable-output-retry-based-on-response: backlog
+  13-3-configurable-output-retry-based-on-response: review
   epic-13-retrospective: optional
 
   # Epic 14: Advanced Runtime Capabilities (New Features)

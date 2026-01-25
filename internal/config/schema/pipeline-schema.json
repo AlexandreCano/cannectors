@@ -174,6 +174,16 @@
           "description": "HTTP status codes that trigger retry.",
           "items": { "type": "integer", "minimum": 400, "maximum": 599 },
           "default": [429, 500, 502, 503, 504]
+        },
+        "useRetryAfterHeader": {
+          "type": "boolean",
+          "description": "Use Retry-After response header to determine delay before retrying. Supports seconds format (e.g., '120') or HTTP-date format (e.g., 'Fri, 31 Dec 2025 23:59:59 GMT'). The delay is capped by maxDelayMs. If header is invalid or absent, falls back to exponential backoff.",
+          "default": false
+        },
+        "retryHintFromBody": {
+          "type": "string",
+          "description": "expr expression to evaluate against JSON response body. The parsed JSON body is available as the 'body' variable. If expression returns true, error is retryable (if status code is in retryableStatusCodes). If false, error is NOT retryable (overrides status code). If body is not valid JSON, falls back to status code only. Example: 'body.retryable == true' or 'body.error.code != \"PERMANENT\"'.",
+          "default": ""
         }
       },
       "additionalProperties": true

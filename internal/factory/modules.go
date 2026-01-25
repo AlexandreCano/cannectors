@@ -1,6 +1,17 @@
 // Package factory provides module creation functions for the pipeline runtime.
 // It centralizes the logic for instantiating input, filter, and output modules
-// from their configuration.
+// from their configuration using the module registry.
+//
+// # Module Creation
+//
+// The factory uses the registry package to look up module constructors by type.
+// Built-in modules (httpPolling, webhook, mapping, condition, httpRequest) are
+// registered automatically at startup. Unknown types resolve to stub implementations.
+//
+// # Adding New Module Types
+//
+// To add a new module type, see the documentation in internal/registry.
+// You do NOT need to modify this factory; just register your constructor.
 package factory
 
 import (
@@ -9,26 +20,35 @@ import (
 	"github.com/canectors/runtime/internal/modules/filter"
 	"github.com/canectors/runtime/internal/modules/input"
 	"github.com/canectors/runtime/internal/modules/output"
+	"github.com/canectors/runtime/internal/registry"
 	"github.com/canectors/runtime/pkg/connector"
 )
 
 // maxNestingDepth is the maximum allowed depth for nested module configurations.
 const maxNestingDepth = 50
 
+func init() {
+	// Initialize the nested module creator in the filter package to enable
+	// registry-based module creation in nested condition blocks.
+	filter.NestedModuleCreator = CreateFilterModuleFromNestedConfig
+}
+
 // CreateInputModule creates an input module instance from configuration.
-// Returns a stub module for unimplemented types.
+// Uses the registry to look up the constructor by type.
+// Returns a stub module for unregistered types.
 func CreateInputModule(cfg *connector.ModuleConfig) input.Module {
 	if cfg == nil {
 		return nil
 	}
 
-	switch cfg.Type {
-	case "httpPolling":
-		endpoint, _ := cfg.Config["endpoint"].(string)
-		return input.NewStub(cfg.Type, endpoint)
-	default:
-		return input.NewStub(cfg.Type, "")
+	constructor := registry.GetInputConstructor(cfg.Type)
+	if constructor != nil {
+		return constructor(cfg)
 	}
+
+	// Fallback to stub for unknown types
+	endpoint, _ := cfg.Config["endpoint"].(string)
+	return input.NewStub(cfg.Type, endpoint)
 }
 
 // CreateFilterModules creates filter module instances from configuration.
@@ -50,31 +70,21 @@ func CreateFilterModules(cfgs []connector.ModuleConfig) ([]filter.Module, error)
 }
 
 // createSingleFilterModule creates a single filter module based on its type.
+// Uses the registry to look up the constructor, with special handling for
+// condition modules that require config parsing.
 func createSingleFilterModule(cfg connector.ModuleConfig, index int) (filter.Module, error) {
-	switch cfg.Type {
-	case "mapping":
-		return createMappingFilterModule(cfg, index)
-	case "condition":
+	// Special handling for condition modules due to nested config parsing
+	if cfg.Type == "condition" {
 		return createConditionFilterModule(cfg, index)
-	default:
-		return filter.NewStub(cfg.Type, index), nil
-	}
-}
-
-// createMappingFilterModule creates a mapping filter module from configuration.
-func createMappingFilterModule(cfg connector.ModuleConfig, index int) (filter.Module, error) {
-	mappings, err := filter.ParseFieldMappings(cfg.Config["mappings"])
-	if err != nil {
-		return nil, fmt.Errorf("invalid mapping config at index %d: %w", index, err)
 	}
 
-	onError, _ := cfg.Config["onError"].(string)
-	module, err := filter.NewMappingFromConfig(mappings, onError)
-	if err != nil {
-		return nil, fmt.Errorf("invalid mapping config at index %d: %w", index, err)
+	constructor := registry.GetFilterConstructor(cfg.Type)
+	if constructor != nil {
+		return constructor(cfg, index)
 	}
 
-	return module, nil
+	// Fallback to stub for unknown types
+	return filter.NewStub(cfg.Type, index), nil
 }
 
 // createConditionFilterModule creates a condition filter module from configuration.
@@ -93,24 +103,22 @@ func createConditionFilterModule(cfg connector.ModuleConfig, index int) (filter.
 }
 
 // CreateOutputModule creates an output module instance from configuration.
-// Uses real HTTPRequestModule for httpRequest type, stub for unsupported types.
+// Uses the registry to look up the constructor by type.
+// Returns a stub module for unregistered types.
 func CreateOutputModule(cfg *connector.ModuleConfig) (output.Module, error) {
 	if cfg == nil {
 		return nil, nil
 	}
 
-	switch cfg.Type {
-	case "httpRequest":
-		module, err := output.NewHTTPRequestFromConfig(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("creating httpRequest module: %w", err)
-		}
-		return module, nil
-	default:
-		endpoint, _ := cfg.Config["endpoint"].(string)
-		method, _ := cfg.Config["method"].(string)
-		return output.NewStub(cfg.Type, endpoint, method), nil
+	constructor := registry.GetOutputConstructor(cfg.Type)
+	if constructor != nil {
+		return constructor(cfg)
 	}
+
+	// Fallback to stub for unknown types
+	endpoint, _ := cfg.Config["endpoint"].(string)
+	method, _ := cfg.Config["method"].(string)
+	return output.NewStub(cfg.Type, endpoint, method), nil
 }
 
 // ParseConditionConfig parses a condition filter configuration from raw config.
@@ -161,6 +169,7 @@ func parseNestedModuleConfig(cfg map[string]interface{}) (*filter.NestedModuleCo
 }
 
 // parseNestedConfig parses a nested module configuration with depth tracking.
+// Uses the registry to support custom filter types in nested configurations.
 func parseNestedConfig(cfg map[string]interface{}, depth int) (*filter.NestedModuleConfig, error) {
 	if depth >= maxNestingDepth {
 		return nil, fmt.Errorf("nested module depth %d exceeds maximum %d", depth, maxNestingDepth)
@@ -169,15 +178,26 @@ func parseNestedConfig(cfg map[string]interface{}, depth int) (*filter.NestedMod
 	nestedConfig := initNestedConfig(cfg)
 	nestedConfigMap := extractConfigMap(cfg, nestedConfig)
 
-	switch nestedConfig.Type {
-	case "mapping":
-		if err := parseMappingNestedConfig(cfg, nestedConfig, nestedConfigMap); err != nil {
-			return nil, err
+	// Use registry-aware parsing for all types, including custom ones
+	if nestedConfig.Type != "" {
+		// Check if this type is registered in the registry
+		constructor := registry.GetFilterConstructor(nestedConfig.Type)
+		if constructor != nil {
+			// Type is registered - parse config based on type
+			switch nestedConfig.Type {
+			case "mapping":
+				if err := parseMappingNestedConfig(cfg, nestedConfig, nestedConfigMap); err != nil {
+					return nil, err
+				}
+			case "condition":
+				if err := parseConditionNestedConfig(cfg, nestedConfig, nestedConfigMap, depth); err != nil {
+					return nil, err
+				}
+			}
+			// For other registered types, we still parse the basic structure
+			// The actual module creation will use the registry
 		}
-	case "condition":
-		if err := parseConditionNestedConfig(cfg, nestedConfig, nestedConfigMap, depth); err != nil {
-			return nil, err
-		}
+		// Note: Unknown types will be handled by the registry when creating the module
 	}
 
 	return nestedConfig, nil
@@ -304,4 +324,65 @@ func getFromMaps(primary, fallback map[string]interface{}, key string) interface
 		}
 	}
 	return nil
+}
+
+// CreateFilterModuleFromNestedConfig creates a filter module from a NestedModuleConfig
+// using the registry. This enables custom filter types to work in nested condition blocks.
+func CreateFilterModuleFromNestedConfig(nestedConfig *filter.NestedModuleConfig, index int) (filter.Module, error) {
+	if nestedConfig == nil {
+		return nil, nil
+	}
+
+	// Special handling for condition modules due to nested config structure
+	if nestedConfig.Type == "condition" {
+		condConfig := filter.ConditionConfig{
+			Expression: nestedConfig.Expression,
+			Lang:       nestedConfig.Lang,
+			OnTrue:     nestedConfig.OnTrue,
+			OnFalse:    nestedConfig.OnFalse,
+			OnError:    nestedConfig.OnError,
+			Then:       nestedConfig.Then,
+			Else:       nestedConfig.Else,
+		}
+		return filter.NewConditionFromConfig(condConfig)
+	}
+
+	// Convert NestedModuleConfig to ModuleConfig for registry lookup
+	moduleConfig := connector.ModuleConfig{
+		Type:   nestedConfig.Type,
+		Config: nestedConfig.Config,
+	}
+
+	// Add mappings to config if present (for mapping modules)
+	if len(nestedConfig.Mappings) > 0 {
+		if moduleConfig.Config == nil {
+			moduleConfig.Config = make(map[string]interface{})
+		}
+		// Convert FieldMapping slice to interface slice for config
+		mappings := make([]interface{}, len(nestedConfig.Mappings))
+		for i, m := range nestedConfig.Mappings {
+			mappings[i] = map[string]interface{}{
+				"source": m.Source,
+				"target": m.Target,
+			}
+		}
+		moduleConfig.Config["mappings"] = mappings
+	}
+
+	// Add onError to config if present
+	if nestedConfig.OnError != "" {
+		if moduleConfig.Config == nil {
+			moduleConfig.Config = make(map[string]interface{})
+		}
+		moduleConfig.Config["onError"] = nestedConfig.OnError
+	}
+
+	// Use registry to create the module
+	constructor := registry.GetFilterConstructor(moduleConfig.Type)
+	if constructor != nil {
+		return constructor(moduleConfig, index)
+	}
+
+	// Fallback to stub for unknown types
+	return filter.NewStub(moduleConfig.Type, index), nil
 }

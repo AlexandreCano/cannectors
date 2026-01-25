@@ -73,7 +73,7 @@ development_status:
   epic-4-retrospective: optional
 
   # Epic 12: CLI Runtime Refinements (Minor Corrections)
-  epic-12: in progress
+  epic-12: done
   12-1-remove-schemaversion-field: done
   12-2-close-input-module-after-input-execution: done
   12-3-queue-execution-when-previous-still-running: done
@@ -82,8 +82,8 @@ development_status:
   epic-12-retrospective: optional
 
   # Epic 13: Module Architecture Improvements (Major Corrections)
-  epic-13: backlog
-  13-1-simplify-module-extensibility-open-source-friendly: backlog
+  epic-13: in-progress
+  13-1-simplify-module-extensibility-open-source-friendly: done
   13-2-clarify-module-boundaries-without-heavy-encapsulation: backlog
   13-3-configurable-output-retry-based-on-response: backlog
   epic-13-retrospective: optional

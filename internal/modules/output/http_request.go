@@ -12,8 +12,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/expr-lang/expr"
+	"github.com/expr-lang/expr/vm"
 
 	"github.com/canectors/runtime/internal/auth"
 	"github.com/canectors/runtime/internal/errhandling"
@@ -27,6 +31,9 @@ const (
 	defaultUserAgent   = "Canectors-Runtime/1.0"
 	defaultContentType = "application/json"
 	defaultBodyFrom    = "records" // batch mode by default
+	// MaxRetryHintExpressionLength is the maximum allowed length for retryHintFromBody expressions
+	// to prevent DoS attacks through extremely long expressions.
+	MaxRetryHintExpressionLength = 10000
 )
 
 // HTTP header names
@@ -60,16 +67,25 @@ var (
 
 // HTTPError represents an HTTP error with status code and context
 type HTTPError struct {
-	StatusCode   int
-	Status       string
-	Endpoint     string
-	Method       string
-	Message      string
-	ResponseBody string
+	StatusCode      int
+	Status          string
+	Endpoint        string
+	Method          string
+	Message         string
+	ResponseBody    string
+	ResponseHeaders http.Header // HTTP response headers for Retry-After support
 }
 
 func (e *HTTPError) Error() string {
 	return fmt.Sprintf("http error %d (%s) %s %s: %s", e.StatusCode, e.Status, e.Method, e.Endpoint, e.Message)
+}
+
+// GetRetryAfter returns the Retry-After header value if present, empty string otherwise.
+func (e *HTTPError) GetRetryAfter() string {
+	if e.ResponseHeaders == nil {
+		return ""
+	}
+	return e.ResponseHeaders.Get("Retry-After")
 }
 
 // RequestConfig holds request-specific configuration
@@ -88,17 +104,18 @@ type RetryConfig = errhandling.RetryConfig
 // HTTPRequestModule implements HTTP-based data sending.
 // It sends transformed records to a target REST API via HTTP requests.
 type HTTPRequestModule struct {
-	endpoint      string
-	method        string
-	headers       map[string]string
-	timeout       time.Duration
-	request       RequestConfig
-	retry         RetryConfig
-	authHandler   auth.Handler
-	client        *http.Client
-	onError       errhandling.OnErrorStrategy // "fail", "skip", "log"
-	successCodes  []int                       // HTTP status codes considered success
-	lastRetryInfo *connector.RetryInfo
+	endpoint         string
+	method           string
+	headers          map[string]string
+	timeout          time.Duration
+	request          RequestConfig
+	retry            RetryConfig
+	authHandler      auth.Handler
+	client           *http.Client
+	onError          errhandling.OnErrorStrategy // "fail", "skip", "log"
+	successCodes     []int                       // HTTP status codes considered success
+	lastRetryInfo    *connector.RetryInfo
+	retryHintProgram *vm.Program // Compiled expr program for retryHintFromBody
 }
 
 // Default success status codes
@@ -139,17 +156,31 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 		return nil, fmt.Errorf("creating auth handler: %w", err)
 	}
 
+	// Compile retryHintFromBody expression if configured
+	var retryHintProgram *vm.Program
+	if retryConfig.RetryHintFromBody != "" {
+		// Validate expression length to prevent DoS
+		if len(retryConfig.RetryHintFromBody) > MaxRetryHintExpressionLength {
+			return nil, fmt.Errorf("retryHintFromBody expression length %d exceeds maximum %d", len(retryConfig.RetryHintFromBody), MaxRetryHintExpressionLength)
+		}
+		retryHintProgram, err = expr.Compile(retryConfig.RetryHintFromBody, expr.AllowUndefinedVariables(), expr.AsBool())
+		if err != nil {
+			return nil, fmt.Errorf("compiling retryHintFromBody expression: %w", err)
+		}
+	}
+
 	module := &HTTPRequestModule{
-		endpoint:     endpoint,
-		method:       method,
-		headers:      headers,
-		timeout:      timeout,
-		request:      reqConfig,
-		retry:        retryConfig,
-		authHandler:  authHandler,
-		client:       client,
-		onError:      onError,
-		successCodes: successCodes,
+		endpoint:         endpoint,
+		method:           method,
+		headers:          headers,
+		timeout:          timeout,
+		request:          reqConfig,
+		retry:            retryConfig,
+		authHandler:      authHandler,
+		client:           client,
+		onError:          onError,
+		successCodes:     successCodes,
+		retryHintProgram: retryHintProgram,
 	}
 
 	logger.Debug("http request output module created",
@@ -563,12 +594,16 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 }
 
 // retryLoop executes the retry loop for HTTP requests.
+// For HTTP errors, it uses h.retry.IsStatusCodeRetryable to decide retryability based on the module's
+// configured retryableStatusCodes (AC #1: module config takes precedence over defaults).
+// For network errors, it defers to errhandling.IsRetryable (network errors bypass retryableStatusCodes).
 func (h *HTTPRequestModule) retryLoop(ctx context.Context, endpoint string, body []byte, recordHeaders map[string]string, startTime time.Time, delaysMs *[]int64, oauth2Retried *bool) error {
 	var lastErr error
 
 	for attempt := 0; attempt <= h.retry.MaxAttempts; attempt++ {
 		if attempt > 0 {
-			backoff := h.waitForRetry(attempt, delaysMs, endpoint)
+			// Pass lastErr to allow Retry-After header extraction (AC #2)
+			backoff := h.waitForRetry(attempt, delaysMs, endpoint, lastErr)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -589,7 +624,8 @@ func (h *HTTPRequestModule) retryLoop(ctx context.Context, endpoint string, body
 			continue
 		}
 
-		if !errhandling.IsRetryable(err) {
+		// Use module's retryableStatusCodes for HTTP errors (AC #1)
+		if !h.isErrorRetryable(err) {
 			h.logNonRetryableError(err, endpoint)
 			return err
 		}
@@ -600,9 +636,139 @@ func (h *HTTPRequestModule) retryLoop(ctx context.Context, endpoint string, body
 	return lastErr // All attempts exhausted
 }
 
-// waitForRetry waits before retry and logs the retry attempt.
-func (h *HTTPRequestModule) waitForRetry(attempt int, delaysMs *[]int64, endpoint string) time.Duration {
+// isErrorRetryable determines if an error should trigger a retry.
+// For HTTP errors: uses h.retry.IsStatusCodeRetryable (module's retryableStatusCodes config).
+// For network errors: uses errhandling.IsRetryable (network errors are retried regardless of retryableStatusCodes).
+func (h *HTTPRequestModule) isErrorRetryable(err error) bool {
+	// Extract HTTPError for status code and body hint checking
+	var httpErr *HTTPError
+	hasHTTPErr := errors.As(err, &httpErr)
+
+	// Check retryHintFromBody if configured (AC #3)
+	if h.retry.RetryHintFromBody != "" && hasHTTPErr {
+		hint := h.evaluateRetryHintFromBody(httpErr.ResponseBody)
+		switch hint {
+		case retryHintTrue:
+			// Body says retryable, but still respect status code config
+			return h.retry.IsStatusCodeRetryable(httpErr.StatusCode)
+		case retryHintFalse:
+			// Body says NOT retryable, override status code
+			return false
+		case retryHintAbsent:
+			// Fall through to status code only
+		}
+	}
+
+	// Extract status code from HTTPError if present
+	if hasHTTPErr {
+		// HTTP error: use module's retryableStatusCodes
+		return h.retry.IsStatusCodeRetryable(httpErr.StatusCode)
+	}
+
+	// Extract status code from ClassifiedError if present
+	var classifiedErr *errhandling.ClassifiedError
+	if errors.As(err, &classifiedErr) && classifiedErr.StatusCode > 0 {
+		// Check body hint from ClassifiedError's original error
+		if h.retry.RetryHintFromBody != "" {
+			if origHTTPErr, ok := classifiedErr.OriginalErr.(*HTTPError); ok {
+				hint := h.evaluateRetryHintFromBody(origHTTPErr.ResponseBody)
+				switch hint {
+				case retryHintTrue:
+					return h.retry.IsStatusCodeRetryable(classifiedErr.StatusCode)
+				case retryHintFalse:
+					return false
+				case retryHintAbsent:
+					// Fall through to status code only
+				}
+			}
+		}
+		// HTTP error wrapped in ClassifiedError: use module's retryableStatusCodes
+		return h.retry.IsStatusCodeRetryable(classifiedErr.StatusCode)
+	}
+
+	// Network error or unknown: defer to errhandling.IsRetryable
+	return errhandling.IsRetryable(err)
+}
+
+// retryHintResult represents the result of evaluating retryHintFromBody
+type retryHintResult int
+
+const (
+	retryHintAbsent retryHintResult = iota // Expression returned nil/undefined or body not JSON
+	retryHintTrue                          // Expression returned true
+	retryHintFalse                         // Expression returned false
+)
+
+// evaluateRetryHintFromBody evaluates the retry hint from response body using the configured expr expression.
+// The expression has access to a "body" variable containing the parsed JSON response.
+// Returns retryHintTrue if expression returns true, retryHintFalse if false, retryHintAbsent if evaluation fails.
+func (h *HTTPRequestModule) evaluateRetryHintFromBody(responseBody string) retryHintResult {
+	if h.retryHintProgram == nil || responseBody == "" {
+		return retryHintAbsent
+	}
+
+	// Parse JSON body
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(responseBody), &data); err != nil {
+		logger.Warn("failed to parse JSON body for retryHintFromBody evaluation, falling back to status code",
+			slog.String("module_type", "httpRequest"),
+			slog.String("error", err.Error()),
+		)
+		return retryHintAbsent
+	}
+
+	// Run the compiled expression with body as context
+	env := map[string]interface{}{
+		"body": data,
+	}
+	result, err := expr.Run(h.retryHintProgram, env)
+	if err != nil {
+		logger.Warn("failed to evaluate retryHintFromBody expression, falling back to status code",
+			slog.String("module_type", "httpRequest"),
+			slog.String("expression", h.retry.RetryHintFromBody),
+			slog.String("error", err.Error()),
+		)
+		return retryHintAbsent
+	}
+
+	// Expression must return a boolean
+	boolResult, ok := result.(bool)
+	if !ok {
+		logger.Warn("retryHintFromBody expression returned non-boolean value, falling back to status code",
+			slog.String("module_type", "httpRequest"),
+			slog.String("expression", h.retry.RetryHintFromBody),
+			slog.String("result_type", fmt.Sprintf("%T", result)),
+		)
+		return retryHintAbsent
+	}
+
+	if boolResult {
+		return retryHintTrue
+	}
+	return retryHintFalse
+}
+
+// waitForRetry calculates the delay before retrying and logs the retry attempt.
+// If UseRetryAfterHeader is enabled and the error contains a valid Retry-After header,
+// that value is used (capped by MaxDelayMs). Otherwise, the exponential backoff is used.
+func (h *HTTPRequestModule) waitForRetry(attempt int, delaysMs *[]int64, endpoint string, lastErr error) time.Duration {
 	backoff := h.retry.CalculateDelay(attempt - 1) // CalculateDelay is 0-indexed
+
+	// Check for Retry-After header if enabled
+	if h.retry.UseRetryAfterHeader && lastErr != nil {
+		if retryAfterDuration, valid := h.parseRetryAfterFromError(lastErr); valid {
+			// Cap at MaxDelayMs (but honor 0 for immediate retry)
+			maxDelay := time.Duration(h.retry.MaxDelayMs) * time.Millisecond
+			if retryAfterDuration > maxDelay {
+				retryAfterDuration = maxDelay
+			} else if retryAfterDuration < 0 {
+				// HTTP-date in the past or now → immediate retry
+				retryAfterDuration = 0
+			}
+			backoff = retryAfterDuration
+		}
+	}
+
 	*delaysMs = append(*delaysMs, backoff.Milliseconds())
 
 	logger.Info("retrying request",
@@ -615,6 +781,53 @@ func (h *HTTPRequestModule) waitForRetry(attempt int, delaysMs *[]int64, endpoin
 	)
 
 	return backoff
+}
+
+// parseRetryAfterFromError extracts and parses the Retry-After header from an HTTPError.
+// Returns the duration to wait and a boolean indicating if the header was valid.
+// Supports RFC 7231 formats: seconds (integer) or HTTP-date.
+// The boolean allows distinguishing "valid but 0" (immediate retry) from "invalid/absent".
+func (h *HTTPRequestModule) parseRetryAfterFromError(err error) (time.Duration, bool) {
+	var httpErr *HTTPError
+	if !errors.As(err, &httpErr) {
+		return 0, false
+	}
+
+	retryAfter := httpErr.GetRetryAfter()
+	if retryAfter == "" {
+		return 0, false
+	}
+
+	return parseRetryAfterValue(retryAfter)
+}
+
+// parseRetryAfterValue parses a Retry-After header value.
+// Supports: seconds (e.g., "120", "0") or HTTP-date (e.g., "Fri, 31 Dec 1999 23:59:59 GMT").
+// Returns (duration, true) if valid (including 0 for immediate retry), (0, false) if invalid.
+func parseRetryAfterValue(value string) (time.Duration, bool) {
+	// Try parsing as integer (seconds)
+	if seconds, err := strconv.Atoi(value); err == nil && seconds >= 0 {
+		return time.Duration(seconds) * time.Second, true
+	}
+
+	// Try parsing as HTTP-date (RFC 7231)
+	// Common formats: RFC1123, RFC850, ANSI C asctime
+	httpDateFormats := []string{
+		time.RFC1123,
+		time.RFC1123Z,
+		time.RFC850,
+		"Mon Jan _2 15:04:05 2006", // ANSI C asctime format
+	}
+
+	for _, format := range httpDateFormats {
+		if t, err := time.Parse(format, value); err == nil {
+			duration := time.Until(t)
+			// Return duration even if 0 or negative (valid header, immediate retry)
+			return duration, true
+		}
+	}
+
+	return 0, false // Invalid format
 }
 
 // shouldRetryOAuth2 handles OAuth2 401 by invalidating token and retrying once.
@@ -794,12 +1007,13 @@ func (h *HTTPRequestModule) executeHTTPRequest(ctx context.Context, endpoint str
 		// Classify HTTP error for retry logic
 		classifiedErr := errhandling.ClassifyHTTPStatus(resp.StatusCode, bodySnippet)
 		classifiedErr.OriginalErr = &HTTPError{
-			StatusCode:   resp.StatusCode,
-			Status:       resp.Status,
-			Endpoint:     endpoint,
-			Method:       h.method,
-			Message:      "request failed",
-			ResponseBody: string(respBody),
+			StatusCode:      resp.StatusCode,
+			Status:          resp.Status,
+			Endpoint:        endpoint,
+			Method:          h.method,
+			Message:         "request failed",
+			ResponseBody:    string(respBody),
+			ResponseHeaders: resp.Header.Clone(), // Capture headers for Retry-After support
 		}
 		return classifiedErr
 	}

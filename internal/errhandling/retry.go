@@ -59,6 +59,44 @@ type RetryConfig struct {
 	// RetryableStatusCodes are HTTP status codes that trigger retry.
 	// Default: [429, 500, 502, 503, 504]
 	RetryableStatusCodes []int
+
+	// UseRetryAfterHeader enables using the Retry-After response header to determine
+	// the delay before retrying. When enabled and the server returns a valid Retry-After
+	// header (seconds or HTTP-date format), that value is used instead of the backoff.
+	// The delay is still capped by MaxDelayMs.
+	// Default: false
+	//
+	// Example usage:
+	//   config := RetryConfig{
+	//     UseRetryAfterHeader: true,
+	//     MaxDelayMs: 60000, // Cap at 60 seconds even if server says more
+	//   }
+	//   // Server returns: Retry-After: 120 → waits 60s (capped)
+	//   // Server returns: Retry-After: 30 → waits 30s
+	UseRetryAfterHeader bool
+
+	// RetryHintFromBody is an expr expression (e.g., "body.retryable == true",
+	// "body.error.code == \"TEMPORARY\"") to evaluate against the JSON response body.
+	// The parsed JSON body is available as the "body" variable.
+	// If the expression returns true, the error is retryable; if false, not retryable.
+	// If the body is not valid JSON, falls back to status code only.
+	// Default: "" (disabled)
+	//
+	// Example expressions:
+	//   "body.retryable == true"                    // Check boolean field
+	//   "body.error.code == \"TEMPORARY\""          // Check string field
+	//   "body.error.code != \"PERMANENT\""          // Negation
+	//   "body.error.code == \"RATE_LIMIT\" || body.error.code == \"TEMPORARY\""  // Complex condition
+	//
+	// Example usage:
+	//   config := RetryConfig{
+	//     RetryableStatusCodes: []int{500, 503},
+	//     RetryHintFromBody: "body.error.code != \"PERMANENT\"",
+	//   }
+	//   // 500 with {"error": {"code": "TEMPORARY"}} → retried (expression true)
+	//   // 500 with {"error": {"code": "PERMANENT"}} → NOT retried (expression false)
+	//   // 500 with non-JSON body → retried (fallback to status code)
+	RetryHintFromBody string
 }
 
 // ErrorHandlingConfig holds error handling configuration for a module.
@@ -204,6 +242,14 @@ func ParseRetryConfig(m map[string]interface{}) RetryConfig {
 
 	if codes, ok := getIntSlice(m, "retryableStatusCodes"); ok {
 		config.RetryableStatusCodes = codes
+	}
+
+	if useRetryAfter, ok := m["useRetryAfterHeader"].(bool); ok {
+		config.UseRetryAfterHeader = useRetryAfter
+	}
+
+	if retryHintPath, ok := m["retryHintFromBody"].(string); ok {
+		config.RetryHintFromBody = retryHintPath
 	}
 
 	return config

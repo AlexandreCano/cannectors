@@ -305,6 +305,116 @@ The following modules are registered by default:
 |------|-------------|
 | `httpRequest` | HTTP POST/PUT/PATCH to REST APIs |
 
+## Output Module Retry Configuration
+
+The `httpRequest` output module supports advanced retry configuration to handle transient errors intelligently.
+
+### Retry Configuration Options
+
+```yaml
+output:
+  type: httpRequest
+  config:
+    endpoint: "https://api.example.com/data"
+    method: POST
+    retry:
+      # Basic retry settings
+      maxAttempts: 3                    # Max retry attempts (0 = disabled, default: 3)
+      delayMs: 1000                     # Initial delay in ms (default: 1000)
+      backoffMultiplier: 2.0            # Exponential backoff multiplier (default: 2.0)
+      maxDelayMs: 30000                 # Max delay cap in ms (default: 30000)
+      
+      # Custom retryable status codes (overrides defaults)
+      retryableStatusCodes: [429, 500, 502, 503, 504]  # Default
+      # Example: Make 408 retryable, exclude 500
+      # retryableStatusCodes: [408, 429, 502, 503, 504]
+      
+      # Retry-After header support
+      useRetryAfterHeader: true         # Use Retry-After header for delay (default: false)
+      
+      # Body hint for retry decision (expr expression)
+      retryHintFromBody: "body.retryable == true"  # expr expression to evaluate (default: "")
+```
+
+### Configuration Details
+
+#### retryableStatusCodes
+
+Defines which HTTP status codes should trigger a retry. This configuration takes precedence over defaults.
+
+| Default Codes | Description |
+|---------------|-------------|
+| 429 | Too Many Requests (rate limiting) |
+| 500 | Internal Server Error |
+| 502 | Bad Gateway |
+| 503 | Service Unavailable |
+| 504 | Gateway Timeout |
+
+**Example:** Make 408 (Request Timeout) retryable, exclude 500:
+```yaml
+retry:
+  retryableStatusCodes: [408, 429, 502, 503, 504]
+```
+
+**Note:** Status codes NOT in the list will not be retried, even if they were previously retryable by default.
+
+#### useRetryAfterHeader
+
+When enabled, the module uses the `Retry-After` HTTP header (if present) to determine the delay before retrying. Supports:
+- Seconds format: `Retry-After: 120` (wait 120 seconds)
+- HTTP-date format: `Retry-After: Fri, 31 Dec 2025 23:59:59 GMT`
+
+The delay is capped by `maxDelayMs`. If the header is invalid or absent, falls back to exponential backoff.
+
+```yaml
+retry:
+  useRetryAfterHeader: true
+  maxDelayMs: 60000  # Cap at 60 seconds even if server says more
+```
+
+#### retryHintFromBody
+
+An [expr](https://github.com/expr-lang/expr) expression to evaluate against the JSON response body. The parsed JSON body is available as the `body` variable. When configured:
+- **Expression returns `true`** → Error is retryable (if status code is in `retryableStatusCodes`)
+- **Expression returns `false`** → Error is NOT retryable (overrides status code)
+- **Body not valid JSON** → Falls back to status code only
+
+**Note on naming:** In YAML/JSON configuration files, use `retryHintFromBody` (camelCase). In Go code, the field is `RetryHintFromBody` (PascalCase). This is standard Go naming convention - exported fields use PascalCase, while configuration files typically use camelCase.
+
+**Example expressions:**
+- `body.retryable == true` → Check boolean field
+- `body.error.code == "TEMPORARY"` → Check string field
+- `body.error.code == "RATE_LIMIT" || body.error.code == "TEMPORARY"` → Complex conditions
+
+**Example:** API returns `{"error": {"code": "PERMANENT"}}` for non-retryable errors:
+```yaml
+retry:
+  retryableStatusCodes: [500, 503]
+  retryHintFromBody: 'body.error.code != "PERMANENT"'
+```
+
+With this config:
+- 500 with `{"error": {"code": "TEMPORARY"}}` → Retried (expression true)
+- 500 with `{"error": {"code": "PERMANENT"}}` → NOT retried (expression false)
+- 500 with non-JSON body → Retried (fallback to status code)
+
+### Configuration Precedence
+
+Retry configuration follows this precedence order:
+1. **Module config** (e.g., output.config.retry)
+2. **Defaults config** (if specified at pipeline level)
+3. **Built-in defaults** (maxAttempts=3, delayMs=1000, etc.)
+
+### Special Cases
+
+#### OAuth2 401 Handling
+
+For OAuth2 authentication, 401 Unauthorized triggers token invalidation and a single retry attempt regardless of `retryableStatusCodes`. This is handled specially to support token refresh flows.
+
+#### Network Errors
+
+Network errors (timeout, connection refused, DNS failures) are always retried based on `errhandling.IsRetryable()`, independent of `retryableStatusCodes`. The status code configuration only affects HTTP response errors.
+
 ## Module Boundaries
 
 Understanding module boundaries is crucial for implementing correct modules. Each module type has clear responsibilities and should not perform tasks outside its scope.

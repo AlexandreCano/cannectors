@@ -62,22 +62,16 @@ var (
 // It orchestrates the execution flow: Input → Filters → Output.
 //
 // The Executor only interacts with modules through their public interfaces,
-// enforcing module boundaries at compile time. This ensures modules can be
-// developed independently without depending on runtime internals.
+// enforcing module boundaries at compile time. This is guaranteed by Go's type system:
+// the fields are declared as interface types, so the runtime cannot access concrete
+// module types or their internals. This ensures modules can be developed independently
+// without depending on runtime internals.
 type Executor struct {
 	inputModule   input.Module
 	filterModules []filter.Module
 	outputModule  output.Module
 	dryRun        bool
 }
-
-// Compile-time verification that Executor uses interface types only.
-// These declarations ensure the runtime doesn't accidentally depend on concrete module types.
-var (
-	_ input.Module  = (input.Module)(nil)
-	_ filter.Module = (filter.Module)(nil)
-	_ output.Module = (output.Module)(nil)
-)
 
 // NewExecutor creates a new pipeline executor with only dry-run flag.
 // This is the basic constructor - modules must be set separately.

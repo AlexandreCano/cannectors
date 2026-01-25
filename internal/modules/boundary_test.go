@@ -71,17 +71,23 @@ func TestModuleBoundaryCompliance(t *testing.T) {
 	}
 }
 
-// TestRuntimeUsesInterfacesOnly verifies that runtime only uses module interfaces.
-// This is a compile-time guarantee enforced by the var _ declarations in pipeline.go,
-// but we document it here for clarity.
+// TestRuntimeUsesInterfacesOnly documents that runtime only uses module interfaces.
+// This is enforced at compile time by Go's type system: the Executor struct declares
+// fields as interface types (input.Module, filter.Module, output.Module), which prevents
+// the runtime from accessing concrete module types or their internals.
 func TestRuntimeUsesInterfacesOnly(t *testing.T) {
 	// This test documents the architectural constraint.
-	// The actual enforcement is done at compile time via:
-	//   var _ input.Module = (input.Module)(nil)
-	//   var _ filter.Module = (filter.Module)(nil)
-	//   var _ output.Module = (output.Module)(nil)
+	// The actual enforcement is done at compile time by Go's type system:
+	//   type Executor struct {
+	//       inputModule   input.Module      // Interface type - enforced by Go
+	//       filterModules []filter.Module   // Interface type - enforced by Go
+	//       outputModule  output.Module     // Interface type - enforced by Go
+	//   }
 	// in internal/runtime/pipeline.go
+	//
+	// The type system prevents the runtime from using concrete types - if someone
+	// tries to change a field to a concrete type, the code won't compile.
 
-	t.Log("Runtime boundary compliance is enforced at compile time")
-	t.Log("See internal/runtime/pipeline.go for interface compliance checks")
+	t.Log("Runtime boundary compliance is enforced at compile time by Go's type system")
+	t.Log("See internal/runtime/pipeline.go Executor struct - fields are interface types")
 }

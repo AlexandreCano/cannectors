@@ -168,26 +168,31 @@ Modules interact with the runtime through:
 
 Boundaries are enforced at compile time through:
 
-1. **Interface Types**: All module interactions use interface types, not concrete types
-2. **Interface Compliance Checks**: `var _ Interface = (*Type)(nil)` ensures compile-time compliance
-3. **Package Boundaries**: Modules in `internal/modules/` don't import runtime internals
-4. **Factory Pattern**: Module creation goes through factory functions that return interfaces
+1. **Interface Type Declarations**: The `Executor` struct declares fields as interface types, not concrete types. Go's type system enforces this at compile time - the runtime cannot access concrete module types or their internals.
+
+2. **Module Implementation Checks**: `var _ Interface = (*Type)(nil)` in module implementations verifies that concrete types implement the required interfaces. This is useful for module developers to catch implementation errors early.
+
+3. **Package Boundaries**: Modules in `internal/modules/` don't import runtime internals (`internal/runtime`, `internal/factory`).
+
+4. **Factory Pattern**: Module creation goes through factory functions that return interfaces, ensuring the runtime only receives interface types.
 
 **Example:**
 ```go
-// ✅ Correct: Runtime uses interface type
+// ✅ Correct: Runtime uses interface type (enforced by Go's type system)
 type Executor struct {
-    inputModule   input.Module      // Interface, not concrete type
-    filterModules []filter.Module   // Interface, not concrete type
-    outputModule  output.Module    // Interface, not concrete type
+    inputModule   input.Module      // Interface type - Go enforces this at compile time
+    filterModules []filter.Module   // Interface type - cannot be changed to concrete type
+    outputModule  output.Module    // Interface type - runtime cannot access internals
 }
 
-// ✅ Correct: Module implements interface
+// ✅ Correct: Module implementation check (verifies module implements interface)
 type HTTPPollingModule struct { /* ... */ }
 func (m *HTTPPollingModule) Fetch(ctx context.Context) ([]map[string]interface{}, error) { /* ... */ }
 func (m *HTTPPollingModule) Close() error { /* ... */ }
-var _ input.Module = (*HTTPPollingModule)(nil)  // Compile-time check
+var _ input.Module = (*HTTPPollingModule)(nil)  // Verifies HTTPPollingModule implements input.Module
 ```
+
+**Note:** The runtime's use of interfaces is guaranteed by Go's type system through the field declarations in `Executor`. The `var _ Interface = (*Type)(nil)` declarations verify that module implementations correctly implement the interfaces, but they don't verify runtime behavior - that's already enforced by the type system.
 
 ## Interface Stability
 

@@ -346,7 +346,7 @@ The runtime interacts with modules **only** through public interfaces:
 1. **Use init() for registration** - This ensures modules are available when the package is imported
 2. **Handle nil configs gracefully** - Return nil or a default when config is nil
 3. **Return meaningful errors** - Especially for invalid configuration
-4. **Implement interface compliance checks** - Use `var _ Interface = (*Type)(nil)`
+4. **Implement interface compliance checks** - Use `var _ Interface = (*Type)(nil)` to verify your module implements the interface correctly (this catches implementation errors at compile time)
 5. **Document your module** - Include godoc comments explaining configuration options
 6. **Write tests** - Test your constructor and module behavior
 7. **Respect module boundaries** - Don't perform tasks outside your module's responsibility

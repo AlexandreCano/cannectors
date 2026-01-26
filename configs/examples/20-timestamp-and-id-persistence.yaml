@@ -6,7 +6,7 @@
 #
 # How it works:
 # 1. First execution: No state exists, fetches all records
-# 2. Runtime persists both execution timestamp and max ID after success
+# 2. Runtime persists both execution timestamp and last ID after success
 # 3. Subsequent executions: Adds both ?modified_since=<timestamp>&after_id=<lastId>
 # 4. API can use either or both parameters for filtering
 

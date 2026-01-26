@@ -32,6 +32,7 @@ const (
 const (
 	ErrCodeEnrichmentEndpointMissing = "ENRICHMENT_ENDPOINT_MISSING"
 	ErrCodeEnrichmentKeyMissing      = "ENRICHMENT_KEY_MISSING"
+	ErrCodeEnrichmentKeyInvalid      = "ENRICHMENT_KEY_INVALID"
 	ErrCodeEnrichmentKeyExtract      = "ENRICHMENT_KEY_EXTRACT"
 	ErrCodeEnrichmentHTTPError       = "ENRICHMENT_HTTP_ERROR"
 	ErrCodeEnrichmentJSONParse       = "ENRICHMENT_JSON_PARSE"
@@ -605,10 +606,9 @@ func (m *EnrichmentModule) buildCacheKey(keyValue string, record map[string]inte
 				slog.String("fallback_key", m.endpoint+"::"+keyValue),
 			)
 			return m.endpoint + "::" + keyValue
-		} else {
-			// Static string - use as-is
-			return m.cacheKey
 		}
+		// Static string - use as-is
+		return m.cacheKey
 	}
 
 	// Default behavior: endpoint + "::" + keyValue

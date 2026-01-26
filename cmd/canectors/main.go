@@ -16,6 +16,7 @@ import (
 	"github.com/canectors/runtime/internal/config"
 	"github.com/canectors/runtime/internal/factory"
 	"github.com/canectors/runtime/internal/logger"
+	"github.com/canectors/runtime/internal/persistence"
 	"github.com/canectors/runtime/internal/runtime"
 	"github.com/canectors/runtime/internal/scheduler"
 	"github.com/canectors/runtime/pkg/connector"
@@ -261,6 +262,11 @@ func runPipelineOnce(pipeline *connector.Pipeline) {
 
 	executor := runtime.NewExecutorWithModules(inputModule, filterModules, outputModule, dryRun)
 
+	// Configure state persistence if input module supports it
+	// Create stateStore with default path (input module will use its own if it has custom storagePath)
+	stateStore := persistence.NewStateStore("")
+	executor.SetStateStore(stateStore)
+
 	if !quiet {
 		if dryRun {
 			fmt.Println("Executing pipeline (dry-run mode - output will not be sent)...")
@@ -405,6 +411,12 @@ func (a *PipelineExecutorAdapter) Execute(pipeline *connector.Pipeline) (*connec
 	}
 
 	executor := runtime.NewExecutorWithModules(inputModule, filterModules, outputModule, a.dryRun)
+
+	// Configure state persistence if input module supports it
+	// Create stateStore with default path (input module will use its own if it has custom storagePath)
+	stateStore := persistence.NewStateStore("")
+	executor.SetStateStore(stateStore)
+
 	return executor.Execute(pipeline)
 }
 

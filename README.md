@@ -16,6 +16,7 @@ Portable runtime CLI for executing connector pipelines. Canectors is a cross-pla
   - File logging support (`--log-file`)
 - **Resource Cleanup**: Automatic cleanup of module resources (connections, file handles)
 - **Error Handling & Retry**: Classified errors (network, auth, validation, server), configurable retry with exponential backoff, timeout handling, and structured error logging (Story 4.4)
+- **State Persistence**: Reliable resumption of polling after restarts by persisting execution timestamp and/or last processed ID (Story 14.5)
 
 ## Project Status
 
@@ -239,6 +240,87 @@ canectors run ./configs/examples/13-scheduled.yaml
 - **Overlap handling**: If a pipeline execution is still running when the next trigger occurs, the new execution is skipped
 - **Graceful shutdown**: On SIGINT/SIGTERM, waits for in-flight executions to complete (30s timeout)
 - **Structured logging**: All scheduled executions are logged with timestamps and durations
+
+### State Persistence for Polling Inputs
+
+State persistence enables reliable resumption of data polling after restarts, avoiding duplicates or data loss. The runtime persists the last execution timestamp and/or last processed ID, then uses this state to filter API requests on subsequent executions.
+
+**How it works:**
+1. **First execution**: No state exists, fetches all records
+2. **Runtime persists state**: After successful execution (Input → Filter → Output), saves execution start timestamp and/or ID from the last processed record (in reception order)
+3. **Subsequent executions**: Loads persisted state and adds query parameters to API requests (e.g., `?since=2026-01-26T10:30:00Z` or `?after_id=12345`)
+4. **API filtering**: Only processes records newer than the last execution timestamp or with ID greater than the last processed ID
+
+**Configuration Example (Timestamp Persistence):**
+
+```yaml
+input:
+  type: httpPolling
+  endpoint: https://api.example.com/v1/orders
+  schedule: "*/5 * * * *"
+  
+  statePersistence:
+    timestamp:
+      enabled: true
+      queryParam: updated_after  # API adds ?updated_after=<timestamp>
+```
+
+**Configuration Example (ID Persistence):**
+
+```yaml
+input:
+  type: httpPolling
+  endpoint: https://api.example.com/v1/orders
+  schedule: "*/5 * * * *"
+  
+  statePersistence:
+    id:
+      enabled: true
+      field: id  # Field path to extract ID from records
+      queryParam: after_id  # API adds ?after_id=<lastId>
+```
+
+**Configuration Example (Both Timestamp and ID):**
+
+```yaml
+input:
+  type: httpPolling
+  endpoint: https://api.example.com/v1/orders
+  schedule: "*/5 * * * *"
+  
+  statePersistence:
+    timestamp:
+      enabled: true
+      queryParam: updated_after
+    id:
+      enabled: true
+      field: order_id
+      queryParam: after_id
+    # Optional: custom storage path (defaults to ./canectors-data/state)
+    # storagePath: /custom/path/to/state
+```
+
+**State Storage:**
+- **Location**: `./canectors-data/state/{pipeline-id}.json` (default)
+- **Format**: JSON with `pipelineId`, `lastTimestamp`, `lastId`, `updatedAt`
+- **Isolation**: Each pipeline maintains its own separate state file
+- **Thread-safe**: Safe for concurrent executions (mutex protection)
+
+**Features:**
+- ✅ **Timestamp persistence**: Uses pipeline execution start timestamp (not extracted from records)
+- ✅ **ID persistence**: Extracts and tracks last ID from processed records (supports nested field paths with dot notation)
+- ✅ **API query filtering**: Automatically adds query parameters to API requests when state exists
+- ✅ **Graceful error handling**: State loading/saving errors don't fail pipeline execution (logs warning, continues without persistence)
+- ✅ **Works with scheduled executions**: State persistence works correctly with CRON scheduler
+- ✅ **Works with manual executions**: State persists between manual runs
+
+**Troubleshooting:**
+- **State not persisting**: Check that `SetStateStore` is called (should be automatic in CLI)
+- **State file not found**: First execution creates the state file after successful execution
+- **State loading errors**: Check file permissions on `./canectors-data/state/` directory
+- **ID extraction fails**: Verify `field` path matches your record structure (supports dot notation like `data.id`)
+
+See example configurations in `configs/examples/18-timestamp-persistence.yaml`, `19-id-persistence.yaml`, and `20-timestamp-and-id-persistence.yaml`.
 
 ### Exit Codes
 

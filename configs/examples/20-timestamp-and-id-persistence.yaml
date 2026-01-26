@@ -1,0 +1,78 @@
+# Example: Combined Timestamp and ID Persistence
+#
+# This example demonstrates using both timestamp and ID persistence together.
+# This is useful for APIs that support multiple filtering mechanisms or when
+# you want redundant tracking for maximum reliability.
+#
+# How it works:
+# 1. First execution: No state exists, fetches all records
+# 2. Runtime persists both execution timestamp and last ID after success
+# 3. Subsequent executions: Adds both ?modified_since=<timestamp>&after_id=<lastId>
+# 4. API can use either or both parameters for filtering
+
+connector:
+  name: transactions-with-dual-persistence
+  version: "1.0.0"
+  description: "Sync transactions with timestamp and ID tracking"
+
+  input:
+    type: httpPolling
+    endpoint: https://api.example.com/v1/transactions
+    schedule: "*/10 * * * *"  # Every 10 minutes
+    headers:
+      Accept: application/json
+    authentication:
+      type: oauth2_client_credentials
+      tokenUrl: https://auth.example.com/oauth/token
+      clientIdRef: "${OAUTH_CLIENT_ID}"
+      clientSecretRef: "${OAUTH_CLIENT_SECRET}"
+      scope: "transactions:read"
+
+    # Combined state persistence configuration
+    statePersistence:
+      timestamp:
+        enabled: true
+        queryParam: modified_since
+      id:
+        enabled: true
+        # Nested field path for ID extraction
+        field: data.transaction_id
+        queryParam: after_id
+      # Optional: custom storage path (defaults to ./canectors-data/state)
+      storagePath: /var/lib/canectors/state
+
+    # Pagination for large result sets
+    pagination:
+      type: cursor
+      cursorParam: cursor
+      nextCursorField: next_cursor
+
+    dataField: transactions
+
+  filters:
+    - type: condition
+      expression: "status != 'pending'"
+      onTrue: continue
+      onFalse: skip
+
+    - type: mapping
+      mappings:
+        - source: data.transaction_id
+          target: transactionId
+        - source: data.amount
+          target: amount
+        - source: data.currency
+          target: currency
+        - source: data.merchant.name
+          target: merchantName
+        - source: status
+          target: transactionStatus
+        - source: created_at
+          target: createdAt
+
+  output:
+    type: httpRequest
+    endpoint: https://accounting.example.com/api/transactions
+    method: POST
+    headers:
+      Content-Type: application/json

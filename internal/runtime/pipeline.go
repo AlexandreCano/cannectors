@@ -14,6 +14,7 @@ import (
 	"github.com/canectors/runtime/internal/modules/filter"
 	"github.com/canectors/runtime/internal/modules/input"
 	"github.com/canectors/runtime/internal/modules/output"
+	"github.com/canectors/runtime/internal/persistence"
 	"github.com/canectors/runtime/pkg/connector"
 )
 
@@ -58,6 +59,26 @@ var (
 	ErrNilOutputModule = errors.New("output module is nil")
 )
 
+// StatePersistentInput is an optional interface for input modules that support state persistence.
+// Input modules implementing this interface can have their state persisted between executions.
+type StatePersistentInput interface {
+	// SetPipelineID sets the pipeline ID for state persistence.
+	SetPipelineID(pipelineID string)
+
+	// SetStateStore sets the state store to use for persistence.
+	// If not called, the input module will use its own state store.
+	SetStateStore(store *persistence.StateStore)
+
+	// LoadState loads the last persisted state for this pipeline.
+	LoadState() (*persistence.State, error)
+
+	// GetPersistenceConfig returns the state persistence configuration.
+	GetPersistenceConfig() *persistence.StatePersistenceConfig
+
+	// GetLastState returns the last loaded state.
+	GetLastState() *persistence.State
+}
+
 // Executor is responsible for executing pipeline configurations.
 // It orchestrates the execution flow: Input → Filters → Output.
 //
@@ -71,6 +92,9 @@ type Executor struct {
 	filterModules []filter.Module
 	outputModule  output.Module
 	dryRun        bool
+
+	// State persistence
+	stateStore *persistence.StateStore
 }
 
 // NewExecutor creates a new pipeline executor with only dry-run flag.
@@ -100,6 +124,59 @@ func NewExecutorWithModules(
 		filterModules: filterModules,
 		outputModule:  outputModule,
 		dryRun:        dryRun,
+	}
+}
+
+// SetStateStore sets the state store for state persistence.
+// If set and the input module supports state persistence, state will be
+// loaded before execution and persisted after successful execution.
+func (e *Executor) SetStateStore(store *persistence.StateStore) {
+	e.stateStore = store
+}
+
+// persistState saves the execution state after successful pipeline execution.
+// It persists the execution start timestamp and/or last ID.
+// lastID is the ID extracted from raw records (before filters) to ensure the field path
+// matches the API response structure, not transformed records.
+func (e *Executor) persistState(pipelineID string, executionStart time.Time, lastID *string, config *persistence.StatePersistenceConfig) {
+	state := &persistence.State{
+		PipelineID: pipelineID,
+		UpdatedAt:  time.Now(),
+	}
+
+	// Set timestamp if enabled
+	if config.TimestampEnabled() {
+		state.LastTimestamp = &executionStart
+		logger.Debug("persisting execution timestamp",
+			slog.String("pipeline_id", pipelineID),
+			slog.String("timestamp", executionStart.Format(time.RFC3339)),
+		)
+	}
+
+	// Set last ID if enabled and extracted successfully
+	if config.IDEnabled() && lastID != nil {
+		state.LastID = lastID
+		logger.Debug("persisting last ID from most recent record",
+			slog.String("pipeline_id", pipelineID),
+			slog.String("id_field", config.ID.Field),
+			slog.String("last_id", *lastID),
+		)
+	}
+
+	// Only save if we have something to persist
+	if state.LastTimestamp != nil || state.LastID != nil {
+		if err := e.stateStore.Save(pipelineID, state); err != nil {
+			logger.Warn("failed to persist state after execution",
+				slog.String("pipeline_id", pipelineID),
+				slog.String("error", err.Error()),
+			)
+		} else {
+			logger.Debug("state persisted successfully",
+				slog.String("pipeline_id", pipelineID),
+				slog.Bool("has_timestamp", state.LastTimestamp != nil),
+				slog.Bool("has_id", state.LastID != nil),
+			)
+		}
 	}
 }
 
@@ -311,31 +388,16 @@ func (e *Executor) Execute(pipeline *connector.Pipeline) (*connector.ExecutionRe
 func (e *Executor) ExecuteWithContext(ctx context.Context, pipeline *connector.Pipeline) (*connector.ExecutionResult, error) {
 	startedAt := time.Now()
 	result := e.newErrorResult(startedAt)
-	var timings stageTimings
 
 	// Validate pipeline and modules first (before logging, in case pipeline is nil)
 	if err := e.validateExecution(pipeline, result); err != nil {
-		// Log execution start and end on validation error (if pipeline is valid)
-		if pipeline != nil {
-			execCtx := logger.ExecutionContext{
-				PipelineID:   pipeline.ID,
-				PipelineName: pipeline.Name,
-				DryRun:       e.dryRun,
-			}
-			logger.LogExecutionStart(execCtx)
-			totalDuration := time.Since(startedAt)
-			logger.LogExecutionEnd(execCtx, StatusError, 0, totalDuration)
-		}
+		e.handleValidationError(pipeline, startedAt)
 		return result, err
 	}
 	result.PipelineID = pipeline.ID
 
-	// Log execution start using helper
-	execCtx := logger.ExecutionContext{
-		PipelineID:   pipeline.ID,
-		PipelineName: pipeline.Name,
-		DryRun:       e.dryRun,
-	}
+	// Setup execution context and logging
+	execCtx := e.createExecutionContext(pipeline)
 	logger.LogExecutionStart(execCtx)
 
 	// Setup output module cleanup (deferred to end of execution)
@@ -343,8 +405,100 @@ func (e *Executor) ExecuteWithContext(ctx context.Context, pipeline *connector.P
 		defer e.closeModule(pipeline.ID, "output", e.outputModule)
 	}
 
+	// Setup state persistence if input module supports it
+	persistenceConfig := e.setupStatePersistence(pipeline)
+
+	// Execute pipeline stages (Input → Filter → Output)
+	// Extract ID from raw records immediately after input to free memory early
+	timings, lastID, err := e.executePipelineStages(ctx, pipeline, result, execCtx, startedAt, persistenceConfig)
+	if err != nil {
+		return result, err
+	}
+
+	// Persist state after successful execution (Input → Filter → Output all succeeded)
+	if persistenceConfig != nil && persistenceConfig.IsEnabled() && e.stateStore != nil {
+		e.persistState(pipeline.ID, startedAt, lastID, persistenceConfig)
+	}
+
+	e.finalizeSuccessWithMetrics(result, startedAt, pipeline, timings)
+	return result, nil
+}
+
+// createExecutionContext creates the execution context for logging.
+func (e *Executor) createExecutionContext(pipeline *connector.Pipeline) logger.ExecutionContext {
+	return logger.ExecutionContext{
+		PipelineID:   pipeline.ID,
+		PipelineName: pipeline.Name,
+		DryRun:       e.dryRun,
+	}
+}
+
+// handleValidationError logs execution start and end for validation errors.
+func (e *Executor) handleValidationError(pipeline *connector.Pipeline, startedAt time.Time) {
+	if pipeline != nil {
+		execCtx := logger.ExecutionContext{
+			PipelineID:   pipeline.ID,
+			PipelineName: pipeline.Name,
+			DryRun:       e.dryRun,
+		}
+		logger.LogExecutionStart(execCtx)
+		totalDuration := time.Since(startedAt)
+		logger.LogExecutionEnd(execCtx, StatusError, 0, totalDuration)
+	}
+}
+
+// setupStatePersistence configures state persistence for the input module if supported.
+// Returns the persistence config if enabled, nil otherwise.
+func (e *Executor) setupStatePersistence(pipeline *connector.Pipeline) *persistence.StatePersistenceConfig {
+	var persistenceConfig *persistence.StatePersistenceConfig
+	if spInput, ok := e.inputModule.(StatePersistentInput); ok {
+		spInput.SetPipelineID(pipeline.ID)
+		// Use executor's state store if available and input module doesn't have a custom storage path
+		// This allows input modules to use their own state store with custom storagePath from config
+		if e.stateStore != nil {
+			config := spInput.GetPersistenceConfig()
+			// Only override if input module doesn't have a custom storagePath
+			// (if it has one, it already created its own stateStore with that path)
+			if config == nil || config.StoragePath == "" {
+				spInput.SetStateStore(e.stateStore)
+			}
+		}
+		state, err := spInput.LoadState()
+		if err != nil {
+			// Log warning but continue - state loading failure is not fatal
+			// Pipeline will execute without state-based filtering (first execution behavior)
+			logger.Warn("failed to load state for pipeline, continuing without persistence",
+				slog.String("pipeline_id", pipeline.ID),
+				slog.String("error", err.Error()),
+			)
+		} else if state != nil {
+			logger.Debug("loaded persisted state for pipeline",
+				slog.String("pipeline_id", pipeline.ID),
+				slog.Bool("has_timestamp", state.LastTimestamp != nil),
+				slog.Bool("has_id", state.LastID != nil),
+			)
+		}
+		persistenceConfig = spInput.GetPersistenceConfig()
+	}
+	return persistenceConfig
+}
+
+// executePipelineStages executes Input, Filter, and Output modules in sequence.
+// Extracts ID from raw records immediately after input to free memory early.
+// Returns timings, last ID (extracted from raw records before filters), and any error encountered.
+func (e *Executor) executePipelineStages(
+	ctx context.Context,
+	pipeline *connector.Pipeline,
+	result *connector.ExecutionResult,
+	execCtx logger.ExecutionContext,
+	startedAt time.Time,
+	persistenceConfig *persistence.StatePersistenceConfig,
+) (stageTimings, *string, error) {
+	var timings stageTimings
+	var lastID *string
+
 	// Execute Input module (returns duration measured inside)
-	records, inputDuration, err := e.executeInput(ctx, pipeline, result)
+	rawRecords, inputDuration, err := e.executeInput(ctx, pipeline, result)
 	timings.inputDuration = inputDuration
 
 	// Close input module immediately after input execution completes.
@@ -357,20 +511,38 @@ func (e *Executor) ExecuteWithContext(ctx context.Context, pipeline *connector.P
 	}
 
 	if err != nil {
-		// Log execution end on input failure
-		totalDuration := time.Since(startedAt)
-		logger.LogExecutionEnd(execCtx, StatusError, 0, totalDuration)
-		return result, err
+		e.handleExecutionFailure(execCtx, startedAt, StatusError, 0)
+		return timings, nil, err
+	}
+
+	// Extract ID from raw records immediately (before filters) to free memory early
+	// This ensures the ID field path matches the API response structure, not transformed records
+	if persistenceConfig != nil && persistenceConfig.IDEnabled() && persistenceConfig.ID.Field != "" && len(rawRecords) > 0 {
+		extractedID, extractErr := persistence.ExtractLastID(rawRecords, persistenceConfig.ID.Field)
+		if extractErr != nil {
+			logger.Warn("failed to extract last ID for state persistence",
+				slog.String("pipeline_id", pipeline.ID),
+				slog.String("id_field", persistenceConfig.ID.Field),
+				slog.String("error", extractErr.Error()),
+			)
+			// Continue without ID - state will be persisted with timestamp only if enabled
+		} else {
+			lastID = &extractedID
+			logger.Debug("extracted last ID from raw records",
+				slog.String("pipeline_id", pipeline.ID),
+				slog.String("id_field", persistenceConfig.ID.Field),
+				slog.String("last_id", extractedID),
+			)
+		}
 	}
 
 	// Execute Filter modules (returns duration measured inside)
-	filteredRecords, filterDuration, err := e.executeFiltersWithResult(ctx, pipeline, records, result)
+	filteredRecords, filterDuration, err := e.executeFiltersWithResult(ctx, pipeline, rawRecords, result)
 	timings.filterDuration = filterDuration
+	// rawRecords can now be garbage collected after filters start processing
 	if err != nil {
-		// Log execution end on filter failure
-		totalDuration := time.Since(startedAt)
-		logger.LogExecutionEnd(execCtx, StatusError, len(records), totalDuration)
-		return result, err
+		e.handleExecutionFailure(execCtx, startedAt, StatusError, len(rawRecords))
+		return timings, nil, err
 	}
 
 	// Generate dry-run preview if applicable
@@ -382,14 +554,17 @@ func (e *Executor) ExecuteWithContext(ctx context.Context, pipeline *connector.P
 	outputDuration, err := e.executeOutputWithResult(ctx, pipeline, filteredRecords, result)
 	timings.outputDuration = outputDuration
 	if err != nil {
-		// Log execution end on output failure
-		totalDuration := time.Since(startedAt)
-		logger.LogExecutionEnd(execCtx, StatusError, result.RecordsProcessed, totalDuration)
-		return result, err
+		e.handleExecutionFailure(execCtx, startedAt, StatusError, result.RecordsProcessed)
+		return timings, nil, err
 	}
 
-	e.finalizeSuccessWithMetrics(result, startedAt, pipeline, timings)
-	return result, nil
+	return timings, lastID, nil
+}
+
+// handleExecutionFailure logs execution end on failure.
+func (e *Executor) handleExecutionFailure(execCtx logger.ExecutionContext, startedAt time.Time, status string, recordsProcessed int) {
+	totalDuration := time.Since(startedAt)
+	logger.LogExecutionEnd(execCtx, status, recordsProcessed, totalDuration)
 }
 
 // newErrorResult creates a new ExecutionResult initialized with error status.

@@ -39,6 +39,11 @@ const (
 	ErrCodeEnrichmentMerge           = "ENRICHMENT_MERGE"
 )
 
+// Error messages
+const (
+	errMsgParsingEndpointURL = "parsing endpoint URL: %w"
+)
+
 // Error types for enrichment module
 var (
 	ErrEnrichmentEndpointMissing = fmt.Errorf("enrichment endpoint is required")
@@ -797,7 +802,7 @@ func (m *EnrichmentModule) buildRequestURL(keyValue string) (string, error) {
 		// Add key as query parameter
 		parsedURL, err := url.Parse(m.endpoint)
 		if err != nil {
-			return "", fmt.Errorf("parsing endpoint URL: %w", err)
+			return "", fmt.Errorf(errMsgParsingEndpointURL, err)
 		}
 		q := parsedURL.Query()
 		q.Set(m.keyParamName, keyValue)

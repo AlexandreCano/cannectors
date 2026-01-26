@@ -94,7 +94,7 @@ development_status:
   14-2-script-filter-module-with-goja: done
   14-3-javascript-logging-integration: done
   14-4-dynamic-enrichment-inside-filters-input-inside-filter-cache: done
-  14-5-last-timestamp-persistence-for-polling-inputs: backlog
+  14-5-last-timestamp-persistence-for-polling-inputs: done
   14-6-distributed-scheduler-support: backlog
   epic-14-retrospective: optional
 

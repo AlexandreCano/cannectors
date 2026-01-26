@@ -75,6 +75,7 @@ type ScriptModule struct {
 	onError      string
 	runtime      *goja.Runtime // Not goroutine-safe - one runtime per module instance
 	transformFn  goja.Callable
+	console      *jsConsole // JavaScript console for logging
 	interruptMu  sync.Mutex // Protects interrupt state
 }
 
@@ -134,8 +135,16 @@ func NewScriptFromConfig(config ScriptConfig) (*ScriptModule, error) {
 	// Normalize onError
 	onError := normalizeScriptOnError(config.OnError)
 
-	// Create Goja runtime
+	moduleID := "inline"
+	if config.ScriptFile != "" {
+		moduleID = config.ScriptFile
+	}
+
 	vm := goja.New()
+	jsConsole, err := newJSConsole(vm, moduleID)
+	if err != nil {
+		return nil, fmt.Errorf("script console init: %w", err)
+	}
 
 	// Compile and run the script
 	_, err = vm.RunString(scriptSource)
@@ -160,6 +169,7 @@ func NewScriptFromConfig(config ScriptConfig) (*ScriptModule, error) {
 		onError:      onError,
 		runtime:      vm,
 		transformFn:  transformFn,
+		console:      jsConsole,
 	}, nil
 }
 
@@ -482,6 +492,12 @@ func (m *ScriptModule) Process(ctx context.Context, records []map[string]interfa
 // Context cancellation is handled at the Process() level via context.AfterFunc.
 // The ctx parameter is used to check for context errors in the returned error.
 func (m *ScriptModule) processRecord(ctx context.Context, record map[string]interface{}, recordIdx int) (map[string]interface{}, error) {
+	// Set record index for console logging context
+	if m.console != nil {
+		m.console.SetRecordIndex(recordIdx)
+		defer m.console.ClearRecordIndex()
+	}
+
 	// Convert Go map to JavaScript object
 	jsRecord := m.runtime.ToValue(record)
 
@@ -559,25 +575,7 @@ func (m *ScriptModule) exportToGoMap(value goja.Value, recordIdx int) (map[strin
 		return result, nil
 	}
 
-	// If it's a Goja Object, check if it's actually an array by checking the class name
-	if obj, ok := exported.(*goja.Object); ok {
-		// Check if the object is actually an array
-		if obj.Get("length") != nil {
-			// Has a length property - likely an array
-			className := obj.ClassName()
-			if className == "Array" {
-				return nil, newScriptError(ErrCodeExecutionFailed, fmt.Sprintf("script at record %d returned an array - transform function must return an object, not an array", recordIdx), recordIdx, "", nil)
-			}
-		}
-
-		// Try to export it to a Go map
-		var result map[string]interface{}
-		if err := m.runtime.ExportTo(value, &result); err != nil {
-			return nil, newScriptError(ErrCodeExecutionFailed, fmt.Sprintf("failed to convert script result at record %d: %v", recordIdx, err), recordIdx, "", err)
-		}
-		return result, nil
-	}
-
-	// For primitives and other types, reject explicitly
+	// Export() returns Go types (map, slice, primitives), not *goja.Object.
+	// Reject primitives and other types explicitly.
 	return nil, newScriptError(ErrCodeExecutionFailed, fmt.Sprintf("script at record %d returned invalid type %T - transform function must return an object, got %T", recordIdx, exported, exported), recordIdx, "", nil)
 }

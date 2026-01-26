@@ -1,6 +1,6 @@
 # Story 14.3: JavaScript Logging Integration
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -225,6 +225,24 @@ Claude Sonnet 4.5 (via Cursor)
 
 ### Debug Log References
 
+### Code Review Fixes (2026-01-25)
+
+**Review target:** 14-3 JavaScript Logging Integration. Fixes applied automatically (option 1).
+
+- [HIGH] **golangci-lint**: errcheck (console.Set / runtime.Set), gofmt (struct alignment), unparam (formatObject), unused (testLogHandler). Fixed: newJSConsole returns error and checks all Set calls; gofmt alignment; formatObject uses formatMapSafe with depth/seen; testLogHandler used in TestJSConsole_LogLevels.
+- [HIGH] **AC2 / Task 6**: Log levels not asserted. Added TestJSConsole_LogLevels using testLogHandler to capture slog records and assert console.error→Error, warn→Warn, info→Info, log→Info, debug→Debug.
+- [HIGH] **AC4 circular refs**: formatObject used json.Marshal only; formatArray used length as pseudo-ptr. Fixed: formatMapSafe / formatSliceSafe with reflect.ValueOf(.).Pointer() for seen; formatArray uses uintptr(unsafe.Pointer(obj)); added TestJSConsole_CircularReference.
+- [MEDIUM] **AC1 script location**: moduleID always "". Fixed: NewScriptFromConfig passes moduleID = config.ScriptFile or "inline".
+- [MEDIUM] **exportToGoMap dead branch**: Removed *goja.Object branch (Export returns Go types, not *goja.Object).
+
 ### Completion Notes List
 
 ### File List
+
+**Created:**
+- internal/modules/filter/console.go
+- internal/modules/filter/console_test.go
+
+**Modified:**
+- internal/modules/filter/script.go (console init, moduleID, exportToGoMap cleanup)
+- go.sum

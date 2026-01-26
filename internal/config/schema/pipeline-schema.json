@@ -403,7 +403,7 @@
         },
         "id": {
           "type": "object",
-          "description": "ID persistence configuration. Tracks maximum ID from processed records.",
+          "description": "ID persistence configuration. Tracks the ID from the last record (in reception order).",
           "properties": {
             "enabled": {
               "type": "boolean",

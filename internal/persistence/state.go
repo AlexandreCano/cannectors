@@ -37,8 +37,9 @@ type State struct {
 	// Used for timestamp-based filtering (e.g., ?since=2026-01-26T10:30:00Z).
 	LastTimestamp *time.Time `json:"lastTimestamp,omitempty"`
 
-	// LastID is the maximum ID from records processed in the last successful execution.
-	// Used for ID-based filtering (e.g., ?after_id=12345).
+	// LastID is the last record ID processed in the last successful execution.
+	// Used as an ID cursor for ID-based filtering (e.g., ?after_id=12345),
+	// assuming records are processed in chronological or ID order.
 	LastID *string `json:"lastId,omitempty"`
 
 	// UpdatedAt is when this state was last updated.

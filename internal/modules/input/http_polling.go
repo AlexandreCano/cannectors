@@ -16,6 +16,7 @@ import (
 	"github.com/canectors/runtime/internal/auth"
 	"github.com/canectors/runtime/internal/errhandling"
 	"github.com/canectors/runtime/internal/logger"
+	"github.com/canectors/runtime/internal/persistence"
 	"github.com/canectors/runtime/pkg/connector"
 )
 
@@ -24,6 +25,11 @@ const (
 	defaultTimeout     = 30 * time.Second
 	defaultUserAgent   = "Canectors-Runtime/1.0"
 	maxPaginationPages = 1000 // Prevent infinite loops
+)
+
+// Error messages
+const (
+	errMsgParsingEndpointURL = "parsing endpoint URL: %w"
 )
 
 // Log message constants
@@ -69,6 +75,8 @@ type PaginationConfig struct {
 
 // HTTPPolling implements polling-based HTTP data fetching.
 // It supports HTTP GET requests with authentication, pagination, and retry logic.
+// State persistence can be configured to track last timestamp and/or last ID
+// for reliable resumption after restarts.
 type HTTPPolling struct {
 	endpoint      string
 	headers       map[string]string
@@ -79,6 +87,12 @@ type HTTPPolling struct {
 	client        *http.Client
 	retryConfig   errhandling.RetryConfig
 	lastRetryInfo *connector.RetryInfo
+
+	// State persistence
+	persistenceConfig *persistence.StatePersistenceConfig
+	stateStore        *persistence.StateStore
+	pipelineID        string
+	lastState         *persistence.State
 }
 
 // NewHTTPPollingFromConfig creates a new HTTP polling input module from configuration.
@@ -114,15 +128,35 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 		return nil, err
 	}
 
+	// Parse state persistence config
+	persistenceConfig := persistence.ParseStatePersistenceConfig(config.Config)
+
 	h := &HTTPPolling{
-		endpoint:    endpoint,
-		headers:     headers,
-		timeout:     timeout,
-		dataField:   dataField,
-		pagination:  pagination,
-		authHandler: authHandler,
-		client:      client,
-		retryConfig: retryConfig,
+		endpoint:          endpoint,
+		headers:           headers,
+		timeout:           timeout,
+		dataField:         dataField,
+		pagination:        pagination,
+		authHandler:       authHandler,
+		client:            client,
+		retryConfig:       retryConfig,
+		persistenceConfig: persistenceConfig,
+	}
+
+	// Initialize state store if persistence is enabled
+	if persistenceConfig != nil && persistenceConfig.IsEnabled() {
+		storagePath := persistenceConfig.StoragePath
+		if storagePath == "" {
+			storagePath = persistence.DefaultStatePath
+		}
+		h.stateStore = persistence.NewStateStore(storagePath)
+
+		logger.Debug("state persistence enabled for HTTP polling module",
+			"endpoint", endpoint,
+			"timestamp_enabled", persistenceConfig.TimestampEnabled(),
+			"id_enabled", persistenceConfig.IDEnabled(),
+			"storage_path", storagePath,
+		)
 	}
 
 	logModuleCreation(endpoint, timeout, authHandler, pagination, retryConfig)
@@ -269,6 +303,9 @@ func parsePaginationConfig(config map[string]interface{}) *PaginationConfig {
 // It executes HTTP GET requests to the configured endpoint, handles authentication,
 // and aggregates paginated results into a single slice of records.
 //
+// If state persistence is configured and state exists, the endpoint may include
+// query parameters for filtering (e.g., ?since=2026-01-26T10:30:00Z or ?after_id=12345).
+//
 // The context can be used to cancel long-running operations.
 //
 // Returns:
@@ -277,24 +314,36 @@ func parsePaginationConfig(config map[string]interface{}) *PaginationConfig {
 func (h *HTTPPolling) Fetch(ctx context.Context) ([]map[string]interface{}, error) {
 	startTime := time.Now()
 
+	// Build endpoint with state-based query params if applicable
+	endpoint, err := h.buildEndpointWithState(h.endpoint)
+	if err != nil {
+		logger.Error("failed to build endpoint with state params",
+			"module_type", "httpPolling",
+			"endpoint", h.endpoint,
+			"error", err.Error(),
+		)
+		return nil, fmt.Errorf("building endpoint with state: %w", err)
+	}
+
 	// Log fetch start with configuration summary
 	logger.Info("input fetch started",
 		"module_type", "httpPolling",
-		"endpoint", h.endpoint,
+		"endpoint", endpoint,
+		"original_endpoint", h.endpoint,
 		"timeout", h.timeout.String(),
 		"has_pagination", h.pagination != nil,
 		"has_auth", h.authHandler != nil,
+		"has_state_persistence", h.persistenceConfig != nil && h.persistenceConfig.IsEnabled(),
 	)
 
 	var records []map[string]interface{}
-	var err error
 
 	// Handle pagination if configured
 	if h.pagination != nil {
 		records, err = h.fetchWithPagination(ctx)
 	} else {
 		// Single request without pagination
-		records, err = h.fetchSingle(ctx, h.endpoint)
+		records, err = h.fetchSingle(ctx, endpoint)
 	}
 
 	duration := time.Since(startTime)
@@ -660,20 +709,26 @@ func (h *HTTPPolling) applyAuthentication(ctx context.Context, req *http.Request
 
 // fetchWithPagination handles paginated requests
 func (h *HTTPPolling) fetchWithPagination(ctx context.Context) ([]map[string]interface{}, error) {
+	// Get base endpoint with state params
+	baseEndpoint, err := h.buildEndpointWithState(h.endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("building endpoint with state: %w", err)
+	}
+
 	switch h.pagination.Type {
 	case "page":
-		return h.fetchPageBased(ctx)
+		return h.fetchPageBased(ctx, baseEndpoint)
 	case "offset":
-		return h.fetchOffsetBased(ctx)
+		return h.fetchOffsetBased(ctx, baseEndpoint)
 	case "cursor":
-		return h.fetchCursorBased(ctx)
+		return h.fetchCursorBased(ctx, baseEndpoint)
 	default:
-		return h.fetchSingle(ctx, h.endpoint)
+		return h.fetchSingle(ctx, baseEndpoint)
 	}
 }
 
 // fetchPageBased handles page-based pagination
-func (h *HTTPPolling) fetchPageBased(ctx context.Context) ([]map[string]interface{}, error) {
+func (h *HTTPPolling) fetchPageBased(ctx context.Context, baseEndpoint string) ([]map[string]interface{}, error) {
 	var allRecords []map[string]interface{}
 	page := 1
 
@@ -685,7 +740,7 @@ func (h *HTTPPolling) fetchPageBased(ctx context.Context) ([]map[string]interfac
 
 	for page <= maxPaginationPages {
 		// Build URL with page parameter
-		pageURL, err := h.buildPaginatedURL(h.pagination.PageParam, strconv.Itoa(page))
+		pageURL, err := h.buildPaginatedURLFrom(baseEndpoint, h.pagination.PageParam, strconv.Itoa(page))
 		if err != nil {
 			return nil, err
 		}
@@ -804,7 +859,7 @@ func (h *HTTPPolling) fetchPageWithMeta(ctx context.Context, endpoint, totalPage
 }
 
 // fetchOffsetBased handles offset-based pagination
-func (h *HTTPPolling) fetchOffsetBased(ctx context.Context) ([]map[string]interface{}, error) {
+func (h *HTTPPolling) fetchOffsetBased(ctx context.Context, baseEndpoint string) ([]map[string]interface{}, error) {
 	var allRecords []map[string]interface{}
 	offset := 0
 	limit := h.pagination.Limit
@@ -824,7 +879,7 @@ func (h *HTTPPolling) fetchOffsetBased(ctx context.Context) ([]map[string]interf
 	for offset < maxPaginationPages*limit {
 		pageNum++
 		// Build URL with offset and limit parameters
-		offsetURL, err := h.buildPaginatedURLMulti(map[string]string{
+		offsetURL, err := h.buildPaginatedURLMultiFrom(baseEndpoint, map[string]string{
 			h.pagination.OffsetParam: strconv.Itoa(offset),
 			h.pagination.LimitParam:  strconv.Itoa(limit),
 		})
@@ -887,7 +942,7 @@ func (h *HTTPPolling) fetchOffsetWithMeta(ctx context.Context, endpoint, totalFi
 }
 
 // fetchCursorBased handles cursor-based pagination
-func (h *HTTPPolling) fetchCursorBased(ctx context.Context) ([]map[string]interface{}, error) {
+func (h *HTTPPolling) fetchCursorBased(ctx context.Context, baseEndpoint string) ([]map[string]interface{}, error) {
 	var allRecords []map[string]interface{}
 	cursor := ""
 	iterations := 0
@@ -903,9 +958,9 @@ func (h *HTTPPolling) fetchCursorBased(ctx context.Context) ([]map[string]interf
 		var fetchURL string
 		var err error
 		if cursor == "" {
-			fetchURL = h.endpoint
+			fetchURL = baseEndpoint
 		} else {
-			fetchURL, err = h.buildPaginatedURL(h.pagination.CursorParam, cursor)
+			fetchURL, err = h.buildPaginatedURLFrom(baseEndpoint, h.pagination.CursorParam, cursor)
 			if err != nil {
 				return nil, err
 			}
@@ -962,12 +1017,12 @@ func (h *HTTPPolling) fetchCursorWithMeta(ctx context.Context, endpoint, nextCur
 	return records, extractStringField(obj, nextCursorField), nil
 }
 
-// buildPaginatedURL adds a query parameter to the endpoint URL.
-// Returns the modified URL or an error if the endpoint URL cannot be parsed.
-func (h *HTTPPolling) buildPaginatedURL(param, value string) (string, error) {
-	parsedURL, err := url.Parse(h.endpoint)
+// buildPaginatedURLFrom adds a query parameter to the given base URL.
+// Returns the modified URL or an error if the URL cannot be parsed.
+func (h *HTTPPolling) buildPaginatedURLFrom(baseURL, param, value string) (string, error) {
+	parsedURL, err := url.Parse(baseURL)
 	if err != nil {
-		return "", fmt.Errorf("parsing endpoint URL: %w", err)
+		return "", fmt.Errorf(errMsgParsingEndpointURL, err)
 	}
 
 	q := parsedURL.Query()
@@ -977,12 +1032,12 @@ func (h *HTTPPolling) buildPaginatedURL(param, value string) (string, error) {
 	return parsedURL.String(), nil
 }
 
-// buildPaginatedURLMulti adds multiple query parameters to the endpoint URL.
-// Returns the modified URL or an error if the endpoint URL cannot be parsed.
-func (h *HTTPPolling) buildPaginatedURLMulti(params map[string]string) (string, error) {
-	parsedURL, err := url.Parse(h.endpoint)
+// buildPaginatedURLMultiFrom adds multiple query parameters to the given base URL.
+// Returns the modified URL or an error if the URL cannot be parsed.
+func (h *HTTPPolling) buildPaginatedURLMultiFrom(baseURL string, params map[string]string) (string, error) {
+	parsedURL, err := url.Parse(baseURL)
 	if err != nil {
-		return "", fmt.Errorf("parsing endpoint URL: %w", err)
+		return "", fmt.Errorf(errMsgParsingEndpointURL, err)
 	}
 
 	q := parsedURL.Query()
@@ -1010,4 +1065,98 @@ func (h *HTTPPolling) Close() error {
 		}
 	}
 	return nil
+}
+
+// SetPipelineID sets the pipeline ID for state persistence.
+// Must be called before Fetch if state persistence is enabled.
+func (h *HTTPPolling) SetPipelineID(pipelineID string) {
+	h.pipelineID = pipelineID
+}
+
+// LoadState loads the last persisted state for this pipeline.
+// Returns nil, nil if no state exists (first execution) or if persistence is disabled.
+// Returns nil, error if state loading fails (caller should decide whether to continue).
+// Should be called before Fetch to enable state-based filtering.
+func (h *HTTPPolling) LoadState() (*persistence.State, error) {
+	if h.stateStore == nil || h.pipelineID == "" {
+		return nil, nil
+	}
+
+	state, err := h.stateStore.Load(h.pipelineID)
+	if err != nil {
+		logger.Warn("failed to load state",
+			"pipeline_id", h.pipelineID,
+			"error", err.Error(),
+		)
+		// Return error instead of silently continuing
+		// Caller (pipeline executor) will log and continue gracefully
+		return nil, err
+	}
+
+	h.lastState = state
+	return state, nil
+}
+
+// GetPersistenceConfig returns the state persistence configuration.
+func (h *HTTPPolling) GetPersistenceConfig() *persistence.StatePersistenceConfig {
+	return h.persistenceConfig
+}
+
+// GetLastState returns the last loaded state.
+func (h *HTTPPolling) GetLastState() *persistence.State {
+	return h.lastState
+}
+
+// SetStateStore sets the state store to use for persistence.
+// Overrides the state store created during module initialization.
+func (h *HTTPPolling) SetStateStore(store *persistence.StateStore) {
+	h.stateStore = store
+}
+
+// buildEndpointWithState builds the endpoint URL with state-based query parameters.
+// If state persistence is enabled and state exists, adds appropriate query params.
+func (h *HTTPPolling) buildEndpointWithState(endpoint string) (string, error) {
+	if h.persistenceConfig == nil || !h.persistenceConfig.IsEnabled() || h.lastState == nil {
+		return endpoint, nil
+	}
+
+	parsedURL, err := url.Parse(endpoint)
+	if err != nil {
+		return "", fmt.Errorf(errMsgParsingEndpointURL, err)
+	}
+
+	q := parsedURL.Query()
+	modified := false
+
+	// Add timestamp query param if configured
+	if h.persistenceConfig.TimestampEnabled() && h.persistenceConfig.Timestamp.QueryParam != "" {
+		if h.lastState.LastTimestamp != nil {
+			q.Set(h.persistenceConfig.Timestamp.QueryParam, h.lastState.FormatTimestamp())
+			modified = true
+			logger.Debug("added timestamp query param for state persistence",
+				"pipeline_id", h.pipelineID,
+				"param", h.persistenceConfig.Timestamp.QueryParam,
+				"value", h.lastState.FormatTimestamp(),
+			)
+		}
+	}
+
+	// Add ID query param if configured
+	if h.persistenceConfig.IDEnabled() && h.persistenceConfig.ID.QueryParam != "" {
+		if h.lastState.LastID != nil {
+			q.Set(h.persistenceConfig.ID.QueryParam, *h.lastState.LastID)
+			modified = true
+			logger.Debug("added ID query param for state persistence",
+				"pipeline_id", h.pipelineID,
+				"param", h.persistenceConfig.ID.QueryParam,
+				"value", *h.lastState.LastID,
+			)
+		}
+	}
+
+	if modified {
+		parsedURL.RawQuery = q.Encode()
+	}
+
+	return parsedURL.String(), nil
 }

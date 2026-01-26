@@ -1,0 +1,58 @@
+# Example: ID Persistence for Polling Inputs
+#
+# This example demonstrates ID-based state persistence for APIs that support
+# cursor/ID-based pagination. The runtime tracks the maximum ID from processed
+# records and uses it to filter subsequent requests.
+#
+# How it works:
+# 1. First execution: No ID exists, fetches all records
+# 2. Runtime extracts max ID from processed records after successful execution
+# 3. Subsequent executions: Loads persisted ID and adds ?since_id=<lastId>
+# 4. API returns only records with ID greater than the last processed ID
+
+connector:
+  name: events-with-id-persistence
+  version: "1.0.0"
+  description: "Sync events with ID-based resumption"
+
+  input:
+    type: httpPolling
+    endpoint: https://api.example.com/v1/events
+    schedule: "*/2 * * * *"  # Every 2 minutes
+    headers:
+      Accept: application/json
+    authentication:
+      type: apiKey
+      header: X-API-Key
+      valueRef: "${EVENTS_API_KEY}"
+
+    # State persistence configuration
+    statePersistence:
+      id:
+        enabled: true
+        # Field path to extract ID from records (supports dot notation)
+        field: id
+        # Query parameter name for filtering (API adds ?since_id=<lastId>)
+        queryParam: since_id
+
+    # Data field for extracting records from response
+    dataField: events
+
+  filters:
+    - type: mapping
+      mappings:
+        - source: id
+          target: eventId
+        - source: type
+          target: eventType
+        - source: payload
+          target: data
+        - source: created_at
+          target: timestamp
+
+  output:
+    type: httpRequest
+    endpoint: https://analytics.example.com/api/events
+    method: POST
+    headers:
+      Content-Type: application/json

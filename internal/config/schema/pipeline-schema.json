@@ -322,6 +322,10 @@
         },
         "pagination": {
           "$ref": "#/$defs/pagination"
+        },
+        "statePersistence": {
+          "$ref": "#/$defs/statePersistence",
+          "description": "State persistence configuration for reliable resumption after restarts."
         }
       },
       "additionalProperties": true,
@@ -366,6 +370,100 @@
               "required": [
                 "schedule"
               ]
+            }
+          }
+        }
+      ]
+    },
+    "statePersistence": {
+      "type": "object",
+      "description": "State persistence configuration for polling input modules. Enables reliable resumption after restarts by persisting execution timestamp and/or last processed ID.",
+      "properties": {
+        "timestamp": {
+          "type": "object",
+          "description": "Timestamp persistence configuration. Uses pipeline execution start timestamp.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable timestamp persistence.",
+              "default": false
+            },
+            "queryParam": {
+              "type": "string",
+              "description": "Query parameter name for API filtering (e.g., 'since', 'updated_after'). If set, adds ?{queryParam}={timestamp} to requests.",
+              "examples": [
+                "since",
+                "updated_after",
+                "modified_since"
+              ],
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "id": {
+          "type": "object",
+          "description": "ID persistence configuration. Tracks maximum ID from processed records.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable ID persistence.",
+              "default": false
+            },
+            "field": {
+              "type": "string",
+              "description": "Field path to extract ID from records. Supports dot notation for nested fields. Required when enabled is true.",
+              "examples": [
+                "id",
+                "record_id",
+                "cursor",
+                "data.id"
+              ],
+              "minLength": 1
+            },
+            "queryParam": {
+              "type": "string",
+              "description": "Query parameter name for API filtering (e.g., 'after_id', 'since_id'). If set, adds ?{queryParam}={lastId} to requests.",
+              "examples": [
+                "after_id",
+                "since_id",
+                "cursor"
+              ],
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "storagePath": {
+          "type": "string",
+          "description": "Custom storage directory path. Defaults to './canectors-data/state'.",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "properties": {
+                  "enabled": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "enabled"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "required": [
+                  "field"
+                ]
+              }
             }
           }
         }

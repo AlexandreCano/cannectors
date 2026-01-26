@@ -1,0 +1,52 @@
+# Example: Timestamp Persistence for Polling Inputs
+#
+# This example demonstrates timestamp-based state persistence for reliable
+# resumption of polling after restarts. The runtime persists the execution
+# start timestamp and uses it to filter API requests on subsequent executions.
+#
+# How it works:
+# 1. First execution: No timestamp exists, fetches all records
+# 2. Runtime persists execution start timestamp after successful execution
+# 3. Subsequent executions: Loads persisted timestamp and adds ?updated_after=<timestamp>
+# 4. API returns only records modified since the last execution
+
+connector:
+  name: orders-with-timestamp-persistence
+  version: "1.0.0"
+  description: "Sync orders with timestamp-based resumption"
+
+  input:
+    type: httpPolling
+    endpoint: https://api.example.com/v1/orders
+    schedule: "*/5 * * * *"  # Every 5 minutes
+    headers:
+      Accept: application/json
+    authentication:
+      type: bearer
+      token: "${API_TOKEN}"
+
+    # State persistence configuration
+    statePersistence:
+      timestamp:
+        enabled: true
+        # Query parameter name for filtering (API adds ?updated_after=<timestamp>)
+        queryParam: updated_after
+
+  filters:
+    - type: mapping
+      mappings:
+        - source: order_id
+          target: id
+        - source: customer.email
+          target: customerEmail
+        - source: total_amount
+          target: amount
+        - source: status
+          target: orderStatus
+
+  output:
+    type: httpRequest
+    endpoint: https://warehouse.example.com/api/orders
+    method: POST
+    headers:
+      Content-Type: application/json

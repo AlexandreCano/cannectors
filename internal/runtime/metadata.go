@@ -301,12 +301,4 @@ func deepCopySlice(src []interface{}) []interface{} {
 	return dst
 }
 
-// MetadataFieldNameError represents an invalid metadata field name error.
-type MetadataFieldNameError struct {
-	FieldName string
-	Reason    string
-}
-
-func (e *MetadataFieldNameError) Error() string {
-	return "invalid metadata field name '" + e.FieldName + "': " + e.Reason
-}
+// (Unused MetadataFieldNameError type and its Error method removed as metadata field name is now fixed.)

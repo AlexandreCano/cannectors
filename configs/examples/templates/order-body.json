@@ -1,0 +1,15 @@
+{
+  "orderId": "{{record.order_id}}",
+  "customerInfo": {
+    "id": "{{record.customer_id}}",
+    "displayName": "{{record.customer_name | default: \"Guest\"}}"
+  },
+  "orderDetails": {
+    "items": "{{record.line_items}}",
+    "totalAmount": "{{record.order_total}}"
+  },
+  "metadata": {
+    "processedAt": "{{record._timestamp | default: \"unknown\"}}",
+    "correlationId": "{{record.correlation_id}}"
+  }
+}

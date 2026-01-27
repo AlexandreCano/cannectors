@@ -184,6 +184,93 @@ canectors validate ./configs/examples/15-retry-configuration.yaml
 canectors run --dry-run ./configs/examples/15-retry-configuration.yaml
 ```
 
+### Templating Examples
+
+#### 21-output-templating.json / 21-output-templating.yaml
+Dynamic output templating with record data (Story 14.6).
+
+**Features:**
+- Template syntax: `{{record.field}}` for accessing record data
+- Templated endpoints: Dynamic URL construction based on record fields
+- Templated headers: Extract header values from record data
+- External body template files: Support for JSON, XML, SOAP, and any text format
+- Nested field access: `{{record.user.profile.name}}`
+- Array index access: `{{record.items[0].name}}`
+- Default values: `{{record.field | default: "value"}}`
+
+**Template Locations:**
+- `endpoint`: Inline template in endpoint URL (e.g., `/customers/{{record.id}}/orders`)
+- `headers`: Inline templates in header values (e.g., `X-User-ID: {{record.user_id}}`)
+- `request.bodyTemplateFile`: External file with template (supports JSON, XML, SOAP, etc.)
+
+**Usage:**
+```bash
+canectors validate ./configs/examples/21-output-templating.yaml
+canectors run --dry-run ./configs/examples/21-output-templating.yaml
+```
+
+#### 22-output-templating-batch.json / 22-output-templating-batch.yaml
+Templating in batch mode (`bodyFrom: "records"`).
+
+**Features:**
+- Batch mode templating: Templates use the FIRST record's data
+- Multi-tenant scenarios: All records in batch share tenant context
+- External template file for batch payloads
+
+**Use Case:** Multi-tenant API where all records belong to the same tenant, tenant ID from first record routes the entire batch.
+
+**Usage:**
+```bash
+canectors validate ./configs/examples/22-output-templating-batch.yaml
+canectors run --dry-run ./configs/examples/22-output-templating-batch.yaml
+```
+
+#### 23-output-templating-soap.json / 23-output-templating-soap.yaml
+SOAP/XML templating for legacy API integration.
+
+**Features:**
+- XML/SOAP body templates with `{{record.field}}` syntax
+- Custom Content-Type header for XML (`text/xml`)
+- Template file can be any format (JSON, XML, SOAP, plain text)
+
+**Use Case:** Integration with legacy SOAP web services that require XML payloads with dynamic data.
+
+**Template Example:**
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <CreateUser>
+      <userId>{{record.user_id}}</userId>
+      <userName>{{record.name}}</userName>
+    </CreateUser>
+  </soap:Body>
+</soap:Envelope>
+```
+
+**Usage:**
+```bash
+canectors validate ./configs/examples/23-output-templating-soap.yaml
+canectors run --dry-run ./configs/examples/23-output-templating-soap.yaml
+```
+
+#### 24-enrichment-templating.json / 24-enrichment-templating.yaml
+Templating in enrichment filters for dynamic API lookups.
+
+**Features:**
+- Templated endpoints in enrichment filter
+- Templated headers for authentication/correlation
+- Templated request bodies for POST/PUT enrichment calls
+- Multiple enrichment strategies with different template patterns
+
+**Use Case:** Enrich order records with customer data by calling CRM API with customer ID from each record.
+
+**Usage:**
+```bash
+canectors validate ./configs/examples/24-enrichment-templating.yaml
+canectors run --dry-run ./configs/examples/24-enrichment-templating.yaml
+```
+
 ## Using the Examples
 
 ### Validate an Example
@@ -268,6 +355,50 @@ Set these before running:
 export API_TOKEN="your-token-here"
 export API_KEY="your-api-key-here"
 # ... etc
+```
+
+### Output Templating Examples (Story 14.6)
+
+#### 21-output-templating.yaml
+Output templating with record data for dynamic endpoints, headers, and bodies.
+
+**Features:**
+- Templated endpoint URLs (`/customers/{{record.customer_id}}/orders`)
+- Templated HTTP headers (`X-Correlation-ID: {{record.correlation_id}}`)
+- Custom body templates with field mapping
+- Default values for missing fields (`{{record.field | default: "value"}}`)
+- Single record mode (`bodyFrom: "record"`)
+
+**Template Syntax:**
+- `{{record.field}}` - Access field from record
+- `{{record.nested.field}}` - Access nested fields using dot notation
+- `{{record.array[0].field}}` - Access array elements by index
+- `{{record.field | default: "value"}}` - Use default value if field is missing/null
+
+**Usage:**
+```bash
+canectors validate ./configs/examples/21-output-templating.yaml
+canectors run --dry-run ./configs/examples/21-output-templating.yaml
+```
+
+#### 22-output-templating-batch.yaml
+Output templating in batch mode for multi-tenant or grouped data scenarios.
+
+**Features:**
+- Batch mode with templated endpoint (uses first record for template evaluation)
+- Tenant-based routing (`/tenants/{{record.tenant_id}}/events/bulk`)
+- Body template applied to each record in the batch
+- Suitable for multi-tenant APIs
+
+**Batch Mode Behavior:**
+- In batch mode (`bodyFrom: "records"`), endpoint and header templates use the **first record**
+- All records should share common metadata (tenant ID, batch ID) for batch mode templating
+- Each record in the batch array is individually templated using `bodyTemplate`
+
+**Usage:**
+```bash
+canectors validate ./configs/examples/22-output-templating-batch.yaml
+canectors run --dry-run ./configs/examples/22-output-templating-batch.yaml
 ```
 
 ## Notes

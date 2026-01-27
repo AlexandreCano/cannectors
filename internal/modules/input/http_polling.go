@@ -15,6 +15,7 @@ import (
 
 	"github.com/canectors/runtime/internal/auth"
 	"github.com/canectors/runtime/internal/errhandling"
+	"github.com/canectors/runtime/internal/httpconfig"
 	"github.com/canectors/runtime/internal/logger"
 	"github.com/canectors/runtime/internal/persistence"
 	"github.com/canectors/runtime/pkg/connector"
@@ -166,50 +167,28 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 
 // extractEndpoint extracts and validates the endpoint (required).
 func extractEndpoint(config *connector.ModuleConfig) (string, error) {
-	endpoint, ok := config.Config["endpoint"].(string)
-	if !ok || endpoint == "" {
+	base := httpconfig.ExtractBaseConfig(config)
+	if base.Endpoint == "" {
 		return "", ErrMissingEndpoint
 	}
-	return endpoint, nil
+	return base.Endpoint, nil
 }
 
 // extractTimeout extracts timeout from config (timeoutMs or legacy timeout in seconds).
 func extractTimeout(config *connector.ModuleConfig) time.Duration {
-	if ms, ok := config.Config["timeoutMs"]; ok {
-		switch v := ms.(type) {
-		case float64:
-			if v > 0 {
-				return time.Duration(v) * time.Millisecond
-			}
-		case int:
-			if v > 0 {
-				return time.Duration(v) * time.Millisecond
-			}
-		}
-	}
-	if timeoutVal, ok := config.Config["timeout"].(float64); ok && timeoutVal > 0 {
-		return time.Duration(timeoutVal * float64(time.Second))
-	}
-	return defaultTimeout
+	base := httpconfig.ExtractBaseConfig(config)
+	return httpconfig.GetTimeoutDuration(base.TimeoutMs, defaultTimeout)
 }
 
 // extractHeaders extracts headers from config.
 func extractHeaders(config *connector.ModuleConfig) map[string]string {
-	headers := make(map[string]string)
-	if headersVal, ok := config.Config["headers"].(map[string]interface{}); ok {
-		for k, v := range headersVal {
-			if strVal, ok := v.(string); ok {
-				headers[k] = strVal
-			}
-		}
-	}
-	return headers
+	return httpconfig.ExtractStringMap(config.Config, "headers")
 }
 
 // extractDataField extracts dataField from config.
 func extractDataField(config *connector.ModuleConfig) string {
-	dataField, _ := config.Config["dataField"].(string)
-	return dataField
+	dec := httpconfig.ExtractDataExtractionConfig(config.Config)
+	return dec.DataField
 }
 
 // extractPagination extracts pagination config from config.

@@ -1,0 +1,6 @@
+{
+  "batchId": "{{record.batch_id}}",
+  "tenantId": "{{record.tenant_id}}",
+  "processedAt": "{{record._timestamp | default: \"unknown\"}}",
+  "eventCount": "{{record._batch_size | default: \"unknown\"}}"
+}

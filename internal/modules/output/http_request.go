@@ -1317,24 +1317,23 @@ func validateHeaderValue(value string) error {
 }
 
 // tryAddValidHeader validates header name and value per RFC 7230, logs and skips if invalid,
-// adds to headers and returns true otherwise.
-func tryAddValidHeader(headers map[string]string, name, value string) bool {
+// adds to headers otherwise.
+func tryAddValidHeader(headers map[string]string, name, value string) {
 	if err := validateHeaderName(name); err != nil {
 		logger.Warn(msgInvalidHeaderNameSkipping,
 			slog.String("header", name),
 			slog.String("error", err.Error()),
 		)
-		return false
+		return
 	}
 	if err := validateHeaderValue(value); err != nil {
 		logger.Warn(msgInvalidHeaderValueSkipping,
 			slog.String("header", name),
 			slog.String("error", err.Error()),
 		)
-		return false
+		return
 	}
 	headers[name] = value
-	return true
 }
 
 // extractHeadersFromRecord extracts header values from record data.

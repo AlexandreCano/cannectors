@@ -210,8 +210,8 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 
 	keyRequired := method == http.MethodGet || config.BodyTemplateFile == ""
 	if keyRequired {
-		if err := validateKeyConfig(config.Key); err != nil {
-			return nil, err
+		if keyErr := validateKeyConfig(config.Key); keyErr != nil {
+			return nil, keyErr
 		}
 	}
 

@@ -549,6 +549,7 @@ func deepCopyMetadata(value interface{}) interface{} {
 		return v
 	}
 }
+
 // getSourceValue retrieves the source value for a mapping, handling missing field cases.
 func (m *MappingModule) getSourceValue(record map[string]interface{}, mapping MappingConfig, recordIdx, mappingIdx int) (interface{}, bool, error) {
 	value, found := getNestedValue(record, mapping.Source)

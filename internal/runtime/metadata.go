@@ -300,5 +300,3 @@ func deepCopySlice(src []interface{}) []interface{} {
 	}
 	return dst
 }
-
-// (Unused MetadataFieldNameError type and its Error method removed as metadata field name is now fixed.)

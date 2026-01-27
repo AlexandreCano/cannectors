@@ -1,0 +1,46 @@
+# Example: SOAP/XML Templating
+#
+# This configuration demonstrates how to use templating with SOAP/XML APIs.
+# The template file can contain any format - JSON, XML, SOAP, plain text, etc.
+#
+# Use Case: Integration with legacy SOAP web services
+
+schemaVersion: "1.1.0"
+
+connector:
+  name: soap-templating-demo
+  version: "1.0.0"
+  description: "Demonstrates SOAP/XML templating for legacy API integration"
+
+  input:
+    type: webhook
+    path: /webhooks/users
+
+  filters:
+    - type: mapping
+      mappings:
+        - source: "userId"
+          target: "user_id"
+        - source: "firstName"
+          target: "first_name"
+        - source: "lastName"
+          target: "last_name"
+        - source: "email"
+          target: "email"
+        - source: "department"
+          target: "department"
+
+  output:
+    type: httpRequest
+    endpoint: "https://legacy-erp.example.com/soap/UserService"
+    method: POST
+
+    # SOAP requires specific Content-Type
+    headers:
+      Content-Type: "application/soap+xml; charset=utf-8"
+      SOAPAction: "http://example.com/UserService/CreateUser"
+
+    request:
+      bodyFrom: "record"
+      # SOAP/XML template file
+      bodyTemplateFile: "./templates/create-user.xml"

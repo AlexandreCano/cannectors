@@ -1,0 +1,6 @@
+{
+  "lookupType": "customer",
+  "customerId": "{{record.customer_id}}",
+  "includeDetails": true,
+  "requestedFields": ["address", "preferences", "creditLimit"]
+}

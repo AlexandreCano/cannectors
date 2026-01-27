@@ -1,0 +1,61 @@
+# Example: Output Templating with Record Data
+#
+# This configuration demonstrates how to use templating in output module
+# configurations to dynamically construct endpoints, headers, and request
+# bodies using data from records.
+#
+# Template Syntax:
+#   - {{record.field}} - Access a field from the record
+#   - {{record.nested.field}} - Access nested fields using dot notation
+#   - {{record.array[0].field}} - Access array elements by index
+#   - {{record.field | default: "value"}} - Use default value if field is missing
+#
+# Templating is supported in:
+#   - endpoint: URL with dynamic path segments (inline)
+#   - headers: HTTP header values (inline)
+#   - request.bodyTemplateFile: External file for body template (JSON, XML, SOAP, etc.)
+
+schemaVersion: "1.1.0"
+
+connector:
+  name: output-templating-demo
+  version: "1.0.0"
+  description: "Demonstrates output templating features"
+
+  input:
+    type: webhook
+    path: /webhooks/orders
+
+  filters:
+    - type: mapping
+      mappings:
+        - source: "orderId"
+          target: "order_id"
+        - source: "customer.id"
+          target: "customer_id"
+        - source: "customer.name"
+          target: "customer_name"
+        - source: "items"
+          target: "line_items"
+        - source: "total"
+          target: "order_total"
+        - source: "metadata.correlation_id"
+          target: "correlation_id"
+
+  output:
+    type: httpRequest
+    # Templated endpoint - customer_id is used to route to customer-specific API
+    endpoint: "https://api.example.com/customers/{{record.customer_id}}/orders"
+    method: POST
+
+    # Templated headers - correlation ID and customer name from record
+    headers:
+      Content-Type: "application/json"
+      X-Correlation-ID: "{{record.correlation_id}}"
+      X-Customer-Name: "{{record.customer_name}}"
+      X-Request-Source: "canectors-pipeline"  # Static header value
+
+    request:
+      bodyFrom: "record"  # One request per record
+      # External template file - allows any format (JSON, XML, etc.)
+      bodyTemplateFile: "./templates/order-body.json"

@@ -579,11 +579,21 @@
         },
         "endpoint": {
           "type": "string",
-          "description": "HTTP endpoint URL for enrichment filter. May contain {paramName} placeholder for path parameters."
+          "description": "HTTP endpoint URL for enrichment filter. Supports {{record.field}} template variables and {paramName} placeholder for path parameters."
+        },
+        "method": {
+          "type": "string",
+          "description": "HTTP method for enrichment requests. GET (default), POST, or PUT.",
+          "enum": ["GET", "POST", "PUT"],
+          "default": "GET"
         },
         "key": {
           "$ref": "#/$defs/enrichmentKey",
-          "description": "Key configuration for enrichment filter."
+          "description": "Key configuration for enrichment filter. Required for GET, optional for POST/PUT with bodyTemplateFile."
+        },
+        "bodyTemplateFile": {
+          "type": "string",
+          "description": "Path to external template file for request body (POST/PUT). Supports {{record.field}} placeholders."
         },
         "cache": {
           "$ref": "#/$defs/enrichmentCache",
@@ -609,7 +619,7 @@
         },
         "headers": {
           "$ref": "#/$defs/httpHeaders",
-          "description": "Custom headers for enrichment HTTP requests."
+          "description": "Custom headers for enrichment HTTP requests. Supports {{record.field}} template variables."
         }
       },
       "additionalProperties": true,
@@ -798,7 +808,7 @@
     },
     "outputModule": {
       "type": "object",
-      "description": "Output module configuration.",
+      "description": "Output module configuration. Supports templating in endpoint, headers, and body using {{record.field}} syntax for dynamic request construction based on record data.",
       "required": [
         "type"
       ],
@@ -812,19 +822,22 @@
           "type": "string"
         },
         "endpoint": {
-          "type": "string"
+          "type": "string",
+          "description": "API endpoint URL. Supports templating with {{record.field}} syntax for dynamic URLs (e.g., '/api/users/{{record.user_id}}/orders'). Template values are URL-encoded automatically."
         },
         "method": {
           "$ref": "#/$defs/httpMethod"
         },
         "headers": {
-          "$ref": "#/$defs/httpHeaders"
+          "$ref": "#/$defs/httpHeaders",
+          "description": "HTTP headers. Header values support templating with {{record.field}} syntax for dynamic values per record."
         },
         "authentication": {
           "$ref": "#/$defs/authentication"
         },
         "request": {
-          "$ref": "#/$defs/httpRequestConfig"
+          "$ref": "#/$defs/httpRequestConfig",
+          "description": "HTTP request configuration including body source, body template file, and path parameters."
         },
         "outputs": {
           "type": "array",
@@ -882,12 +895,14 @@
     },
     "httpRequestConfig": {
       "type": "object",
+      "description": "HTTP request configuration. Supports templating in endpoint, headers, and body using {{record.field}} syntax.",
       "properties": {
         "method": {
           "$ref": "#/$defs/httpMethod"
         },
         "path": {
-          "type": "string"
+          "type": "string",
+          "description": "URL path. Supports templating with {{record.field}} syntax for dynamic path segments."
         },
         "pathParams": {
           "type": "object",
@@ -902,7 +917,14 @@
           }
         },
         "bodyFrom": {
-          "type": "string"
+          "type": "string",
+          "description": "Body source: 'record' (single record per request) or 'records' (batch array). Default: 'records'.",
+          "enum": ["record", "records"],
+          "default": "records"
+        },
+        "bodyTemplateFile": {
+          "type": "string",
+          "description": "Path to external template file for request body construction. The file can contain any format (JSON, XML, SOAP, etc.) with {{record.field}} placeholders that are replaced with record data. If not specified, the record(s) are sent directly as JSON."
         },
         "headers": {
           "$ref": "#/$defs/httpHeaders"

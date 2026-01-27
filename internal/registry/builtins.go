@@ -101,15 +101,15 @@ func registerBuiltinFilterModules() {
 		return module, nil
 	})
 
-	// enrichment - Dynamic enrichment filter module with HTTP requests and caching
-	RegisterFilter("enrichment", func(cfg connector.ModuleConfig, index int) (filter.Module, error) {
-		enrichmentConfig, err := filter.ParseEnrichmentConfig(cfg.Config, cfg.Authentication)
+	// http_call - HTTP call filter module with HTTP requests and caching
+	RegisterFilter("http_call", func(cfg connector.ModuleConfig, index int) (filter.Module, error) {
+		httpCallConfig, err := filter.ParseHTTPCallConfig(cfg.Config, cfg.Authentication)
 		if err != nil {
-			return nil, fmt.Errorf("invalid enrichment config at index %d: %w", index, err)
+			return nil, fmt.Errorf("invalid http_call config at index %d: %w", index, err)
 		}
-		module, err := filter.NewEnrichmentFromConfig(enrichmentConfig)
+		module, err := filter.NewHTTPCallFromConfig(httpCallConfig)
 		if err != nil {
-			return nil, fmt.Errorf("invalid enrichment config at index %d: %w", index, err)
+			return nil, fmt.Errorf("invalid http_call config at index %d: %w", index, err)
 		}
 		return module, nil
 	})

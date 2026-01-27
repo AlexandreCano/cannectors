@@ -1,0 +1,58 @@
+# Example: Enrichment Filter with Templating
+#
+# This configuration demonstrates how to use templating in the enrichment filter.
+# The template supports {{record.field}} syntax for dynamic endpoint, headers, and body.
+#
+# Use Case: Enrich order records with customer data from a CRM API
+
+schemaVersion: "1.1.0"
+
+connector:
+  name: enrichment-templating-demo
+  version: "1.0.0"
+  description: "Demonstrates templating in enrichment filter"
+
+  input:
+    type: webhook
+    path: /webhooks/orders
+
+  filters:
+    # Example 1: GET request with templated endpoint
+    - type: enrichment
+      endpoint: "https://crm.example.com/api/v1/customers/{{record.customer_id}}"
+      # method: GET is default, key not needed when using endpoint templating
+      mergeStrategy: merge
+      dataField: "data"
+      headers:
+        X-Request-ID: "{{record.order_id}}"
+        X-Source: "order-enrichment"
+      authentication:
+        type: bearer
+        token: "${CRM_API_TOKEN}"
+      cache:
+        maxSize: 1000
+        defaultTTL: 300
+
+    # Example 2: POST request with body template file
+    - type: enrichment
+      endpoint: "https://lookup.example.com/api/customers"
+      method: POST
+      bodyTemplateFile: "./templates/enrichment-lookup.json"
+      mergeStrategy: append
+      dataField: "result"
+      headers:
+        Content-Type: "application/json"
+        X-Correlation-ID: "{{record.correlation_id | default: \"unknown\"}}"
+      authentication:
+        type: api-key
+        key: "${LOOKUP_API_KEY}"
+        header: "X-API-Key"
+
+  output:
+    type: httpRequest
+    endpoint: "https://warehouse.example.com/api/orders"
+    method: POST
+    headers:
+      Content-Type: "application/json"
+    request:
+      bodyFrom: "record"

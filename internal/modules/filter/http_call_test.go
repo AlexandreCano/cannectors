@@ -12,9 +12,9 @@ import (
 	"github.com/canectors/runtime/pkg/connector"
 )
 
-func TestNewEnrichmentFromConfig(t *testing.T) {
+func TestNewHTTPCallFromConfig(t *testing.T) {
 	t.Run("creates module with valid config", func(t *testing.T) {
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: "https://api.example.com/customers/{id}",
 			Key: KeyConfig{
 				Field:     "customerId",
@@ -23,7 +23,7 @@ func TestNewEnrichmentFromConfig(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
@@ -48,7 +48,7 @@ func TestNewEnrichmentFromConfig(t *testing.T) {
 	})
 
 	t.Run("returns error for missing endpoint", func(t *testing.T) {
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Key: KeyConfig{
 				Field:     "customerId",
 				ParamType: "path",
@@ -56,14 +56,14 @@ func TestNewEnrichmentFromConfig(t *testing.T) {
 			},
 		}
 
-		_, err := NewEnrichmentFromConfig(config)
+		_, err := NewHTTPCallFromConfig(config)
 		if err == nil {
 			t.Error("expected error for missing endpoint")
 		}
 	})
 
 	t.Run("returns error for missing key field", func(t *testing.T) {
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: "https://api.example.com/customers",
 			Key: KeyConfig{
 				ParamType: "query",
@@ -71,14 +71,14 @@ func TestNewEnrichmentFromConfig(t *testing.T) {
 			},
 		}
 
-		_, err := NewEnrichmentFromConfig(config)
+		_, err := NewHTTPCallFromConfig(config)
 		if err == nil {
 			t.Error("expected error for missing key field")
 		}
 	})
 
 	t.Run("returns error for invalid key paramType", func(t *testing.T) {
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: "https://api.example.com/customers",
 			Key: KeyConfig{
 				Field:     "customerId",
@@ -87,7 +87,7 @@ func TestNewEnrichmentFromConfig(t *testing.T) {
 			},
 		}
 
-		_, err := NewEnrichmentFromConfig(config)
+		_, err := NewHTTPCallFromConfig(config)
 		if err == nil {
 			t.Error("expected error for invalid key paramType")
 		}
@@ -95,7 +95,7 @@ func TestNewEnrichmentFromConfig(t *testing.T) {
 
 	t.Run("accepts valid paramTypes", func(t *testing.T) {
 		for _, paramType := range []string{"query", "path", "header"} {
-			config := EnrichmentConfig{
+			config := HTTPCallConfig{
 				Endpoint: "https://api.example.com/customers",
 				Key: KeyConfig{
 					Field:     "customerId",
@@ -104,7 +104,7 @@ func TestNewEnrichmentFromConfig(t *testing.T) {
 				},
 			}
 
-			module, err := NewEnrichmentFromConfig(config)
+			module, err := NewHTTPCallFromConfig(config)
 			if err != nil {
 				t.Errorf("expected no error for paramType %s, got %v", paramType, err)
 			}
@@ -115,7 +115,7 @@ func TestNewEnrichmentFromConfig(t *testing.T) {
 	})
 
 	t.Run("uses custom cache configuration", func(t *testing.T) {
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: "https://api.example.com/customers",
 			Key: KeyConfig{
 				Field:     "customerId",
@@ -128,7 +128,7 @@ func TestNewEnrichmentFromConfig(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
@@ -138,7 +138,7 @@ func TestNewEnrichmentFromConfig(t *testing.T) {
 	})
 
 	t.Run("creates module with authentication", func(t *testing.T) {
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: "https://api.example.com/customers",
 			Key: KeyConfig{
 				Field:     "customerId",
@@ -151,7 +151,7 @@ func TestNewEnrichmentFromConfig(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
@@ -161,7 +161,7 @@ func TestNewEnrichmentFromConfig(t *testing.T) {
 	})
 }
 
-func TestParseEnrichmentConfig(t *testing.T) {
+func TestParseHTTPCallConfig(t *testing.T) {
 	t.Run("parses complete config", func(t *testing.T) {
 		raw := map[string]interface{}{
 			"endpoint": "https://api.example.com/customers/{id}",
@@ -183,7 +183,7 @@ func TestParseEnrichmentConfig(t *testing.T) {
 			},
 		}
 
-		config, err := ParseEnrichmentConfig(raw, nil)
+		config, err := ParseHTTPCallConfig(raw, nil)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
@@ -229,7 +229,7 @@ func TestParseEnrichmentConfig(t *testing.T) {
 			},
 		}
 
-		config, err := ParseEnrichmentConfig(raw, authConfig)
+		config, err := ParseHTTPCallConfig(raw, authConfig)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
@@ -268,7 +268,7 @@ func TestParseEnrichmentConfig(t *testing.T) {
 			},
 		}
 
-		config, err := ParseEnrichmentConfig(raw, authConfig)
+		config, err := ParseHTTPCallConfig(raw, authConfig)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
@@ -286,7 +286,7 @@ func TestParseEnrichmentConfig(t *testing.T) {
 	})
 }
 
-func TestEnrichmentModule_Process(t *testing.T) {
+func TestHTTPCallModule_Process(t *testing.T) {
 	t.Run("enriches records with API data", func(t *testing.T) {
 		// Create mock server
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -303,7 +303,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "customerId",
@@ -312,7 +312,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -359,7 +359,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -368,7 +368,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -417,7 +417,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL + "/customers/{id}/details",
 			Key: KeyConfig{
 				Field:     "customerId",
@@ -426,7 +426,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -458,7 +458,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "customerId",
@@ -467,7 +467,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -497,7 +497,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "customer.id",
@@ -506,7 +506,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -546,7 +546,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -556,7 +556,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 			DataField: "data",
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -592,7 +592,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -602,7 +602,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 			MergeStrategy: "replace",
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -642,7 +642,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -652,7 +652,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 			MergeStrategy: "append",
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -666,10 +666,10 @@ func TestEnrichmentModule_Process(t *testing.T) {
 			t.Fatalf("expected no error, got %v", err)
 		}
 
-		// Enrichment data should be under _enrichment key
-		enrichment, ok := result[0]["_enrichment"].(map[string]interface{})
+		// Enrichment data should be under _response key
+		enrichment, ok := result[0]["_response"].(map[string]interface{})
 		if !ok {
-			t.Fatal("expected _enrichment to be a map")
+			t.Fatal("expected _response to be a map")
 		}
 		if enrichment["enrichedData"] != "value" {
 			t.Errorf("expected enrichedData 'value', got %v", enrichment["enrichedData"])
@@ -681,7 +681,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 	})
 
 	t.Run("handles nil records", func(t *testing.T) {
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: "https://api.example.com",
 			Key: KeyConfig{
 				Field:     "id",
@@ -690,7 +690,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -711,7 +711,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -720,7 +720,7 @@ func TestEnrichmentModule_Process(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -739,14 +739,14 @@ func TestEnrichmentModule_Process(t *testing.T) {
 	})
 }
 
-func TestEnrichmentModule_ErrorHandling(t *testing.T) {
+func TestHTTPCallModule_ErrorHandling(t *testing.T) {
 	t.Run("onError fail: stops on HTTP error", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -756,7 +756,7 @@ func TestEnrichmentModule_ErrorHandling(t *testing.T) {
 			OnError: "fail",
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -791,7 +791,7 @@ func TestEnrichmentModule_ErrorHandling(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -801,7 +801,7 @@ func TestEnrichmentModule_ErrorHandling(t *testing.T) {
 			OnError: "skip",
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -828,7 +828,7 @@ func TestEnrichmentModule_ErrorHandling(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -838,7 +838,7 @@ func TestEnrichmentModule_ErrorHandling(t *testing.T) {
 			OnError: "log",
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -871,7 +871,7 @@ func TestEnrichmentModule_ErrorHandling(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "customerId",
@@ -881,7 +881,7 @@ func TestEnrichmentModule_ErrorHandling(t *testing.T) {
 			OnError: "fail",
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -895,17 +895,17 @@ func TestEnrichmentModule_ErrorHandling(t *testing.T) {
 			t.Error("expected error for missing key field")
 		}
 
-		enrichErr, ok := err.(*EnrichmentError)
+		enrichErr, ok := err.(*HTTPCallError)
 		if !ok {
-			t.Fatalf("expected EnrichmentError, got %T", err)
+			t.Fatalf("expected HTTPCallError, got %T", err)
 		}
-		if enrichErr.Code != ErrCodeEnrichmentKeyExtract {
-			t.Errorf("expected error code %s, got %s", ErrCodeEnrichmentKeyExtract, enrichErr.Code)
+		if enrichErr.Code != ErrCodeHTTPCallKeyExtract {
+			t.Errorf("expected error code %s, got %s", ErrCodeHTTPCallKeyExtract, enrichErr.Code)
 		}
 	})
 
 	t.Run("handles null key value", func(t *testing.T) {
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: "https://api.example.com",
 			Key: KeyConfig{
 				Field:     "id",
@@ -915,7 +915,7 @@ func TestEnrichmentModule_ErrorHandling(t *testing.T) {
 			OnError: "fail",
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -937,7 +937,7 @@ func TestEnrichmentModule_ErrorHandling(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -947,7 +947,7 @@ func TestEnrichmentModule_ErrorHandling(t *testing.T) {
 			OnError: "fail",
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -961,17 +961,17 @@ func TestEnrichmentModule_ErrorHandling(t *testing.T) {
 			t.Error("expected error for invalid JSON")
 		}
 
-		enrichErr, ok := err.(*EnrichmentError)
+		enrichErr, ok := err.(*HTTPCallError)
 		if !ok {
-			t.Fatalf("expected EnrichmentError, got %T", err)
+			t.Fatalf("expected HTTPCallError, got %T", err)
 		}
-		if enrichErr.Code != ErrCodeEnrichmentJSONParse {
-			t.Errorf("expected error code %s, got %s", ErrCodeEnrichmentJSONParse, enrichErr.Code)
+		if enrichErr.Code != ErrCodeHTTPCallJSONParse {
+			t.Errorf("expected error code %s, got %s", ErrCodeHTTPCallJSONParse, enrichErr.Code)
 		}
 	})
 }
 
-func TestEnrichmentModule_CacheIsolation(t *testing.T) {
+func TestHTTPCallModule_CacheIsolation(t *testing.T) {
 	t.Run("separate modules have isolated caches", func(t *testing.T) {
 		var module1Requests, module2Requests int32
 
@@ -995,7 +995,7 @@ func TestEnrichmentModule_CacheIsolation(t *testing.T) {
 		}))
 		defer server2.Close()
 
-		config1 := EnrichmentConfig{
+		config1 := HTTPCallConfig{
 			Endpoint: server1.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -1003,7 +1003,7 @@ func TestEnrichmentModule_CacheIsolation(t *testing.T) {
 				ParamName: "id",
 			},
 		}
-		config2 := EnrichmentConfig{
+		config2 := HTTPCallConfig{
 			Endpoint: server2.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -1012,8 +1012,8 @@ func TestEnrichmentModule_CacheIsolation(t *testing.T) {
 			},
 		}
 
-		module1, _ := NewEnrichmentFromConfig(config1)
-		module2, _ := NewEnrichmentFromConfig(config2)
+		module1, _ := NewHTTPCallFromConfig(config1)
+		module2, _ := NewHTTPCallFromConfig(config2)
 
 		records := []map[string]interface{}{
 			{"id": "same-key"},
@@ -1040,7 +1040,7 @@ func TestEnrichmentModule_CacheIsolation(t *testing.T) {
 	})
 }
 
-func TestEnrichmentModule_DeepMerge(t *testing.T) {
+func TestHTTPCallModule_DeepMerge(t *testing.T) {
 	t.Run("deep merges nested objects", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			response := map[string]interface{}{
@@ -1057,7 +1057,7 @@ func TestEnrichmentModule_DeepMerge(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -1067,7 +1067,7 @@ func TestEnrichmentModule_DeepMerge(t *testing.T) {
 			MergeStrategy: "merge",
 		}
 
-		module, _ := NewEnrichmentFromConfig(config)
+		module, _ := NewHTTPCallFromConfig(config)
 
 		records := []map[string]interface{}{
 			{
@@ -1109,7 +1109,7 @@ func TestEnrichmentModule_DeepMerge(t *testing.T) {
 	})
 }
 
-func TestEnrichmentModule_NumericKeyValues(t *testing.T) {
+func TestHTTPCallModule_NumericKeyValues(t *testing.T) {
 	t.Run("handles numeric key values", func(t *testing.T) {
 		var receivedID string
 
@@ -1123,7 +1123,7 @@ func TestEnrichmentModule_NumericKeyValues(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -1132,7 +1132,7 @@ func TestEnrichmentModule_NumericKeyValues(t *testing.T) {
 			},
 		}
 
-		module, _ := NewEnrichmentFromConfig(config)
+		module, _ := NewHTTPCallFromConfig(config)
 
 		// Test with float64 (how JSON numbers are decoded)
 		records := []map[string]interface{}{
@@ -1151,7 +1151,7 @@ func TestEnrichmentModule_NumericKeyValues(t *testing.T) {
 	})
 }
 
-func TestEnrichmentModule_ClearCache(t *testing.T) {
+func TestHTTPCallModule_ClearCache(t *testing.T) {
 	t.Run("ClearCache removes all entries", func(t *testing.T) {
 		var requestCount int32
 
@@ -1165,7 +1165,7 @@ func TestEnrichmentModule_ClearCache(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -1174,7 +1174,7 @@ func TestEnrichmentModule_ClearCache(t *testing.T) {
 			},
 		}
 
-		module, _ := NewEnrichmentFromConfig(config)
+		module, _ := NewHTTPCallFromConfig(config)
 
 		records := []map[string]interface{}{{"id": "123"}}
 
@@ -1199,7 +1199,7 @@ func TestEnrichmentModule_ClearCache(t *testing.T) {
 	})
 }
 
-func TestEnrichmentModule_Authentication(t *testing.T) {
+func TestHTTPCallModule_Authentication(t *testing.T) {
 	t.Run("API key authentication in query parameter", func(t *testing.T) {
 		var receivedAPIKey string
 
@@ -1213,7 +1213,7 @@ func TestEnrichmentModule_Authentication(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -1230,7 +1230,7 @@ func TestEnrichmentModule_Authentication(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -1259,7 +1259,7 @@ func TestEnrichmentModule_Authentication(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -1274,7 +1274,7 @@ func TestEnrichmentModule_Authentication(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -1305,7 +1305,7 @@ func TestEnrichmentModule_Authentication(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -1321,7 +1321,7 @@ func TestEnrichmentModule_Authentication(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -1378,7 +1378,7 @@ func TestEnrichmentModule_Authentication(t *testing.T) {
 		}))
 		defer apiServer.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: apiServer.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -1395,7 +1395,7 @@ func TestEnrichmentModule_Authentication(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -1413,7 +1413,7 @@ func TestEnrichmentModule_Authentication(t *testing.T) {
 	})
 }
 
-func TestEnrichmentModule_CacheTTLExpiration(t *testing.T) {
+func TestHTTPCallModule_CacheTTLExpiration(t *testing.T) {
 	t.Run("cache entries expire according to TTL", func(t *testing.T) {
 		var requestCount int32
 
@@ -1427,7 +1427,7 @@ func TestEnrichmentModule_CacheTTLExpiration(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -1440,7 +1440,7 @@ func TestEnrichmentModule_CacheTTLExpiration(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -1482,7 +1482,7 @@ func TestEnrichmentModule_CacheTTLExpiration(t *testing.T) {
 	})
 }
 
-func TestEnrichmentModule_CacheSizeLimitAndLRU(t *testing.T) {
+func TestHTTPCallModule_CacheSizeLimitAndLRU(t *testing.T) {
 	t.Run("cache respects maxSize and evicts LRU entries", func(t *testing.T) {
 		var requestCount int32
 
@@ -1497,7 +1497,7 @@ func TestEnrichmentModule_CacheSizeLimitAndLRU(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -1510,7 +1510,7 @@ func TestEnrichmentModule_CacheSizeLimitAndLRU(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -1562,7 +1562,7 @@ func TestEnrichmentModule_CacheSizeLimitAndLRU(t *testing.T) {
 	})
 }
 
-func TestEnrichmentModule_CacheKeyCollision(t *testing.T) {
+func TestHTTPCallModule_CacheKeyCollision(t *testing.T) {
 	t.Run("cache key delimiter prevents collisions", func(t *testing.T) {
 		// Test that cache keys with "::" delimiter prevent collisions
 		// when keyValue contains ":" or endpoint contains ":"
@@ -1580,7 +1580,7 @@ func TestEnrichmentModule_CacheKeyCollision(t *testing.T) {
 		defer server.Close()
 
 		// Create module with endpoint that contains ":"
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL, // Contains "http://" which has ":"
 			Key: KeyConfig{
 				Field:     "id",
@@ -1593,7 +1593,7 @@ func TestEnrichmentModule_CacheKeyCollision(t *testing.T) {
 			},
 		}
 
-		module1, err := NewEnrichmentFromConfig(config)
+		module1, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -1645,7 +1645,7 @@ func TestEnrichmentModule_CacheKeyCollision(t *testing.T) {
 	})
 }
 
-func TestEnrichmentModule_ConfigurableCacheKey(t *testing.T) {
+func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 	t.Run("static cache key", func(t *testing.T) {
 		var requestCount int32
 
@@ -1659,7 +1659,7 @@ func TestEnrichmentModule_ConfigurableCacheKey(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -1673,7 +1673,7 @@ func TestEnrichmentModule_ConfigurableCacheKey(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -1715,7 +1715,7 @@ func TestEnrichmentModule_ConfigurableCacheKey(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -1729,7 +1729,7 @@ func TestEnrichmentModule_ConfigurableCacheKey(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -1788,7 +1788,7 @@ func TestEnrichmentModule_ConfigurableCacheKey(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -1802,7 +1802,7 @@ func TestEnrichmentModule_ConfigurableCacheKey(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}
@@ -1861,7 +1861,7 @@ func TestEnrichmentModule_ConfigurableCacheKey(t *testing.T) {
 		}))
 		defer server.Close()
 
-		config := EnrichmentConfig{
+		config := HTTPCallConfig{
 			Endpoint: server.URL,
 			Key: KeyConfig{
 				Field:     "id",
@@ -1875,7 +1875,7 @@ func TestEnrichmentModule_ConfigurableCacheKey(t *testing.T) {
 			},
 		}
 
-		module, err := NewEnrichmentFromConfig(config)
+		module, err := NewHTTPCallFromConfig(config)
 		if err != nil {
 			t.Fatalf("failed to create module: %v", err)
 		}

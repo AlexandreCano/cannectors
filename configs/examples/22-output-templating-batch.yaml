@@ -1,0 +1,49 @@
+# Example: Output Templating in Batch Mode
+#
+# This configuration demonstrates templating in batch mode (bodyFrom: "records").
+# In batch mode, template variables in the endpoint, headers, and body template file
+# are evaluated using the FIRST record in the batch.
+#
+# Use Case: Multi-tenant API where all records in a batch belong to the same tenant
+
+schemaVersion: "1.1.0"
+
+connector:
+  name: batch-templating-demo
+  version: "1.0.0"
+  description: "Demonstrates output templating in batch mode"
+
+  input:
+    type: httpPolling
+    endpoint: "https://data-source.example.com/events"
+    schedule: "*/5 * * * *"
+    method: GET
+
+  filters:
+    - type: mapping
+      mappings:
+        - source: "tenantId"
+          target: "tenant_id"
+        - source: "batchId"
+          target: "batch_id"
+        - source: "eventType"
+          target: "event_type"
+        - source: "eventData"
+          target: "data"
+
+  output:
+    type: httpRequest
+    # In batch mode, {{record.tenant_id}} uses the first record's tenant_id
+    endpoint: "https://api.example.com/tenants/{{record.tenant_id}}/events/bulk"
+    method: POST
+
+    # Headers evaluated from first record
+    headers:
+      Content-Type: "application/json"
+      X-Tenant-ID: "{{record.tenant_id}}"
+      X-Batch-ID: "{{record.batch_id}}"
+
+    request:
+      bodyFrom: "records"  # Batch mode - all records in one request
+      # Template file evaluated with first record's data
+      bodyTemplateFile: "./templates/batch-events.json"

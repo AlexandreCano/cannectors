@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+               xmlns:usr="http://example.com/UserService">
+  <soap:Header>
+    <usr:RequestId>{{record.correlation_id | default: "auto-generated"}}</usr:RequestId>
+  </soap:Header>
+  <soap:Body>
+    <usr:CreateUserRequest>
+      <usr:User>
+        <usr:UserId>{{record.user_id}}</usr:UserId>
+        <usr:FirstName>{{record.first_name}}</usr:FirstName>
+        <usr:LastName>{{record.last_name}}</usr:LastName>
+        <usr:Email>{{record.email}}</usr:Email>
+        <usr:Department>{{record.department | default: "General"}}</usr:Department>
+      </usr:User>
+    </usr:CreateUserRequest>
+  </soap:Body>
+</soap:Envelope>

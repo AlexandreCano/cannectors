@@ -1,8 +1,9 @@
 // Package filter provides implementations for filter modules.
-// Enrichment module fetches additional data from external APIs and merges it into records.
+// HTTPCall module makes HTTP requests to external APIs and can enrich or transform records.
 package filter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,33 +11,36 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/canectors/runtime/internal/auth"
 	"github.com/canectors/runtime/internal/cache"
 	"github.com/canectors/runtime/internal/errhandling"
+	"github.com/canectors/runtime/internal/httpconfig"
 	"github.com/canectors/runtime/internal/logger"
+	"github.com/canectors/runtime/internal/template"
 	"github.com/canectors/runtime/pkg/connector"
 )
 
-// Default configuration values for enrichment module
+// Default configuration values for http_call module
 const (
-	defaultEnrichmentTimeout  = 30 * time.Second
-	defaultCacheMaxSize       = 1000
-	defaultCacheTTLSeconds    = 300 // 5 minutes
-	defaultEnrichmentStrategy = "merge"
+	defaultHTTPCallTimeout  = 30 * time.Second
+	defaultCacheMaxSize     = 1000
+	defaultCacheTTLSeconds  = 300 // 5 minutes
+	defaultHTTPCallStrategy = "merge"
 )
 
-// Error codes for enrichment module
+// Error codes for http_call module
 const (
-	ErrCodeEnrichmentEndpointMissing = "ENRICHMENT_ENDPOINT_MISSING"
-	ErrCodeEnrichmentKeyMissing      = "ENRICHMENT_KEY_MISSING"
-	ErrCodeEnrichmentKeyInvalid      = "ENRICHMENT_KEY_INVALID"
-	ErrCodeEnrichmentKeyExtract      = "ENRICHMENT_KEY_EXTRACT"
-	ErrCodeEnrichmentHTTPError       = "ENRICHMENT_HTTP_ERROR"
-	ErrCodeEnrichmentJSONParse       = "ENRICHMENT_JSON_PARSE"
-	ErrCodeEnrichmentMerge           = "ENRICHMENT_MERGE"
+	ErrCodeHTTPCallEndpointMissing = "HTTP_CALL_ENDPOINT_MISSING"
+	ErrCodeHTTPCallKeyMissing      = "HTTP_CALL_KEY_MISSING"
+	ErrCodeHTTPCallKeyInvalid      = "HTTP_CALL_KEY_INVALID"
+	ErrCodeHTTPCallKeyExtract      = "HTTP_CALL_KEY_EXTRACT"
+	ErrCodeHTTPCallHTTPError       = "HTTP_CALL_HTTP_ERROR"
+	ErrCodeHTTPCallJSONParse       = "HTTP_CALL_JSON_PARSE"
+	ErrCodeHTTPCallMerge           = "HTTP_CALL_MERGE"
 )
 
 // Error messages
@@ -44,11 +48,11 @@ const (
 	errMsgParsingEndpointURL = "parsing endpoint URL: %w"
 )
 
-// Error types for enrichment module
+// Error types for http_call module
 var (
-	ErrEnrichmentEndpointMissing = fmt.Errorf("enrichment endpoint is required")
-	ErrEnrichmentKeyMissing      = fmt.Errorf("enrichment key configuration is required")
-	ErrEnrichmentKeyInvalid      = fmt.Errorf("enrichment key paramType must be 'query', 'path', or 'header'")
+	ErrHTTPCallEndpointMissing = fmt.Errorf("http_call endpoint is required")
+	ErrHTTPCallKeyMissing      = fmt.Errorf("http_call key configuration is required")
+	ErrHTTPCallKeyInvalid      = fmt.Errorf("http_call key paramType must be 'query', 'path', or 'header'")
 )
 
 // KeyConfig defines how to extract a key from a record and use it in HTTP requests.
@@ -61,7 +65,7 @@ type KeyConfig struct {
 	ParamName string `json:"paramName"`
 }
 
-// CacheConfig defines cache behavior for the enrichment module.
+// CacheConfig defines cache behavior for the http_call module.
 type CacheConfig struct {
 	// MaxSize is the maximum number of entries in the cache (default 1000)
 	MaxSize int `json:"maxSize"`
@@ -76,29 +80,35 @@ type CacheConfig struct {
 	Key string `json:"key"`
 }
 
-// EnrichmentConfig represents the configuration for an enrichment filter module.
-type EnrichmentConfig struct {
-	// Endpoint is the HTTP endpoint URL (required). May contain {key} placeholder for path params.
-	Endpoint string `json:"endpoint"`
-	// Key defines how to extract and use the key value (required)
+// HTTPCallConfig represents the configuration for an http_call filter module.
+// Fields are organized in logical groups matching httpconfig types for consistency,
+// but kept as direct fields for simpler struct literal syntax in tests and usage.
+type HTTPCallConfig struct {
+	// Base HTTP configuration (from httpconfig.BaseConfig)
+	Endpoint  string                `json:"endpoint"`
+	Method    string                `json:"method,omitempty"`
+	Headers   map[string]string     `json:"headers,omitempty"`
+	TimeoutMs int                   `json:"timeoutMs,omitempty"`
+	Auth      *connector.AuthConfig `json:"auth,omitempty"`
+
+	// Body template configuration (from httpconfig.BodyTemplateConfig)
+	BodyTemplateFile string `json:"bodyTemplateFile,omitempty"`
+
+	// Error handling configuration (from httpconfig.ErrorHandlingConfig)
+	OnError string `json:"onError,omitempty"`
+
+	// Data extraction configuration (from httpconfig.DataExtractionConfig)
+	DataField string `json:"dataField,omitempty"`
+
+	// Key defines how to extract and use the key value (required for GET, optional for POST/PUT with template)
 	Key KeyConfig `json:"key"`
-	// Auth is the optional authentication configuration
-	Auth *connector.AuthConfig `json:"auth,omitempty"`
 	// Cache defines cache behavior (optional, uses defaults if not specified)
 	Cache CacheConfig `json:"cache"`
-	// MergeStrategy defines how to merge enrichment data: "merge" (default), "replace", "append"
+	// MergeStrategy defines how to merge response data: "merge" (default), "replace", "append"
 	MergeStrategy string `json:"mergeStrategy"`
-	// DataField is the JSON field containing the data in the response (optional)
-	DataField string `json:"dataField"`
-	// OnError specifies error handling mode: "fail" (default), "skip", "log"
-	OnError string `json:"onError"`
-	// TimeoutMs is the request timeout in milliseconds (default 30000)
-	TimeoutMs int `json:"timeoutMs"`
-	// Headers are custom HTTP headers to include in requests
-	Headers map[string]string `json:"headers"`
 }
 
-// EnrichmentModule implements a filter that enriches records with external API data.
+// HTTPCallModule implements a filter that makes HTTP requests and can enrich records with response data.
 // It supports caching to avoid redundant API calls for records with the same key value.
 //
 // Thread Safety:
@@ -108,24 +118,27 @@ type EnrichmentConfig struct {
 // Error Handling:
 //   - HTTP errors are not cached (only successful responses are cached)
 //   - onError mode controls behavior: fail (stop pipeline), skip (drop record), log (continue)
-type EnrichmentModule struct {
-	endpoint      string
-	keyField      string
-	keyParamType  string
-	keyParamName  string
-	authHandler   auth.Handler
-	httpClient    *http.Client
-	cache         cache.Cache
-	mergeStrategy string
-	dataField     string
-	onError       string
-	headers       map[string]string
-	cacheTTL      time.Duration
-	cacheKey      string // Cache key configuration (optional)
+type HTTPCallModule struct {
+	endpoint          string
+	method            string // HTTP method (GET, POST, PUT)
+	keyField          string
+	keyParamType      string
+	keyParamName      string
+	authHandler       auth.Handler
+	httpClient        *http.Client
+	cache             cache.Cache
+	mergeStrategy     string
+	dataField         string
+	onError           string
+	headers           map[string]string
+	cacheTTL          time.Duration
+	cacheKey          string              // Cache key configuration (optional)
+	bodyTemplateRaw   string              // Loaded body template content (for POST/PUT)
+	templateEvaluator *template.Evaluator // Template evaluator for dynamic content
 }
 
-// EnrichmentError carries structured context for enrichment failures.
-type EnrichmentError struct {
+// HTTPCallError carries structured context for http_call failures.
+type HTTPCallError struct {
 	Code        string
 	Message     string
 	RecordIndex int
@@ -135,7 +148,7 @@ type EnrichmentError struct {
 	Details     map[string]interface{}
 }
 
-func (e *EnrichmentError) Error() string {
+func (e *HTTPCallError) Error() string {
 	return e.Message
 }
 
@@ -153,11 +166,11 @@ func sanitizeURL(urlStr string) string {
 	return parsed.String()
 }
 
-// newEnrichmentError creates an EnrichmentError with context.
-func newEnrichmentError(code, message string, recordIdx int, endpoint string, statusCode int, keyValue string) *EnrichmentError {
+// newHTTPCallError creates an HTTPCallError with context.
+func newHTTPCallError(code, message string, recordIdx int, endpoint string, statusCode int, keyValue string) *HTTPCallError {
 	// Sanitize endpoint URL in error message to avoid exposing sensitive data
 	sanitizedEndpoint := sanitizeURL(endpoint)
-	return &EnrichmentError{
+	return &HTTPCallError{
 		Code:        code,
 		Message:     message,
 		RecordIndex: recordIdx,
@@ -168,78 +181,62 @@ func newEnrichmentError(code, message string, recordIdx int, endpoint string, st
 	}
 }
 
-// NewEnrichmentFromConfig creates a new enrichment filter module from configuration.
+// NewHTTPCallFromConfig creates a new http_call filter module from configuration.
 // It validates the configuration and initializes the HTTP client and cache.
 //
 // Required config fields:
 //   - endpoint: The HTTP endpoint URL
-//   - key: Key extraction configuration (field, paramType, paramName)
+//   - key: Key extraction configuration (field, paramType, paramName) - required for GET, optional for POST/PUT
 //
 // Optional config fields:
+//   - method: HTTP method (GET, POST, PUT). Defaults to GET.
 //   - auth: Authentication configuration
 //   - cache: Cache configuration (maxSize, defaultTTL)
 //   - mergeStrategy: How to merge data ("merge", "replace", "append")
 //   - dataField: JSON field containing the data array
 //   - onError: Error handling mode ("fail", "skip", "log")
 //   - timeoutMs: Request timeout in milliseconds
-//   - headers: Custom HTTP headers
-func NewEnrichmentFromConfig(config EnrichmentConfig) (*EnrichmentModule, error) {
-	// Validate endpoint
+//   - headers: Custom HTTP headers (supports {{record.field}} templates)
+//   - bodyTemplateFile: Path to external template file for POST/PUT requests
+func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 	if config.Endpoint == "" {
-		return nil, newEnrichmentError(ErrCodeEnrichmentEndpointMissing, "enrichment endpoint is required", -1, "", 0, "")
+		return nil, newHTTPCallError(ErrCodeHTTPCallEndpointMissing, "http_call endpoint is required", -1, "", 0, "")
 	}
 
-	// Validate key configuration
-	if err := validateKeyConfig(config.Key); err != nil {
+	method, err := normalizeHTTPCallMethod(config.Method)
+	if err != nil {
 		return nil, err
 	}
 
-	// Normalize merge strategy
-	mergeStrategy := config.MergeStrategy
-	if mergeStrategy == "" {
-		mergeStrategy = defaultEnrichmentStrategy
-	}
-	if mergeStrategy != "merge" && mergeStrategy != "replace" && mergeStrategy != "append" {
-		logger.Warn("invalid mergeStrategy for enrichment module; defaulting to merge",
-			slog.String("merge_strategy", mergeStrategy),
-		)
-		mergeStrategy = defaultEnrichmentStrategy
-	}
-
-	// Normalize onError
-	onError := config.OnError
-	if onError == "" {
-		onError = OnErrorFail
-	}
-	if onError != OnErrorFail && onError != OnErrorSkip && onError != OnErrorLog {
-		logger.Warn("invalid onError value for enrichment module; defaulting to fail",
-			slog.String("on_error", onError),
-		)
-		onError = OnErrorFail
-	}
-
-	// Set timeout
-	timeout := defaultEnrichmentTimeout
-	if config.TimeoutMs > 0 {
-		timeout = time.Duration(config.TimeoutMs) * time.Millisecond
-	}
-
-	// Create HTTP client
-	httpClient := &http.Client{
-		Timeout: timeout,
-	}
-
-	// Create auth handler if configured
-	var authHandler auth.Handler
-	if config.Auth != nil {
-		var err error
-		authHandler, err = auth.NewHandler(config.Auth, httpClient)
-		if err != nil {
-			return nil, fmt.Errorf("creating enrichment auth handler: %w", err)
+	keyRequired := method == http.MethodGet || config.BodyTemplateFile == ""
+	if keyRequired {
+		if err := validateKeyConfig(config.Key); err != nil {
+			return nil, err
 		}
 	}
 
-	// Set cache configuration
+	mergeStrategy := normalizeHTTPCallMergeStrategy(config.MergeStrategy)
+	onError := normalizeHTTPCallOnError(config.OnError)
+	timeout := httpconfig.GetTimeoutDuration(config.TimeoutMs, defaultHTTPCallTimeout)
+
+	httpClient := &http.Client{Timeout: timeout}
+	authHandler, err := buildHTTPCallAuth(config.Auth, httpClient)
+	if err != nil {
+		return nil, err
+	}
+
+	lruCache, cacheTTL := buildHTTPCallCache(config.Cache.MaxSize, config.Cache.DefaultTTL)
+
+	bodyTemplateRaw, err := loadHTTPCallBodyTemplate(config.BodyTemplateFile)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := validateHTTPCallTemplates(config.Endpoint, config.Headers); err != nil {
+		return nil, err
+	}
+
+	hasTemplating := httpCallHasTemplating(config.Endpoint, config.Headers, config.BodyTemplateFile != "")
 	cacheMaxSize := config.Cache.MaxSize
 	if cacheMaxSize <= 0 {
 		cacheMaxSize = defaultCacheMaxSize
@@ -248,13 +245,10 @@ func NewEnrichmentFromConfig(config EnrichmentConfig) (*EnrichmentModule, error)
 	if cacheTTLSeconds <= 0 {
 		cacheTTLSeconds = defaultCacheTTLSeconds
 	}
-	cacheTTL := time.Duration(cacheTTLSeconds) * time.Second
 
-	// Create cache
-	lruCache := cache.NewLRUCache(cacheMaxSize, cacheTTL)
-
-	logger.Debug("enrichment module initialized",
+	logger.Debug("http_call module initialized",
 		slog.String("endpoint", config.Endpoint),
+		slog.String("method", method),
 		slog.String("key_field", config.Key.Field),
 		slog.String("key_param_type", config.Key.ParamType),
 		slog.String("merge_strategy", mergeStrategy),
@@ -263,56 +257,163 @@ func NewEnrichmentFromConfig(config EnrichmentConfig) (*EnrichmentModule, error)
 		slog.Int("cache_ttl_seconds", cacheTTLSeconds),
 		slog.String("cache_key", config.Cache.Key),
 		slog.Bool("has_auth", authHandler != nil),
+		slog.Bool("has_templating", hasTemplating),
+		slog.String("body_template_file", config.BodyTemplateFile),
 	)
 
-	return &EnrichmentModule{
-		endpoint:      config.Endpoint,
-		keyField:      config.Key.Field,
-		keyParamType:  config.Key.ParamType,
-		keyParamName:  config.Key.ParamName,
-		authHandler:   authHandler,
-		httpClient:    httpClient,
-		cache:         lruCache,
-		mergeStrategy: mergeStrategy,
-		dataField:     config.DataField,
-		onError:       onError,
-		headers:       config.Headers,
-		cacheTTL:      cacheTTL,
-		cacheKey:      config.Cache.Key,
+	return &HTTPCallModule{
+		endpoint:          config.Endpoint,
+		method:            method,
+		keyField:          config.Key.Field,
+		keyParamType:      config.Key.ParamType,
+		keyParamName:      config.Key.ParamName,
+		authHandler:       authHandler,
+		httpClient:        httpClient,
+		cache:             lruCache,
+		mergeStrategy:     mergeStrategy,
+		dataField:         config.DataField,
+		onError:           onError,
+		headers:           config.Headers,
+		cacheTTL:          cacheTTL,
+		cacheKey:          config.Cache.Key,
+		bodyTemplateRaw:   bodyTemplateRaw,
+		templateEvaluator: template.NewEvaluator(),
 	}, nil
+}
+
+func normalizeHTTPCallMethod(method string) (string, error) {
+	m := strings.ToUpper(method)
+	if m == "" {
+		m = http.MethodGet
+	}
+	if m != http.MethodGet && m != http.MethodPost && m != http.MethodPut {
+		return "", fmt.Errorf("http_call method must be GET, POST, or PUT, got: %s", method)
+	}
+	return m, nil
+}
+
+func normalizeHTTPCallMergeStrategy(s string) string {
+	if s == "" {
+		return defaultHTTPCallStrategy
+	}
+	if s != "merge" && s != "replace" && s != "append" {
+		logger.Warn("invalid mergeStrategy for http_call module; defaulting to merge",
+			slog.String("merge_strategy", s),
+		)
+		return defaultHTTPCallStrategy
+	}
+	return s
+}
+
+func normalizeHTTPCallOnError(s string) string {
+	if s == "" {
+		return OnErrorFail
+	}
+	if s != OnErrorFail && s != OnErrorSkip && s != OnErrorLog {
+		logger.Warn("invalid onError value for http_call module; defaulting to fail",
+			slog.String("on_error", s),
+		)
+		return OnErrorFail
+	}
+	return s
+}
+
+func buildHTTPCallAuth(authCfg *connector.AuthConfig, client *http.Client) (auth.Handler, error) {
+	if authCfg == nil {
+		return nil, nil
+	}
+	h, err := auth.NewHandler(authCfg, client)
+	if err != nil {
+		return nil, fmt.Errorf("creating http_call auth handler: %w", err)
+	}
+	return h, nil
+}
+
+func buildHTTPCallCache(maxSize, ttlSeconds int) (*cache.LRUCache, time.Duration) {
+	if maxSize <= 0 {
+		maxSize = defaultCacheMaxSize
+	}
+	if ttlSeconds <= 0 {
+		ttlSeconds = defaultCacheTTLSeconds
+	}
+	return cache.NewLRUCache(maxSize, time.Duration(ttlSeconds)*time.Second), time.Duration(ttlSeconds) * time.Second
+}
+
+func loadHTTPCallBodyTemplate(path string) (string, error) {
+	if path == "" {
+		return "", nil
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("loading http_call body template file %q: %w", path, err)
+	}
+	raw := string(content)
+	if err := template.ValidateSyntax(raw); err != nil {
+		return "", fmt.Errorf("invalid template syntax in %q: %w", path, err)
+	}
+	logger.Debug("loaded http_call body template file",
+		slog.String("file", path),
+		slog.Int("size", len(content)),
+	)
+	return raw, nil
+}
+
+func validateHTTPCallTemplates(endpoint string, headers map[string]string) error {
+	if err := template.ValidateSyntax(endpoint); err != nil {
+		return fmt.Errorf("invalid template syntax in endpoint: %w", err)
+	}
+	for name, v := range headers {
+		if err := template.ValidateSyntax(v); err != nil {
+			return fmt.Errorf("invalid template syntax in header %q: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func httpCallHasTemplating(endpoint string, headers map[string]string, hasBodyTemplate bool) bool {
+	if template.HasVariables(endpoint) || hasBodyTemplate {
+		return true
+	}
+	for _, v := range headers {
+		if template.HasVariables(v) {
+			return true
+		}
+	}
+	return false
 }
 
 // validateKeyConfig validates the key extraction configuration.
 func validateKeyConfig(key KeyConfig) error {
 	if key.Field == "" {
-		return newEnrichmentError(ErrCodeEnrichmentKeyMissing, "enrichment key field is required", -1, "", 0, "")
+		return newHTTPCallError(ErrCodeHTTPCallKeyMissing, "http_call key field is required", -1, "", 0, "")
 	}
 	if key.ParamType == "" {
-		return newEnrichmentError(ErrCodeEnrichmentKeyMissing, "enrichment key paramType is required", -1, "", 0, "")
+		return newHTTPCallError(ErrCodeHTTPCallKeyMissing, "http_call key paramType is required", -1, "", 0, "")
 	}
 	if key.ParamType != "query" && key.ParamType != "path" && key.ParamType != "header" {
-		return newEnrichmentError(ErrCodeEnrichmentKeyInvalid, "enrichment key paramType must be 'query', 'path', or 'header'", -1, "", 0, "")
+		return newHTTPCallError(ErrCodeHTTPCallKeyInvalid, "http_call key paramType must be 'query', 'path', or 'header'", -1, "", 0, "")
 	}
 	if key.ParamName == "" {
-		return newEnrichmentError(ErrCodeEnrichmentKeyMissing, "enrichment key paramName is required", -1, "", 0, "")
+		return newHTTPCallError(ErrCodeHTTPCallKeyMissing, "http_call key paramName is required", -1, "", 0, "")
 	}
 	return nil
 }
 
-// ParseEnrichmentConfig parses an enrichment filter configuration from raw config map.
+// ParseHTTPCallConfig parses an http_call filter configuration from raw config map.
 // The authentication parameter is passed separately (from cfg.Authentication) to match
 // the ModuleConfig structure used by input and output modules.
-func ParseEnrichmentConfig(cfg map[string]interface{}, auth *connector.AuthConfig) (EnrichmentConfig, error) {
-	config := EnrichmentConfig{}
+func ParseHTTPCallConfig(cfg map[string]interface{}, auth *connector.AuthConfig) (HTTPCallConfig, error) {
+	config := HTTPCallConfig{}
 
-	// Parse endpoint (required)
+	// Use httpconfig extraction for base config
 	config.Endpoint = parseStringField(cfg, "endpoint")
-
-	// Parse key configuration (required)
-	config.Key = parseKeyConfig(cfg)
-
-	// Set authentication from separate parameter (consistent with input/output modules)
+	config.Method = parseStringField(cfg, "method")
+	config.Headers = parseHeaders(cfg)
+	config.TimeoutMs = parseIntField(cfg, "timeoutMs")
 	config.Auth = auth
+
+	// Parse key configuration (required for GET, optional for POST/PUT with template)
+	config.Key = parseKeyConfig(cfg)
 
 	// Parse cache configuration (optional)
 	config.Cache = parseCacheConfig(cfg)
@@ -321,8 +422,9 @@ func ParseEnrichmentConfig(cfg map[string]interface{}, auth *connector.AuthConfi
 	config.MergeStrategy = parseStringField(cfg, "mergeStrategy")
 	config.DataField = parseStringField(cfg, "dataField")
 	config.OnError = parseStringField(cfg, "onError")
-	config.TimeoutMs = parseIntField(cfg, "timeoutMs")
-	config.Headers = parseHeaders(cfg)
+
+	// Parse body template file (optional, for POST/PUT)
+	config.BodyTemplateFile = parseStringField(cfg, "bodyTemplateFile")
 
 	return config, nil
 }
@@ -388,7 +490,7 @@ func parseHeaders(cfg map[string]interface{}) map[string]string {
 	return headers
 }
 
-// Process enriches each input record with data from an external API.
+// Process makes HTTP requests for each input record and can enrich them with response data.
 // For each record:
 //  1. Extracts the key value from the record
 //  2. Checks the cache for existing data
@@ -397,7 +499,7 @@ func parseHeaders(cfg map[string]interface{}) map[string]string {
 //  5. Caches successful responses
 //
 // The context can be used to cancel long-running operations.
-func (m *EnrichmentModule) Process(ctx context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (m *HTTPCallModule) Process(ctx context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
 	if records == nil {
 		return []map[string]interface{}{}, nil
 	}
@@ -406,7 +508,7 @@ func (m *EnrichmentModule) Process(ctx context.Context, records []map[string]int
 	inputCount := len(records)
 
 	logger.Debug("filter processing started",
-		slog.String("module_type", "enrichment"),
+		slog.String("module_type", "http_call"),
 		slog.Int("input_records", inputCount),
 		slog.String("on_error", m.onError),
 	)
@@ -438,7 +540,7 @@ func (m *EnrichmentModule) Process(ctx context.Context, records []map[string]int
 			case OnErrorFail:
 				duration := time.Since(startTime)
 				logger.Error("filter processing failed",
-					slog.String("module_type", "enrichment"),
+					slog.String("module_type", "http_call"),
 					slog.Int("record_index", recordIdx),
 					slog.Duration("duration", duration),
 					slog.String("error", err.Error()),
@@ -446,15 +548,15 @@ func (m *EnrichmentModule) Process(ctx context.Context, records []map[string]int
 				return nil, err
 			case OnErrorSkip:
 				skippedCount++
-				logger.Warn("skipping record due to enrichment error",
-					slog.String("module_type", "enrichment"),
+				logger.Warn("skipping record due to http_call error",
+					slog.String("module_type", "http_call"),
 					slog.Int("record_index", recordIdx),
 					slog.String("error", err.Error()),
 				)
 				continue
 			case OnErrorLog:
-				logger.Error("enrichment error (continuing)",
-					slog.String("module_type", "enrichment"),
+				logger.Error("http_call error (continuing)",
+					slog.String("module_type", "http_call"),
 					slog.Int("record_index", recordIdx),
 					slog.String("error", err.Error()),
 				)
@@ -470,7 +572,7 @@ func (m *EnrichmentModule) Process(ctx context.Context, records []map[string]int
 	outputCount := len(result)
 
 	logger.Info("filter processing completed",
-		slog.String("module_type", "enrichment"),
+		slog.String("module_type", "http_call"),
 		slog.Int("input_records", inputCount),
 		slog.Int("output_records", outputCount),
 		slog.Int("skipped_records", skippedCount),
@@ -483,32 +585,36 @@ func (m *EnrichmentModule) Process(ctx context.Context, records []map[string]int
 	return result, nil
 }
 
-// processRecord enriches a single record with data from the external API.
+// processRecord makes an HTTP call for a single record and enriches it with the response data.
 // Returns the enriched record, whether it was a cache hit, and any error.
-func (m *EnrichmentModule) processRecord(ctx context.Context, record map[string]interface{}, recordIdx int) (map[string]interface{}, bool, error) {
-	// Extract key value from record
-	keyValue, err := m.extractKeyValue(record, recordIdx)
-	if err != nil {
-		return nil, false, err
+func (m *HTTPCallModule) processRecord(ctx context.Context, record map[string]interface{}, recordIdx int) (map[string]interface{}, bool, error) {
+	// Extract key value from record (may be empty for POST/PUT with template-only mode)
+	var keyValue string
+	var err error
+	if m.keyField != "" {
+		keyValue, err = m.extractKeyValue(record, recordIdx)
+		if err != nil {
+			return nil, false, err
+		}
 	}
 
 	// Check cache first
 	cacheKey := m.buildCacheKey(keyValue, record)
 	if cachedData, found := m.cache.Get(cacheKey); found {
-		enrichmentData, ok := cachedData.(map[string]interface{})
+		responseData, ok := cachedData.(map[string]interface{})
 		if ok {
-			logger.Debug("enrichment cache hit",
-				slog.String("module_type", "enrichment"),
+			logger.Debug("http_call cache hit",
+				slog.String("module_type", "http_call"),
 				slog.Int("record_index", recordIdx),
 				slog.String("key_value", keyValue),
 			)
-			enrichedRecord := m.mergeData(record, enrichmentData)
+			enrichedRecord := m.mergeData(record, responseData)
 			return enrichedRecord, true, nil
 		}
 	}
 
 	// Cache miss - make HTTP request
-	enrichmentData, err := m.fetchEnrichmentData(ctx, keyValue, recordIdx)
+	responseData, err := m.fetchResponseData(ctx, keyValue, recordIdx, record)
 	if err != nil {
 		return nil, false, err
 	}
@@ -516,27 +622,27 @@ func (m *EnrichmentModule) processRecord(ctx context.Context, record map[string]
 	// Cache successful response (don't cache errors)
 	// Rebuild cache key in case it depends on record values
 	cacheKey = m.buildCacheKey(keyValue, record)
-	m.cache.Set(cacheKey, enrichmentData, m.cacheTTL)
+	m.cache.Set(cacheKey, responseData, m.cacheTTL)
 
-	logger.Debug("enrichment cache miss (fetched and cached)",
-		slog.String("module_type", "enrichment"),
+	logger.Debug("http_call cache miss (fetched and cached)",
+		slog.String("module_type", "http_call"),
 		slog.Int("record_index", recordIdx),
 		slog.String("key_value", keyValue),
 	)
 
 	// Merge data into record
-	enrichedRecord := m.mergeData(record, enrichmentData)
+	enrichedRecord := m.mergeData(record, responseData)
 
 	return enrichedRecord, false, nil
 }
 
 // extractKeyValue extracts the key value from a record using the configured field path.
-func (m *EnrichmentModule) extractKeyValue(record map[string]interface{}, recordIdx int) (string, error) {
+func (m *HTTPCallModule) extractKeyValue(record map[string]interface{}, recordIdx int) (string, error) {
 	value, found := getNestedValue(record, m.keyField)
 	if !found {
-		return "", newEnrichmentError(
-			ErrCodeEnrichmentKeyExtract,
-			fmt.Sprintf("enrichment failed to extract key from record %d: field '%s' not found", recordIdx, m.keyField),
+		return "", newHTTPCallError(
+			ErrCodeHTTPCallKeyExtract,
+			fmt.Sprintf("http_call failed to extract key from record %d: field '%s' not found", recordIdx, m.keyField),
 			recordIdx, m.endpoint, 0, "",
 		)
 	}
@@ -556,9 +662,9 @@ func (m *EnrichmentModule) extractKeyValue(record map[string]interface{}, record
 	case int, int64, int32:
 		keyValue = fmt.Sprintf("%v", v)
 	case nil:
-		return "", newEnrichmentError(
-			ErrCodeEnrichmentKeyExtract,
-			fmt.Sprintf("enrichment failed to extract key from record %d: field '%s' is null", recordIdx, m.keyField),
+		return "", newHTTPCallError(
+			ErrCodeHTTPCallKeyExtract,
+			fmt.Sprintf("http_call failed to extract key from record %d: field '%s' is null", recordIdx, m.keyField),
 			recordIdx, m.endpoint, 0, "",
 		)
 	default:
@@ -566,9 +672,9 @@ func (m *EnrichmentModule) extractKeyValue(record map[string]interface{}, record
 	}
 
 	if keyValue == "" {
-		return "", newEnrichmentError(
-			ErrCodeEnrichmentKeyExtract,
-			fmt.Sprintf("enrichment failed to extract key from record %d: field '%s' is empty", recordIdx, m.keyField),
+		return "", newHTTPCallError(
+			ErrCodeHTTPCallKeyExtract,
+			fmt.Sprintf("http_call failed to extract key from record %d: field '%s' is empty", recordIdx, m.keyField),
 			recordIdx, m.endpoint, 0, "",
 		)
 	}
@@ -582,7 +688,7 @@ func (m *EnrichmentModule) extractKeyValue(record map[string]interface{}, record
 //   - A JSON path expression (starting with "$." or dot notation): extracts value from record
 //
 // If cacheKey is not configured, uses default: endpoint + "::" + keyValue
-func (m *EnrichmentModule) buildCacheKey(keyValue string, record map[string]interface{}) string {
+func (m *HTTPCallModule) buildCacheKey(keyValue string, record map[string]interface{}) string {
 	// If cacheKey is configured, use it
 	if m.cacheKey != "" {
 		// Check if it's a JSON path expression (starts with "$." or contains ".")
@@ -593,8 +699,8 @@ func (m *EnrichmentModule) buildCacheKey(keyValue string, record map[string]inte
 				return fmt.Sprintf("%v", value)
 			}
 			// If path not found, log warning and fall back to default behavior
-			logger.Warn("enrichment cache key path not found, using default key",
-				slog.String("module_type", "enrichment"),
+			logger.Warn("http_call cache key path not found, using default key",
+				slog.String("module_type", "http_call"),
 				slog.String("configured_path", m.cacheKey),
 				slog.String("fallback_key", m.endpoint+"::"+keyValue),
 			)
@@ -605,8 +711,8 @@ func (m *EnrichmentModule) buildCacheKey(keyValue string, record map[string]inte
 				return fmt.Sprintf("%v", value)
 			}
 			// If path not found, log warning and fall back to default behavior
-			logger.Warn("enrichment cache key path not found, using default key",
-				slog.String("module_type", "enrichment"),
+			logger.Warn("http_call cache key path not found, using default key",
+				slog.String("module_type", "http_call"),
 				slog.String("configured_path", m.cacheKey),
 				slog.String("fallback_key", m.endpoint+"::"+keyValue),
 			)
@@ -623,10 +729,10 @@ func (m *EnrichmentModule) buildCacheKey(keyValue string, record map[string]inte
 	return m.endpoint + "::" + keyValue
 }
 
-// fetchEnrichmentData fetches data from the external API for the given key value.
-func (m *EnrichmentModule) fetchEnrichmentData(ctx context.Context, keyValue string, recordIdx int) (map[string]interface{}, error) {
+// fetchResponseData fetches data from the external API for the given key value and record.
+func (m *HTTPCallModule) fetchResponseData(ctx context.Context, keyValue string, recordIdx int, record map[string]interface{}) (map[string]interface{}, error) {
 	// Build and execute HTTP request
-	body, statusCode, err := m.executeHTTPRequest(ctx, keyValue, recordIdx)
+	body, statusCode, err := m.executeHTTPRequest(ctx, keyValue, recordIdx, record)
 	if err != nil {
 		return nil, err
 	}
@@ -636,19 +742,19 @@ func (m *EnrichmentModule) fetchEnrichmentData(ctx context.Context, keyValue str
 }
 
 // executeHTTPRequest builds the HTTP request, executes it, and returns the response body and status code.
-func (m *EnrichmentModule) executeHTTPRequest(ctx context.Context, keyValue string, recordIdx int) ([]byte, int, error) {
-	// Build request URL
-	requestURL, err := m.buildRequestURL(keyValue)
+func (m *HTTPCallModule) executeHTTPRequest(ctx context.Context, keyValue string, recordIdx int, record map[string]interface{}) ([]byte, int, error) {
+	// Build request URL with template evaluation
+	requestURL, err := m.buildRequestURL(keyValue, record)
 	if err != nil {
-		return nil, 0, newEnrichmentError(
-			ErrCodeEnrichmentHTTPError,
-			fmt.Sprintf("enrichment failed to build request URL: %v", err),
+		return nil, 0, newHTTPCallError(
+			ErrCodeHTTPCallHTTPError,
+			fmt.Sprintf("http_call failed to build request URL: %v", err),
 			recordIdx, m.endpoint, 0, keyValue,
 		)
 	}
 
 	// Create and configure HTTP request
-	req, err := m.buildHTTPRequest(ctx, requestURL, keyValue, recordIdx)
+	req, err := m.buildHTTPRequest(ctx, requestURL, keyValue, recordIdx, record)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -657,15 +763,15 @@ func (m *EnrichmentModule) executeHTTPRequest(ctx context.Context, keyValue stri
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		classifiedErr := errhandling.ClassifyNetworkError(err)
-		return nil, 0, newEnrichmentError(
-			ErrCodeEnrichmentHTTPError,
-			fmt.Sprintf("enrichment HTTP request failed: %v", classifiedErr),
+		return nil, 0, newHTTPCallError(
+			ErrCodeHTTPCallHTTPError,
+			fmt.Sprintf("http_call HTTP request failed: %v", classifiedErr),
 			recordIdx, m.endpoint, 0, keyValue,
 		)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			logger.Warn("failed to close enrichment response body",
+			logger.Warn("failed to close http_call response body",
 				slog.String("error", closeErr.Error()),
 			)
 		}
@@ -674,9 +780,9 @@ func (m *EnrichmentModule) executeHTTPRequest(ctx context.Context, keyValue stri
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, resp.StatusCode, newEnrichmentError(
-			ErrCodeEnrichmentHTTPError,
-			fmt.Sprintf("enrichment failed to read response: %v", err),
+		return nil, resp.StatusCode, newHTTPCallError(
+			ErrCodeHTTPCallHTTPError,
+			fmt.Sprintf("http_call failed to read response: %v", err),
 			recordIdx, m.endpoint, resp.StatusCode, keyValue,
 		)
 	}
@@ -687,9 +793,9 @@ func (m *EnrichmentModule) executeHTTPRequest(ctx context.Context, keyValue stri
 		if len(bodySnippet) > 200 {
 			bodySnippet = bodySnippet[:200] + "..."
 		}
-		return nil, resp.StatusCode, newEnrichmentError(
-			ErrCodeEnrichmentHTTPError,
-			fmt.Sprintf("enrichment HTTP error %d: %s", resp.StatusCode, bodySnippet),
+		return nil, resp.StatusCode, newHTTPCallError(
+			ErrCodeHTTPCallHTTPError,
+			fmt.Sprintf("http_call HTTP error %d: %s", resp.StatusCode, bodySnippet),
 			recordIdx, m.endpoint, resp.StatusCode, keyValue,
 		)
 	}
@@ -698,13 +804,23 @@ func (m *EnrichmentModule) executeHTTPRequest(ctx context.Context, keyValue stri
 }
 
 // buildHTTPRequest creates and configures an HTTP request with headers and authentication.
-func (m *EnrichmentModule) buildHTTPRequest(ctx context.Context, requestURL, keyValue string, recordIdx int) (*http.Request, error) {
+func (m *HTTPCallModule) buildHTTPRequest(ctx context.Context, requestURL, keyValue string, recordIdx int, record map[string]interface{}) (*http.Request, error) {
+	// Build request body for POST/PUT
+	var bodyReader io.Reader
+	if m.method == http.MethodPost || m.method == http.MethodPut {
+		if m.bodyTemplateRaw != "" {
+			// Evaluate body template with record data
+			bodyContent := m.templateEvaluator.Evaluate(m.bodyTemplateRaw, record)
+			bodyReader = bytes.NewReader([]byte(bodyContent))
+		}
+	}
+
 	// Create HTTP request
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	req, err := http.NewRequestWithContext(ctx, m.method, requestURL, bodyReader)
 	if err != nil {
-		return nil, newEnrichmentError(
-			ErrCodeEnrichmentHTTPError,
-			fmt.Sprintf("enrichment failed to create request: %v", err),
+		return nil, newHTTPCallError(
+			ErrCodeHTTPCallHTTPError,
+			fmt.Sprintf("http_call failed to create request: %v", err),
 			recordIdx, m.endpoint, 0, keyValue,
 		)
 	}
@@ -713,22 +829,31 @@ func (m *EnrichmentModule) buildHTTPRequest(ctx context.Context, requestURL, key
 	req.Header.Set("User-Agent", "Canectors-Runtime/1.0")
 	req.Header.Set("Accept", "application/json")
 
-	// Set custom headers
+	// Set Content-Type for POST/PUT
+	if m.method == http.MethodPost || m.method == http.MethodPut {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	// Set custom headers with template evaluation
 	for key, value := range m.headers {
-		req.Header.Set(key, value)
+		evaluatedValue := value
+		if template.HasVariables(value) {
+			evaluatedValue = m.templateEvaluator.Evaluate(value, record)
+		}
+		req.Header.Set(key, evaluatedValue)
 	}
 
 	// Apply key as header if configured
-	if m.keyParamType == "header" {
+	if m.keyParamType == "header" && keyValue != "" {
 		req.Header.Set(m.keyParamName, keyValue)
 	}
 
 	// Apply authentication
 	if m.authHandler != nil {
 		if authErr := m.authHandler.ApplyAuth(ctx, req); authErr != nil {
-			return nil, newEnrichmentError(
-				ErrCodeEnrichmentHTTPError,
-				fmt.Sprintf("enrichment failed to apply auth: %v", authErr),
+			return nil, newHTTPCallError(
+				ErrCodeHTTPCallHTTPError,
+				fmt.Sprintf("http_call failed to apply auth: %v", authErr),
 				recordIdx, m.endpoint, 0, keyValue,
 			)
 		}
@@ -738,13 +863,13 @@ func (m *EnrichmentModule) buildHTTPRequest(ctx context.Context, requestURL, key
 }
 
 // parseResponseData parses the JSON response and extracts the data field if configured.
-func (m *EnrichmentModule) parseResponseData(body []byte, statusCode int, recordIdx int) (map[string]interface{}, error) {
+func (m *HTTPCallModule) parseResponseData(body []byte, statusCode int, recordIdx int) (map[string]interface{}, error) {
 	// Parse JSON response
 	var responseData map[string]interface{}
 	if err := json.Unmarshal(body, &responseData); err != nil {
-		return nil, newEnrichmentError(
-			ErrCodeEnrichmentJSONParse,
-			fmt.Sprintf("enrichment failed to parse response: %v", err),
+		return nil, newHTTPCallError(
+			ErrCodeHTTPCallJSONParse,
+			fmt.Sprintf("http_call failed to parse response: %v", err),
 			recordIdx, m.endpoint, statusCode, "",
 		)
 	}
@@ -759,10 +884,10 @@ func (m *EnrichmentModule) parseResponseData(body []byte, statusCode int, record
 
 // extractDataField extracts the configured data field from the response.
 // Returns an empty map if the field is not found or invalid.
-func (m *EnrichmentModule) extractDataField(responseData map[string]interface{}, recordIdx int) map[string]interface{} {
+func (m *HTTPCallModule) extractDataField(responseData map[string]interface{}, recordIdx int) map[string]interface{} {
 	data, ok := responseData[m.dataField]
 	if !ok {
-		logger.Warn("enrichment dataField not found or invalid",
+		logger.Warn("http_call dataField not found or invalid",
 			slog.String("data_field", m.dataField),
 			slog.Int("record_index", recordIdx),
 		)
@@ -782,25 +907,37 @@ func (m *EnrichmentModule) extractDataField(responseData map[string]interface{},
 	}
 
 	// dataField not an object - return empty
-	logger.Warn("enrichment dataField not found or invalid",
+	logger.Warn("http_call dataField not found or invalid",
 		slog.String("data_field", m.dataField),
 		slog.Int("record_index", recordIdx),
 	)
 	return make(map[string]interface{})
 }
 
-// buildRequestURL constructs the HTTP request URL based on the key configuration.
-func (m *EnrichmentModule) buildRequestURL(keyValue string) (string, error) {
+// buildRequestURL constructs the HTTP request URL based on the key configuration and template evaluation.
+func (m *HTTPCallModule) buildRequestURL(keyValue string, record map[string]interface{}) (string, error) {
+	endpoint := m.endpoint
+
+	// Evaluate template variables in endpoint ({{record.field}} syntax)
+	if template.HasVariables(endpoint) {
+		endpoint = m.templateEvaluator.EvaluateForURL(endpoint, record)
+	}
+
+	// If no key configuration, return the templated endpoint as-is
+	if m.keyParamType == "" {
+		return endpoint, nil
+	}
+
 	switch m.keyParamType {
 	case "path":
 		// Replace {paramName} in endpoint with key value
 		placeholder := "{" + m.keyParamName + "}"
-		requestURL := strings.Replace(m.endpoint, placeholder, url.PathEscape(keyValue), 1)
+		requestURL := strings.Replace(endpoint, placeholder, url.PathEscape(keyValue), 1)
 		return requestURL, nil
 
 	case "query":
 		// Add key as query parameter
-		parsedURL, err := url.Parse(m.endpoint)
+		parsedURL, err := url.Parse(endpoint)
 		if err != nil {
 			return "", fmt.Errorf(errMsgParsingEndpointURL, err)
 		}
@@ -810,49 +947,49 @@ func (m *EnrichmentModule) buildRequestURL(keyValue string) (string, error) {
 		return parsedURL.String(), nil
 
 	case "header":
-		// Header is added in fetchEnrichmentData, return endpoint as-is
-		return m.endpoint, nil
+		// Header is added in buildHTTPRequest, return endpoint as-is
+		return endpoint, nil
 
 	default:
 		return "", fmt.Errorf("unknown key paramType: %s", m.keyParamType)
 	}
 }
 
-// mergeData merges enrichment data into the record based on the merge strategy.
-func (m *EnrichmentModule) mergeData(record, enrichmentData map[string]interface{}) map[string]interface{} {
+// mergeData merges response data into the record based on the merge strategy.
+func (m *HTTPCallModule) mergeData(record, responseData map[string]interface{}) map[string]interface{} {
 	switch m.mergeStrategy {
 	case "merge":
-		return m.deepMerge(record, enrichmentData)
+		return m.deepMerge(record, responseData)
 
 	case "replace":
-		// Replace the entire record with enrichment data
-		// Keep original fields that aren't in enrichment data
+		// Replace the entire record with response data
+		// Keep original fields that aren't in response data
 		result := make(map[string]interface{})
 		for k, v := range record {
 			result[k] = v
 		}
-		for k, v := range enrichmentData {
+		for k, v := range responseData {
 			result[k] = v
 		}
 		return result
 
 	case "append":
-		// Append enrichment data under a special key
+		// Append response data under a special key
 		result := make(map[string]interface{})
 		for k, v := range record {
 			result[k] = v
 		}
-		result["_enrichment"] = enrichmentData
+		result["_response"] = responseData
 		return result
 
 	default:
-		return m.deepMerge(record, enrichmentData)
+		return m.deepMerge(record, responseData)
 	}
 }
 
 // deepMerge performs a deep merge of two maps.
 // Values from b override values from a, except for nested maps which are merged recursively.
-func (m *EnrichmentModule) deepMerge(a, b map[string]interface{}) map[string]interface{} {
+func (m *HTTPCallModule) deepMerge(a, b map[string]interface{}) map[string]interface{} {
 	result := make(map[string]interface{})
 
 	// Copy all from a
@@ -879,11 +1016,11 @@ func (m *EnrichmentModule) deepMerge(a, b map[string]interface{}) map[string]int
 }
 
 // GetCacheStats returns the current cache statistics.
-func (m *EnrichmentModule) GetCacheStats() cache.Stats {
+func (m *HTTPCallModule) GetCacheStats() cache.Stats {
 	return m.cache.Stats()
 }
 
 // ClearCache clears all entries from the cache.
-func (m *EnrichmentModule) ClearCache() {
+func (m *HTTPCallModule) ClearCache() {
 	m.cache.Clear()
 }

@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/canectors/runtime/internal/auth"
 	"github.com/canectors/runtime/internal/errhandling"
+	"github.com/canectors/runtime/internal/httpconfig"
 	"github.com/canectors/runtime/internal/logger"
 	"github.com/canectors/runtime/pkg/connector"
 )
@@ -46,6 +48,12 @@ const (
 const (
 	authTypeAPIKey      = "api-key"
 	defaultAPIKeyHeader = "X-API-Key"
+)
+
+// Log messages for header validation (extracted for reuse and testability)
+const (
+	msgInvalidHeaderNameSkipping  = "invalid header name, skipping"
+	msgInvalidHeaderValueSkipping = "invalid header value, skipping"
 )
 
 // Supported HTTP methods for output module
@@ -95,6 +103,8 @@ type RequestConfig struct {
 	QueryParams       map[string]string // Static query parameters
 	QueryFromRecord   map[string]string // Query parameters extracted from record data
 	HeadersFromRecord map[string]string // Headers extracted from record data
+	BodyTemplateFile  string            // Path to external template file for request body
+	bodyTemplateRaw   string            // Loaded template content (internal use)
 }
 
 // RetryConfig is an alias for errhandling.RetryConfig for backward compatibility.
@@ -104,18 +114,19 @@ type RetryConfig = errhandling.RetryConfig
 // HTTPRequestModule implements HTTP-based data sending.
 // It sends transformed records to a target REST API via HTTP requests.
 type HTTPRequestModule struct {
-	endpoint         string
-	method           string
-	headers          map[string]string
-	timeout          time.Duration
-	request          RequestConfig
-	retry            RetryConfig
-	authHandler      auth.Handler
-	client           *http.Client
-	onError          errhandling.OnErrorStrategy // "fail", "skip", "log"
-	successCodes     []int                       // HTTP status codes considered success
-	lastRetryInfo    *connector.RetryInfo
-	retryHintProgram *vm.Program // Compiled expr program for retryHintFromBody
+	endpoint          string
+	method            string
+	headers           map[string]string
+	timeout           time.Duration
+	request           RequestConfig
+	retry             RetryConfig
+	authHandler       auth.Handler
+	client            *http.Client
+	onError           errhandling.OnErrorStrategy // "fail", "skip", "log"
+	successCodes      []int                       // HTTP status codes considered success
+	lastRetryInfo     *connector.RetryInfo
+	retryHintProgram  *vm.Program        // Compiled expr program for retryHintFromBody
+	templateEvaluator *TemplateEvaluator // Template evaluator for dynamic content
 }
 
 // Default success status codes
@@ -169,18 +180,52 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 		}
 	}
 
+	// Validate template syntax in endpoint and headers
+	if err := validateTemplateConfig(endpoint, headers); err != nil {
+		return nil, fmt.Errorf("validating template configuration: %w", err)
+	}
+
+	// Load body template file if configured
+	if reqConfig.BodyTemplateFile != "" {
+		templateContent, err := os.ReadFile(reqConfig.BodyTemplateFile)
+		if err != nil {
+			return nil, fmt.Errorf("loading body template file %q: %w", reqConfig.BodyTemplateFile, err)
+		}
+		reqConfig.bodyTemplateRaw = string(templateContent)
+
+		// Validate template syntax in loaded file
+		if err := ValidateTemplateSyntax(reqConfig.bodyTemplateRaw); err != nil {
+			return nil, fmt.Errorf("invalid template syntax in %q: %w", reqConfig.BodyTemplateFile, err)
+		}
+
+		logger.Debug("loaded body template file",
+			slog.String("file", reqConfig.BodyTemplateFile),
+			slog.Int("size", len(templateContent)),
+		)
+	}
+
 	module := &HTTPRequestModule{
-		endpoint:         endpoint,
-		method:           method,
-		headers:          headers,
-		timeout:          timeout,
-		request:          reqConfig,
-		retry:            retryConfig,
-		authHandler:      authHandler,
-		client:           client,
-		onError:          onError,
-		successCodes:     successCodes,
-		retryHintProgram: retryHintProgram,
+		endpoint:          endpoint,
+		method:            method,
+		headers:           headers,
+		timeout:           timeout,
+		request:           reqConfig,
+		retry:             retryConfig,
+		authHandler:       authHandler,
+		client:            client,
+		onError:           onError,
+		successCodes:      successCodes,
+		retryHintProgram:  retryHintProgram,
+		templateEvaluator: NewTemplateEvaluator(),
+	}
+
+	// Check if endpoint/headers use templating
+	hasTemplating := HasTemplateVariables(endpoint)
+	for _, v := range headers {
+		if HasTemplateVariables(v) {
+			hasTemplating = true
+			break
+		}
 	}
 
 	logger.Debug("http request output module created",
@@ -189,9 +234,28 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 		slog.String("timeout", timeout.String()),
 		slog.Bool("has_auth", authHandler != nil),
 		slog.String("body_from", reqConfig.BodyFrom),
+		slog.Bool("has_templating", hasTemplating),
+		slog.String("body_template_file", reqConfig.BodyTemplateFile),
 	)
 
 	return module, nil
+}
+
+// validateTemplateConfig validates template syntax in configuration.
+func validateTemplateConfig(endpoint string, headers map[string]string) error {
+	// Validate endpoint template syntax
+	if err := ValidateTemplateSyntax(endpoint); err != nil {
+		return fmt.Errorf("invalid endpoint template: %w", err)
+	}
+
+	// Validate header template syntax
+	for name, value := range headers {
+		if err := ValidateTemplateSyntax(value); err != nil {
+			return fmt.Errorf("invalid template in header %q: %w", name, err)
+		}
+	}
+
+	return nil
 }
 
 // extractBasicConfig extracts required configuration: endpoint, method, and timeout
@@ -211,25 +275,18 @@ func extractBasicConfig(config map[string]interface{}) (endpoint, method string,
 		return "", "", 0, fmt.Errorf("%w: %s", ErrInvalidMethod, method)
 	}
 
-	timeout = defaultHTTPTimeout
-	if timeoutMs, ok := config["timeoutMs"].(float64); ok && timeoutMs > 0 {
-		timeout = time.Duration(timeoutMs) * time.Millisecond
+	timeoutMs := 0
+	if ms, ok := config["timeoutMs"].(float64); ok && ms > 0 {
+		timeoutMs = int(ms)
 	}
+	timeout = httpconfig.GetTimeoutDuration(timeoutMs, defaultHTTPTimeout)
 
 	return endpoint, method, timeout, nil
 }
 
 // extractHeaders extracts custom HTTP headers from configuration
 func extractHeaders(config map[string]interface{}) map[string]string {
-	headers := make(map[string]string)
-	if headersVal, ok := config["headers"].(map[string]interface{}); ok {
-		for k, v := range headersVal {
-			if strVal, ok := v.(string); ok {
-				headers[k] = strVal
-			}
-		}
-	}
-	return headers
+	return httpconfig.ExtractStringMap(config, "headers")
 }
 
 // extractRequestConfig extracts request-specific configuration
@@ -238,49 +295,32 @@ func extractRequestConfig(config map[string]interface{}) RequestConfig {
 		BodyFrom: defaultBodyFrom,
 	}
 
-	requestVal, ok := config["request"].(map[string]interface{})
-	if !ok {
-		return reqConfig
-	}
+	// Extract dynamic params using httpconfig
+	dynamicParams := httpconfig.ExtractDynamicParamsConfig(config)
+	reqConfig.PathParams = dynamicParams.PathParams
+	reqConfig.QueryParams = dynamicParams.QueryParams
+	reqConfig.QueryFromRecord = dynamicParams.QueryFromRecord
+	reqConfig.HeadersFromRecord = dynamicParams.HeadersFromRecord
 
-	if bodyFrom, ok := requestVal["bodyFrom"].(string); ok {
-		reqConfig.BodyFrom = bodyFrom
-	}
+	// Extract body template from request sub-object
+	bodyTemplateConfig := httpconfig.ExtractBodyTemplateConfigFromRequest(config)
+	reqConfig.BodyTemplateFile = bodyTemplateConfig.BodyTemplateFile
 
-	if pathParams, ok := requestVal["pathParams"].(map[string]interface{}); ok {
-		reqConfig.PathParams = extractStringMap(pathParams)
-	}
-
-	if queryParams, ok := requestVal["query"].(map[string]interface{}); ok {
-		reqConfig.QueryParams = extractStringMap(queryParams)
-	}
-
-	if queryFromRecord, ok := requestVal["queryFromRecord"].(map[string]interface{}); ok {
-		reqConfig.QueryFromRecord = extractStringMap(queryFromRecord)
-	}
-
-	if headersFromRecord, ok := requestVal["headersFromRecord"].(map[string]interface{}); ok {
-		reqConfig.HeadersFromRecord = extractStringMap(headersFromRecord)
+	// Extract bodyFrom from request sub-object
+	if requestVal, ok := config["request"].(map[string]interface{}); ok {
+		if bodyFrom, ok := requestVal["bodyFrom"].(string); ok {
+			reqConfig.BodyFrom = bodyFrom
+		}
 	}
 
 	return reqConfig
 }
 
-// extractStringMap converts map[string]interface{} to map[string]string
-func extractStringMap(m map[string]interface{}) map[string]string {
-	result := make(map[string]string)
-	for k, v := range m {
-		if strVal, ok := v.(string); ok {
-			result[k] = strVal
-		}
-	}
-	return result
-}
-
 // extractErrorHandling extracts error handling mode from configuration
 func extractErrorHandling(config map[string]interface{}) errhandling.OnErrorStrategy {
-	if onErrorVal, ok := config["onError"].(string); ok {
-		return errhandling.ParseOnErrorStrategy(onErrorVal)
+	ehc := httpconfig.ExtractErrorHandlingConfig(config)
+	if ehc.OnError != "" {
+		return errhandling.ParseOnErrorStrategy(ehc.OnError)
 	}
 	return errhandling.OnErrorFail // default
 }
@@ -412,16 +452,47 @@ func (h *HTTPRequestModule) sendBatchMode(ctx context.Context, records []map[str
 		slog.Int("record_count", len(records)),
 	)
 
-	// Marshal records to JSON array
-	body, err := json.Marshal(records)
-	if err != nil {
-		logger.Error("failed to marshal records to JSON",
-			slog.String("module_type", "httpRequest"),
-			slog.String("endpoint", h.endpoint),
-			slog.Int("record_count", len(records)),
-			slog.String("error", err.Error()),
+	// Build request body
+	var body []byte
+	var err error
+
+	if h.request.bodyTemplateRaw != "" {
+		// Use template file: evaluate template with first record (batch context)
+		// For batch mode with template, we can only use first record's data
+		// The template should be designed accordingly
+		if len(records) > 0 {
+			bodyStr := h.templateEvaluator.EvaluateTemplate(h.request.bodyTemplateRaw, records[0])
+			body = []byte(bodyStr)
+
+			// Validate resulting JSON is well-formed (AC #4)
+			// Only validate if Content-Type indicates JSON
+			if h.isJSONContentType() {
+				if validationErr := validateJSON(body); validationErr != nil {
+					logger.Warn("body template produced invalid JSON, continuing anyway",
+						slog.String("error", validationErr.Error()),
+						slog.String("body_preview", truncateString(string(body), 100)),
+					)
+					// Continue execution - let HTTP client handle the error if needed
+				}
+			}
+		} else {
+			body = []byte(h.request.bodyTemplateRaw)
+		}
+		logger.Debug("body generated from template file",
+			slog.Int("body_size", len(body)),
 		)
-		return 0, fmt.Errorf("%w: %w", ErrJSONMarshal, err)
+	} else {
+		// Default: marshal records to JSON array
+		body, err = json.Marshal(records)
+		if err != nil {
+			logger.Error("failed to marshal records to JSON",
+				slog.String("module_type", "httpRequest"),
+				slog.String("endpoint", h.endpoint),
+				slog.Int("record_count", len(records)),
+				slog.String("error", err.Error()),
+			)
+			return 0, fmt.Errorf("%w: %w", ErrJSONMarshal, err)
+		}
 	}
 
 	logger.Debug("request body prepared",
@@ -429,11 +500,18 @@ func (h *HTTPRequestModule) sendBatchMode(ctx context.Context, records []map[str
 		slog.Int("body_size", len(body)),
 	)
 
-	// Resolve endpoint with static query parameters
-	endpoint := h.resolveEndpointWithStaticQuery(h.endpoint)
+	// Resolve endpoint with template variables and static query parameters
+	// In batch mode, templates are evaluated using the first record
+	endpoint := h.resolveEndpointForBatch(h.endpoint, records)
 
-	// Execute request (no record-specific headers in batch mode)
-	err = h.doRequestWithHeaders(ctx, endpoint, body, nil)
+	// Evaluate templated headers using first record in batch mode
+	var batchHeaders map[string]string
+	if len(records) > 0 {
+		batchHeaders = h.extractHeadersFromRecord(records[0])
+	}
+
+	// Execute request with batch-resolved headers
+	err = h.doRequestWithHeaders(ctx, endpoint, body, batchHeaders)
 	requestDuration := time.Since(requestStart)
 
 	if err != nil {
@@ -471,65 +549,27 @@ func (h *HTTPRequestModule) sendSingleRecordMode(ctx context.Context, records []
 	for i, record := range records {
 		requestStart := time.Now()
 
-		// Marshal single record to JSON object
-		body, err := json.Marshal(record)
+		body, err := h.buildBodyForRecord(record, i)
 		if err != nil {
 			failed++
-			logger.Error("failed to marshal record",
-				slog.String("module_type", "httpRequest"),
-				slog.Int("record_index", i),
-				slog.String("error", err.Error()),
-			)
-			// Marshal errors respect onError strategy
 			if h.onError == errhandling.OnErrorFail {
 				return sent, fmt.Errorf("%w at record %d: %w", ErrJSONMarshal, i, err)
 			}
-			// skip or log mode: continue
 			continue
 		}
 
-		// Resolve endpoint with path parameters and query params from record
 		endpoint := h.resolveEndpointForRecord(record)
-
-		// Extract headers from record data
 		recordHeaders := h.extractHeadersFromRecord(record)
 
-		// Execute request with record-specific headers
-		err = h.doRequestWithHeaders(ctx, endpoint, body, recordHeaders)
-		requestDuration := time.Since(requestStart)
-
-		if err != nil {
+		ok, err := h.executeRequestAndLog(ctx, endpoint, body, recordHeaders, i, requestStart)
+		if !ok {
 			failed++
-			errorCategory := errhandling.GetErrorCategory(err)
-			isFatal := errhandling.IsFatal(err)
-
-			logger.Error("request failed for record",
-				slog.String("module_type", "httpRequest"),
-				slog.Int("record_index", i),
-				slog.String("endpoint", endpoint),
-				slog.Duration("duration", requestDuration),
-				slog.String("error", err.Error()),
-				slog.String("error_category", string(errorCategory)),
-				slog.Bool("is_fatal", isFatal),
-				slog.String("on_error", string(h.onError)),
-			)
-
-			// All errors respect onError strategy
-			// "fatal" means no retry (handled by retry executor), not always fail
 			if h.onError == errhandling.OnErrorFail {
 				return sent, err
 			}
-			// skip or log mode: continue to next record
 			continue
 		}
-
 		sent++
-		logger.Debug("record sent successfully",
-			slog.String("module_type", "httpRequest"),
-			slog.Int("record_index", i),
-			slog.String("endpoint", endpoint),
-			slog.Duration("duration", requestDuration),
-		)
 	}
 
 	logger.Debug("single record mode completed",
@@ -540,6 +580,68 @@ func (h *HTTPRequestModule) sendSingleRecordMode(ctx context.Context, records []
 	)
 
 	return sent, nil
+}
+
+// buildBodyForRecord builds the request body for a single record (template or JSON marshal).
+// Returns an error only on marshal failure; invalid JSON from templates is logged but not returned.
+func (h *HTTPRequestModule) buildBodyForRecord(record map[string]interface{}, recordIndex int) ([]byte, error) {
+	if h.request.bodyTemplateRaw != "" {
+		bodyStr := h.templateEvaluator.EvaluateTemplate(h.request.bodyTemplateRaw, record)
+		body := []byte(bodyStr)
+		if h.isJSONContentType() {
+			if validationErr := validateJSON(body); validationErr != nil {
+				logger.Warn("body template produced invalid JSON, continuing anyway",
+					slog.Int("record_index", recordIndex),
+					slog.String("error", validationErr.Error()),
+					slog.String("body_preview", truncateString(string(body), 100)),
+				)
+			}
+		}
+		return body, nil
+	}
+	body, err := json.Marshal(record)
+	if err != nil {
+		logger.Error("failed to marshal record",
+			slog.String("module_type", "httpRequest"),
+			slog.Int("record_index", recordIndex),
+			slog.String("error", err.Error()),
+		)
+		return nil, err
+	}
+	return body, nil
+}
+
+// executeRequestAndLog performs the HTTP request for a single record, logs outcome, and returns success.
+func (h *HTTPRequestModule) executeRequestAndLog(
+	ctx context.Context, endpoint string, body []byte, recordHeaders map[string]string,
+	recordIndex int, requestStart time.Time,
+) (ok bool, err error) {
+	err = h.doRequestWithHeaders(ctx, endpoint, body, recordHeaders)
+	duration := time.Since(requestStart)
+
+	if err != nil {
+		errorCategory := errhandling.GetErrorCategory(err)
+		isFatal := errhandling.IsFatal(err)
+		logger.Error("request failed for record",
+			slog.String("module_type", "httpRequest"),
+			slog.Int("record_index", recordIndex),
+			slog.String("endpoint", endpoint),
+			slog.Duration("duration", duration),
+			slog.String("error", err.Error()),
+			slog.String("error_category", string(errorCategory)),
+			slog.Bool("is_fatal", isFatal),
+			slog.String("on_error", string(h.onError)),
+		)
+		return false, err
+	}
+
+	logger.Debug("record sent successfully",
+		slog.String("module_type", "httpRequest"),
+		slog.Int("record_index", recordIndex),
+		slog.String("endpoint", endpoint),
+		slog.Duration("duration", duration),
+	)
+	return true, nil
 }
 
 // handleOAuth2Unauthorized handles 401 Unauthorized for OAuth2 authentication
@@ -1033,9 +1135,11 @@ func (h *HTTPRequestModule) executeHTTPRequest(ctx context.Context, endpoint str
 // Note: calculateBackoff and isTransientError methods have been replaced by
 // errhandling.RetryConfig.CalculateDelay and errhandling.IsRetryable respectively.
 
-// resolveEndpointWithStaticQuery adds static query parameters to the endpoint
+// resolveEndpointWithStaticQuery adds static query parameters to the endpoint.
+// In batch mode, template variables can be evaluated using the first record if available.
 func (h *HTTPRequestModule) resolveEndpointWithStaticQuery(endpoint string) string {
-	if len(h.request.QueryParams) == 0 {
+	// No query params to add
+	if len(h.request.QueryParams) == 0 && !HasTemplateVariables(endpoint) {
 		return endpoint
 	}
 
@@ -1060,11 +1164,43 @@ func (h *HTTPRequestModule) resolveEndpointWithStaticQuery(endpoint string) stri
 	return parsedURL.String()
 }
 
-// resolveEndpointForRecord resolves path parameters and query params for a single record
+// resolveEndpointForBatch resolves template variables in endpoint for batch mode.
+// Uses the first record for template evaluation when in batch mode.
+func (h *HTTPRequestModule) resolveEndpointForBatch(endpoint string, records []map[string]interface{}) string {
+	// Evaluate template variables using first record (for batch mode)
+	if HasTemplateVariables(endpoint) && len(records) > 0 {
+		endpoint = h.templateEvaluator.EvaluateTemplateForURL(endpoint, records[0])
+		logger.Debug("batch mode: evaluated endpoint template using first record",
+			slog.String("endpoint", endpoint),
+		)
+	}
+
+	finalURL := h.resolveEndpointWithStaticQuery(endpoint)
+
+	// Validate the resulting URL is well-formed (AC #2)
+	if err := validateURL(finalURL); err != nil {
+		logger.Warn("invalid URL after template evaluation",
+			slog.String("url", finalURL),
+			slog.String("error", err.Error()),
+		)
+		// Return the URL anyway to avoid breaking execution, but log the issue
+	}
+
+	return finalURL
+}
+
+// resolveEndpointForRecord resolves path parameters, template variables, and query params for a single record.
+// Template variables ({{record.field}}) are evaluated first, then path parameters ({param}) are substituted.
 func (h *HTTPRequestModule) resolveEndpointForRecord(record map[string]interface{}) string {
 	endpoint := h.endpoint
 
-	// Substitute path parameters (properly URL-encoded)
+	// Evaluate template variables in endpoint ({{record.field}} syntax)
+	// This allows dynamic URL construction based on record data
+	if HasTemplateVariables(endpoint) {
+		endpoint = h.templateEvaluator.EvaluateTemplateForURL(endpoint, record)
+	}
+
+	// Substitute path parameters (properly URL-encoded) - legacy {param} syntax
 	for param, fieldPath := range h.request.PathParams {
 		value := getFieldValue(record, fieldPath)
 		if value != "" {
@@ -1101,24 +1237,169 @@ func (h *HTTPRequestModule) resolveEndpointForRecord(record map[string]interface
 	}
 
 	parsedURL.RawQuery = q.Encode()
-	return parsedURL.String()
-}
+	finalURL := parsedURL.String()
 
-// extractHeadersFromRecord extracts header values from record data
-func (h *HTTPRequestModule) extractHeadersFromRecord(record map[string]interface{}) map[string]string {
-	if len(h.request.HeadersFromRecord) == 0 {
-		return nil
+	// Validate the resulting URL is well-formed (AC #2)
+	if err := validateURL(finalURL); err != nil {
+		logger.Warn("invalid URL after template evaluation",
+			slog.String("url", finalURL),
+			slog.String("error", err.Error()),
+		)
+		// Return the URL anyway to avoid breaking execution, but log the issue
 	}
 
-	headers := make(map[string]string)
-	for headerName, fieldPath := range h.request.HeadersFromRecord {
-		value := getFieldValue(record, fieldPath)
-		if value != "" {
-			headers[headerName] = value
+	return finalURL
+}
+
+// validateURL validates that a URL string is well-formed.
+// Returns an error if the URL is invalid.
+func validateURL(urlStr string) error {
+	if urlStr == "" {
+		return fmt.Errorf("empty URL")
+	}
+
+	parsed, err := url.Parse(urlStr)
+	if err != nil {
+		return fmt.Errorf("invalid URL format: %w", err)
+	}
+
+	// Check that URL has a scheme
+	if parsed.Scheme == "" {
+		return fmt.Errorf("URL missing scheme")
+	}
+
+	// Check that URL has a host (for http/https schemes)
+	if parsed.Scheme == "http" || parsed.Scheme == "https" {
+		if parsed.Host == "" {
+			return fmt.Errorf("URL missing host")
 		}
 	}
 
+	return nil
+}
+
+// validateHeaderName validates an HTTP header name per RFC 7230.
+// Header names must be valid token characters (alphanumeric and specific symbols).
+func validateHeaderName(name string) error {
+	if name == "" {
+		return fmt.Errorf("header name cannot be empty")
+	}
+
+	// RFC 7230: header names are tokens (alphanumeric and specific symbols)
+	// Check for invalid characters: control characters, spaces, and specific invalid chars
+	for _, r := range name {
+		if r < 0x21 || r > 0x7E {
+			return fmt.Errorf("header name contains invalid character: %q", r)
+		}
+		if r == ':' || r == ' ' || r == '\t' || r == '\r' || r == '\n' {
+			return fmt.Errorf("header name contains invalid character: %q", r)
+		}
+	}
+
+	return nil
+}
+
+// validateHeaderValue validates an HTTP header value per RFC 7230.
+// Header values must not contain control characters except HTAB.
+func validateHeaderValue(value string) error {
+	// RFC 7230: header values can contain VCHAR, obs-text, and HTAB
+	// Control characters (except HTAB) are not allowed
+	for _, r := range value {
+		if r < 0x20 && r != '\t' {
+			return fmt.Errorf("header value contains invalid control character: %q", r)
+		}
+		if r == '\r' || r == '\n' {
+			return fmt.Errorf("header value contains invalid character: %q", r)
+		}
+	}
+
+	return nil
+}
+
+// tryAddValidHeader validates header name and value per RFC 7230, logs and skips if invalid,
+// adds to headers and returns true otherwise.
+func tryAddValidHeader(headers map[string]string, name, value string) bool {
+	if err := validateHeaderName(name); err != nil {
+		logger.Warn(msgInvalidHeaderNameSkipping,
+			slog.String("header", name),
+			slog.String("error", err.Error()),
+		)
+		return false
+	}
+	if err := validateHeaderValue(value); err != nil {
+		logger.Warn(msgInvalidHeaderValueSkipping,
+			slog.String("header", name),
+			slog.String("error", err.Error()),
+		)
+		return false
+	}
+	headers[name] = value
+	return true
+}
+
+// extractHeadersFromRecord extracts header values from record data.
+// Supports both HeadersFromRecord (field path lookup) and template syntax ({{record.field}}).
+// Validates header names and values per RFC 7230 (AC #3).
+func (h *HTTPRequestModule) extractHeadersFromRecord(record map[string]interface{}) map[string]string {
+	headers := make(map[string]string)
+
+	for headerName, headerValue := range h.headers {
+		value := headerValue
+		if HasTemplateVariables(headerValue) {
+			value = h.templateEvaluator.EvaluateTemplate(headerValue, record)
+			if value == "" {
+				continue
+			}
+		}
+		tryAddValidHeader(headers, headerName, value)
+	}
+
+	for headerName, fieldPath := range h.request.HeadersFromRecord {
+		value := getFieldValue(record, fieldPath)
+		if value != "" {
+			tryAddValidHeader(headers, headerName, value)
+		}
+	}
+
+	if len(headers) == 0 {
+		return nil
+	}
 	return headers
+}
+
+// validateJSON validates that a byte slice contains valid JSON.
+// Returns an error if the JSON is invalid.
+func validateJSON(data []byte) error {
+	if len(data) == 0 {
+		return fmt.Errorf("empty JSON")
+	}
+
+	var v interface{}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+
+	return nil
+}
+
+// isJSONContentType checks if the module's Content-Type header indicates JSON.
+func (h *HTTPRequestModule) isJSONContentType() bool {
+	contentType := h.headers[headerContentType]
+	if contentType == "" {
+		contentType = defaultContentType
+	}
+
+	// Check if Content-Type is JSON (application/json, application/vnd.api+json, etc.)
+	return strings.HasPrefix(strings.ToLower(contentType), "application/json") ||
+		strings.Contains(strings.ToLower(contentType), "+json")
+}
+
+// truncateString truncates a string to a maximum length for logging.
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 // getFieldValue extracts a string value from a record using dot notation path

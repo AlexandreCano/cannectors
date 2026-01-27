@@ -4353,3 +4353,131 @@ func TestHTTPRequest_RetryHintFromBody_ComplexExpression(t *testing.T) {
 		t.Errorf("expected 2 requests (complex expr matches), got %d", ts.getRequestCount())
 	}
 }
+
+// Test metadata exclusion from request body
+func TestHTTPRequest_MetadataExclusion(t *testing.T) {
+	t.Run("excludes _metadata field from body", func(t *testing.T) {
+		var receivedBody string
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, _ := io.ReadAll(r.Body)
+			receivedBody = string(body)
+			w.WriteHeader(200)
+		}))
+		defer ts.Close()
+
+		config := newModuleConfig(map[string]interface{}{
+			"endpoint": ts.URL + "/api/data",
+			"method":   "POST",
+		})
+
+		module, err := NewHTTPRequestFromConfig(config)
+		if err != nil {
+			t.Fatalf("failed to create module: %v", err)
+		}
+
+		records := []map[string]interface{}{
+			{
+				"name":      "test",
+				"_metadata": map[string]interface{}{"processed": true, "timestamp": "2024-01-01"},
+			},
+		}
+
+		_, err = module.Send(context.Background(), records)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		// Verify _metadata is not in the body
+		if strings.Contains(receivedBody, "_metadata") {
+			t.Errorf("expected _metadata to be excluded from body, got: %s", receivedBody)
+		}
+		if !strings.Contains(receivedBody, "name") {
+			t.Errorf("expected data fields to be present, got: %s", receivedBody)
+		}
+	})
+
+	t.Run("only excludes _metadata field, not other underscore fields", func(t *testing.T) {
+		var receivedBody string
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, _ := io.ReadAll(r.Body)
+			receivedBody = string(body)
+			w.WriteHeader(200)
+		}))
+		defer ts.Close()
+
+		config := newModuleConfig(map[string]interface{}{
+			"endpoint": ts.URL + "/api/data",
+			"method":   "POST",
+		})
+
+		module, err := NewHTTPRequestFromConfig(config)
+		if err != nil {
+			t.Fatalf("failed to create module: %v", err)
+		}
+
+		records := []map[string]interface{}{
+			{
+				"name":      "test",
+				"_metadata": map[string]interface{}{"processed": true},
+				"_internal": "should be included",
+				"_custom":   123,
+			},
+		}
+
+		_, err = module.Send(context.Background(), records)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		// Verify only _metadata is excluded, other underscore fields are kept
+		if strings.Contains(receivedBody, "_metadata") {
+			t.Errorf("expected _metadata to be excluded, got: %s", receivedBody)
+		}
+		if !strings.Contains(receivedBody, "_internal") {
+			t.Errorf("expected _internal to be included, got: %s", receivedBody)
+		}
+		if !strings.Contains(receivedBody, "_custom") {
+			t.Errorf("expected _custom to be included, got: %s", receivedBody)
+		}
+	})
+
+	t.Run("works in single record mode", func(t *testing.T) {
+		var receivedBody string
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, _ := io.ReadAll(r.Body)
+			receivedBody = string(body)
+			w.WriteHeader(200)
+		}))
+		defer ts.Close()
+
+		config := newModuleConfig(map[string]interface{}{
+			"endpoint": ts.URL + "/api/data",
+			"method":   "POST",
+			"request": map[string]interface{}{
+				"bodyFrom": "record",
+			},
+		})
+
+		module, err := NewHTTPRequestFromConfig(config)
+		if err != nil {
+			t.Fatalf("failed to create module: %v", err)
+		}
+
+		records := []map[string]interface{}{
+			{
+				"name":      "test",
+				"_metadata": map[string]interface{}{"processed": true},
+			},
+		}
+
+		_, err = module.Send(context.Background(), records)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		// Verify metadata is not in the body
+		if strings.Contains(receivedBody, "_metadata") {
+			t.Errorf("expected metadata to be excluded in single record mode, got: %s", receivedBody)
+		}
+	})
+}

@@ -1885,3 +1885,127 @@ func valuesEqual(a, b interface{}) bool {
 	// Handle primitives - use string comparison for simplicity
 	return a == b
 }
+
+// Test metadata preservation through mapping filter
+func TestMapping_MetadataPreservation(t *testing.T) {
+	t.Run("preserves _metadata during transformation", func(t *testing.T) {
+		mappings := []FieldMapping{
+			{Source: "name", Target: "fullName"},
+			{Source: "age", Target: "userAge"},
+		}
+
+		module, err := NewMappingFromConfig(mappings, OnErrorFail)
+		if err != nil {
+			t.Fatalf("NewMappingFromConfig failed: %v", err)
+		}
+
+		records := []map[string]interface{}{
+			{
+				"name": "John",
+				"age":  30,
+				"_metadata": map[string]interface{}{
+					"processed_at": "2024-01-01T12:00:00Z",
+					"source":       "api",
+				},
+			},
+		}
+
+		result, err := module.Process(context.Background(), records)
+		if err != nil {
+			t.Fatalf("Process failed: %v", err)
+		}
+
+		if len(result) != 1 {
+			t.Fatalf("expected 1 record, got %d", len(result))
+		}
+
+		// Check that mapped fields exist
+		if result[0]["fullName"] != "John" {
+			t.Errorf("expected fullName='John', got %v", result[0]["fullName"])
+		}
+		if result[0]["userAge"] != 30 {
+			t.Errorf("expected userAge=30, got %v", result[0]["userAge"])
+		}
+
+		// Check that _metadata is preserved
+		metadata, ok := result[0]["_metadata"].(map[string]interface{})
+		if !ok {
+			t.Fatal("expected _metadata to be preserved")
+		}
+		if metadata["processed_at"] != "2024-01-01T12:00:00Z" {
+			t.Errorf("expected processed_at preserved, got %v", metadata["processed_at"])
+		}
+		if metadata["source"] != "api" {
+			t.Errorf("expected source preserved, got %v", metadata["source"])
+		}
+	})
+
+	t.Run("only preserves _metadata field not other underscore fields", func(t *testing.T) {
+		mappings := []FieldMapping{
+			{Source: "data", Target: "output"},
+		}
+
+		module, err := NewMappingFromConfig(mappings, OnErrorFail)
+		if err != nil {
+			t.Fatalf("NewMappingFromConfig failed: %v", err)
+		}
+
+		records := []map[string]interface{}{
+			{
+				"data":      "value",
+				"_metadata": map[string]interface{}{"key": "meta"},
+				"_custom":   "custom_value",
+				"_internal": map[string]interface{}{"debug": true},
+			},
+		}
+
+		result, err := module.Process(context.Background(), records)
+		if err != nil {
+			t.Fatalf("Process failed: %v", err)
+		}
+
+		// Check _metadata is preserved
+		if _, ok := result[0]["_metadata"]; !ok {
+			t.Error("expected _metadata to be preserved")
+		}
+		// Other underscore fields should NOT be preserved (only _metadata)
+		if _, ok := result[0]["_custom"]; ok {
+			t.Error("expected _custom to NOT be preserved (only _metadata is special)")
+		}
+		if _, ok := result[0]["_internal"]; ok {
+			t.Error("expected _internal to NOT be preserved (only _metadata is special)")
+		}
+	})
+
+	t.Run("_metadata available for mapping source", func(t *testing.T) {
+		// This test verifies _metadata can be accessed via mapping if needed
+		mappings := []FieldMapping{
+			{Source: "_metadata.source", Target: "original_source"},
+			{Source: "name", Target: "name"},
+		}
+
+		module, err := NewMappingFromConfig(mappings, OnErrorFail)
+		if err != nil {
+			t.Fatalf("NewMappingFromConfig failed: %v", err)
+		}
+
+		records := []map[string]interface{}{
+			{
+				"name": "Test",
+				"_metadata": map[string]interface{}{
+					"source": "external-api",
+				},
+			},
+		}
+
+		result, err := module.Process(context.Background(), records)
+		if err != nil {
+			t.Fatalf("Process failed: %v", err)
+		}
+
+		// _metadata.source should be mapped to output field
+		if result[0]["original_source"] != "external-api" {
+			t.Errorf("expected original_source='external-api', got %v", result[0]["original_source"])
+		}
+	})
+}

@@ -482,8 +482,9 @@ func (h *HTTPRequestModule) sendBatchMode(ctx context.Context, records []map[str
 			slog.Int("body_size", len(body)),
 		)
 	} else {
-		// Default: marshal records to JSON array
-		body, err = json.Marshal(records)
+		// Default: marshal records to JSON array (with metadata stripped)
+		recordsForBody := stripMetadataFromRecords(records)
+		body, err = json.Marshal(recordsForBody)
 		if err != nil {
 			logger.Error("failed to marshal records to JSON",
 				slog.String("module_type", "httpRequest"),
@@ -599,7 +600,9 @@ func (h *HTTPRequestModule) buildBodyForRecord(record map[string]interface{}, re
 		}
 		return body, nil
 	}
-	body, err := json.Marshal(record)
+	// Strip metadata before serialization
+	recordForBody := stripMetadataFromRecord(record)
+	body, err := json.Marshal(recordForBody)
 	if err != nil {
 		logger.Error("failed to marshal record",
 			slog.String("module_type", "httpRequest"),
@@ -1356,6 +1359,45 @@ func (h *HTTPRequestModule) extractHeadersFromRecord(record map[string]interface
 		return nil
 	}
 	return headers
+}
+
+// MetadataFieldName is the reserved field name for record metadata.
+// This field is automatically excluded from request bodies.
+// Note: This matches runtime.DefaultMetadataFieldName but is defined here to avoid import cycles.
+const MetadataFieldName = "_metadata"
+
+// stripMetadataFromRecords removes the _metadata field from records before serialization.
+// Used to exclude internal metadata from the request body sent to target systems.
+func stripMetadataFromRecords(records []map[string]interface{}) []map[string]interface{} {
+	result := make([]map[string]interface{}, len(records))
+	for i, record := range records {
+		result[i] = stripMetadataFromRecord(record)
+	}
+	return result
+}
+
+// stripMetadataFromRecord removes the _metadata field from a single record.
+// Creates a copy of the record without the metadata field to avoid modifying the original.
+// This matches the behavior of runtime.MetadataAccessor.StripCopy but is implemented here
+// to avoid import cycles between output and runtime packages.
+func stripMetadataFromRecord(record map[string]interface{}) map[string]interface{} {
+	if record == nil {
+		return record
+	}
+
+	// Check if _metadata exists, if not return original
+	if _, exists := record[MetadataFieldName]; !exists {
+		return record
+	}
+
+	// Create a new map without _metadata
+	result := make(map[string]interface{}, len(record)-1)
+	for key, value := range record {
+		if key != MetadataFieldName {
+			result[key] = value
+		}
+	}
+	return result
 }
 
 // validateJSON validates that a byte slice contains valid JSON.

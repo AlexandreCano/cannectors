@@ -1,0 +1,103 @@
+# Example: Record Metadata Storage
+# This example demonstrates how to use metadata fields to store internal state
+# that persists through the pipeline but is excluded from the output request body.
+
+connector:
+  name: metadata-storage-example
+  version: 1.0.0
+  description: Demonstrates metadata storage for internal state tracking
+
+  input:
+    type: http-polling
+    connectionRef: source-api
+    config:
+      endpoint: /api/records
+      method: GET
+      responseExtraction:
+        dataPath: data
+    schedule:
+      cron: "*/5 * * * *"
+
+  filters:
+    # Script filter to add metadata during processing
+    - type: script
+      config:
+        script: |
+          function transform(record) {
+            // Add processing metadata
+            record._metadata = record._metadata || {};
+            record._metadata.processed_at = new Date().toISOString();
+            record._metadata.source_system = "external-api";
+            record._metadata.batch_id = "batch-" + Math.random().toString(36).substr(2, 9);
+            
+            // Add validation flags
+            record._metadata.validated = record.email && record.email.includes("@");
+            
+            // Track original values before transformation
+            record._metadata.original = {
+              name: record.name,
+              timestamp: record.created_at
+            };
+            
+            return record;
+          }
+
+    # Mapping filter - metadata is automatically preserved
+    - type: mapping
+      config:
+        onError: log
+        mappings:
+          - source: name
+            target: displayName
+          - source: email
+            target: contactEmail
+          - source: created_at
+            target: createdAt
+            transforms:
+              - op: toDate
+                format: "2006-01-02T15:04:05Z07:00"
+
+    # Condition filter can access metadata for routing
+    - type: condition
+      config:
+        expression: _metadata.validated == true
+        onTrue: continue
+        onFalse: skip
+
+  output:
+    type: http-request
+    connectionRef: target-api
+    config:
+      endpoint: /api/users
+      method: POST
+      request:
+        bodyFrom: record
+        # _metadata field is always excluded from request body automatically
+        # But can be accessed in templates for headers/URLs
+
+        # Use metadata in endpoint URL
+        # endpoint: /api/users/{{_metadata.batch_id}}/create
+
+      # Use metadata in headers
+      headers:
+        X-Processed-At: "{{_metadata.processed_at}}"
+        X-Source-System: "{{_metadata.source_system}}"
+        X-Batch-ID: "{{_metadata.batch_id}}"
+
+connections:
+  source-api:
+    type: http
+    baseUrl: https://source.example.com
+    auth:
+      type: api-key
+      config:
+        headerName: X-API-Key
+        value: "${SOURCE_API_KEY}"
+
+  target-api:
+    type: http
+    baseUrl: https://target.example.com
+    auth:
+      type: bearer
+      config:
+        token: "${TARGET_API_TOKEN}"

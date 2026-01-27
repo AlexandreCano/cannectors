@@ -995,14 +995,12 @@ func TestTemplateEvaluator_EdgeCases_VeryLongTemplate(t *testing.T) {
 	}
 }
 
-// TestTemplateEvaluator_EdgeCases_ConcurrentAccess tests concurrent template evaluation
-// Note: Cache is not thread-safe, but evaluation itself should be safe
+// TestTemplateEvaluator_EdgeCases_ConcurrentAccess tests concurrent template evaluation.
+// Each goroutine uses its own Evaluator because the template cache is not thread-safe.
 func TestTemplateEvaluator_EdgeCases_ConcurrentAccess(t *testing.T) {
-	evaluator := NewTemplateEvaluator()
 	template := "{{record.id}}"
 	record := map[string]interface{}{"id": "123"}
 
-	// Run concurrent evaluations
 	const numGoroutines = 10
 	const numIterations = 100
 	done := make(chan bool, numGoroutines)
@@ -1010,6 +1008,7 @@ func TestTemplateEvaluator_EdgeCases_ConcurrentAccess(t *testing.T) {
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
 			defer func() { done <- true }()
+			evaluator := NewTemplateEvaluator()
 			for j := 0; j < numIterations; j++ {
 				result := evaluator.EvaluateTemplate(template, record)
 				if result != "123" {
@@ -1019,7 +1018,6 @@ func TestTemplateEvaluator_EdgeCases_ConcurrentAccess(t *testing.T) {
 		}()
 	}
 
-	// Wait for all goroutines
 	for i := 0; i < numGoroutines; i++ {
 		<-done
 	}

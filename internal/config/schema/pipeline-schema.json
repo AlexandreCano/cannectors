@@ -510,7 +510,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "description": "Filter type. Canonical: mapping, condition, script, enrichment.",
+          "description": "Filter type. Canonical: mapping, condition, script, http_call.",
           "minLength": 1
         },
         "script": {
@@ -579,29 +579,29 @@
         },
         "endpoint": {
           "type": "string",
-          "description": "HTTP endpoint URL for enrichment filter. Supports {{record.field}} template variables and {paramName} placeholder for path parameters."
+          "description": "HTTP endpoint URL for http_call filter. Supports {{record.field}} template variables and {paramName} placeholder for path parameters."
         },
         "method": {
           "type": "string",
-          "description": "HTTP method for enrichment requests. GET (default), POST, or PUT.",
+          "description": "HTTP method for http_call requests. GET (default), POST, or PUT.",
           "enum": ["GET", "POST", "PUT"],
           "default": "GET"
         },
         "key": {
-          "$ref": "#/$defs/enrichmentKey",
-          "description": "Key configuration for enrichment filter. Required for GET, optional for POST/PUT with bodyTemplateFile."
+          "$ref": "#/$defs/http_callKey",
+          "description": "Key configuration for http_call filter. Required for GET, optional for POST/PUT with bodyTemplateFile."
         },
         "bodyTemplateFile": {
           "type": "string",
           "description": "Path to external template file for request body (POST/PUT). Supports {{record.field}} placeholders."
         },
         "cache": {
-          "$ref": "#/$defs/enrichmentCache",
-          "description": "Cache configuration for enrichment filter."
+          "$ref": "#/$defs/http_callCache",
+          "description": "Cache configuration for http_call filter."
         },
         "mergeStrategy": {
           "type": "string",
-          "description": "How to merge enrichment data into records.",
+          "description": "How to merge http_call data into records.",
           "enum": [
             "merge",
             "replace",
@@ -611,15 +611,15 @@
         },
         "dataField": {
           "type": "string",
-          "description": "JSON field containing the data in the enrichment response."
+          "description": "JSON field containing the data in the http_call response."
         },
         "authentication": {
           "$ref": "#/$defs/authentication",
-          "description": "Authentication for enrichment HTTP requests."
+          "description": "Authentication for http_call HTTP requests."
         },
         "headers": {
           "$ref": "#/$defs/httpHeaders",
-          "description": "Custom headers for enrichment HTTP requests. Supports {{record.field}} template variables."
+          "description": "Custom headers for http_call HTTP requests. Supports {{record.field}} template variables."
         }
       },
       "additionalProperties": true,
@@ -703,7 +703,7 @@
           "if": {
             "properties": {
               "type": {
-                "const": "enrichment"
+                "const": "http_call"
               }
             },
             "required": [
@@ -719,9 +719,9 @@
         }
       ]
     },
-    "enrichmentKey": {
+    "http_callKey": {
       "type": "object",
-      "description": "Key extraction configuration for enrichment filter.",
+      "description": "Key extraction configuration for http_call filter.",
       "required": [
         "field",
         "paramType",
@@ -748,9 +748,9 @@
       },
       "additionalProperties": false
     },
-    "enrichmentCache": {
+    "http_callCache": {
       "type": "object",
-      "description": "Cache configuration for enrichment filter.",
+      "description": "Cache configuration for http_call filter.",
       "properties": {
         "maxSize": {
           "type": "integer",

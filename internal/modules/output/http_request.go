@@ -1030,12 +1030,17 @@ func (h *HTTPRequestModule) executeHTTPRequest(ctx context.Context, endpoint str
 	req.Header.Set(headerUserAgent, defaultUserAgent)
 	req.Header.Set(headerContentType, defaultContentType)
 
-	// Set custom headers from config (may override defaults)
+	// Set static headers from config only. Templated headers are set from recordHeaders
+	// (evaluated per-record); setting raw config here would send unresolved placeholders
+	// when a templated value resolves to empty and is skipped in extractHeadersFromRecord.
 	for key, value := range h.headers {
+		if HasTemplateVariables(value) {
+			continue
+		}
 		req.Header.Set(key, value)
 	}
 
-	// Set headers from record data (may override config headers)
+	// Set headers from record data (evaluated templated + HeadersFromRecord; overrides config)
 	for key, value := range recordHeaders {
 		req.Header.Set(key, value)
 	}
@@ -1559,12 +1564,15 @@ func (h *HTTPRequestModule) buildPreviewHeaders(recordHeaders map[string]string,
 	headers[headerUserAgent] = defaultUserAgent
 	headers[headerContentType] = defaultContentType
 
-	// Set custom headers from config (may override defaults)
+	// Set static headers from config only; templated ones come from recordHeaders
 	for key, value := range h.headers {
+		if HasTemplateVariables(value) {
+			continue
+		}
 		headers[key] = value
 	}
 
-	// Set headers from record data (may override config headers)
+	// Set headers from record data (evaluated templated + HeadersFromRecord; overrides config)
 	for key, value := range recordHeaders {
 		headers[key] = value
 	}

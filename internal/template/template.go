@@ -336,7 +336,7 @@ func ValidateSyntax(template string) error {
 			ErrMsgInvalidTemplateSyntax, openCount, closeCount)
 	}
 
-	// Check each template variable has content
+	// Check each template variable has content and that all {{/}} form valid expressions
 	if openCount > 0 {
 		// First check for completely empty braces: {{}} or {{ }}
 		emptyBracesRegex := regexp.MustCompile(`\{\{\s*\}\}`)
@@ -344,12 +344,19 @@ func ValidateSyntax(template string) error {
 			return fmt.Errorf("%s: %s", ErrMsgInvalidTemplateSyntax, ErrMsgEmptyVariablePath)
 		}
 
-		// Then validate properly formed variables
+		// Validate properly formed variables
 		variables := templateVarRegex.FindAllStringSubmatch(template, -1)
 		for _, match := range variables {
 			if len(match) >= 2 && strings.TrimSpace(match[1]) == "" {
 				return fmt.Errorf("%s: %s", ErrMsgInvalidTemplateSyntax, ErrMsgEmptyVariablePath)
 			}
+		}
+
+		// Ensure every {{ and }} is part of a valid match (e.g. "}}{{" has balanced count but invalid pairing)
+		remainder := templateVarRegex.ReplaceAllString(template, "")
+		if strings.Contains(remainder, TemplatePrefix) || strings.Contains(remainder, TemplateSuffix) {
+			return fmt.Errorf("%s: template delimiters must form valid {{...}} expressions (stray '{{' or '}}' found)",
+				ErrMsgInvalidTemplateSyntax)
 		}
 	}
 

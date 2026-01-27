@@ -18,7 +18,7 @@ connector:
 
   filters:
     # Example 1: GET request with templated endpoint
-    - type: enrichment
+    - type: http_call
       endpoint: "https://crm.example.com/api/v1/customers/{{record.customer_id}}"
       # method: GET is default, key not needed when using endpoint templating
       mergeStrategy: merge
@@ -34,7 +34,7 @@ connector:
         defaultTTL: 300
 
     # Example 2: POST request with body template file
-    - type: enrichment
+    - type: http_call
       endpoint: "https://lookup.example.com/api/customers"
       method: POST
       bodyTemplateFile: "./templates/enrichment-lookup.json"

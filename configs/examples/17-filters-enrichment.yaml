@@ -28,7 +28,7 @@ connector:
 
   filters:
     # Enrichment filter: Fetch customer details for each order
-    - type: enrichment
+    - type: http_call
       name: customer-enrichment
       description: Enriches orders with customer information from CRM
 
@@ -85,7 +85,7 @@ connector:
         X-Request-Source: canectors
 
     # Alternative: Query parameter example
-    # - type: enrichment
+    # - type: http_call
     #   name: product-enrichment
     #   endpoint: https://api.products.example.com/search
     #   key:
@@ -97,7 +97,7 @@ connector:
     #     defaultTTL: 600    # 10 minutes
 
     # Alternative: Header parameter example
-    # - type: enrichment
+    # - type: http_call
     #   name: tenant-context
     #   endpoint: https://api.tenant.example.com/context
     #   key:

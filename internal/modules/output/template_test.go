@@ -1045,7 +1045,12 @@ func TestValidateTemplateSyntax_EdgeCases(t *testing.T) {
 		{
 			name:        "nested braces",
 			template:    "{{record.{{field}}}}",
-			expectError: false, // This is actually valid syntax (though unusual)
+			expectError: true, // stray {{/}} remain after removing {{field}} match
+		},
+		{
+			name:        "balanced but invalid pairing",
+			template:    "}}{{",
+			expectError: true,
 		},
 		{
 			name:        "very long template",

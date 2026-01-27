@@ -1,0 +1,77 @@
+# Example: Metadata in Output Templates
+# This example shows how metadata values can be used in output templates
+# for endpoint URLs, headers, and request body construction.
+
+connector:
+  name: metadata-templating-example
+  version: 1.0.0
+  description: Using metadata values in output templates
+
+  input:
+    type: http-polling
+    connectionRef: source-api
+    config:
+      endpoint: /api/items
+      method: GET
+      responseExtraction:
+        dataPath: items
+    schedule:
+      cron: "*/10 * * * *"
+
+  filters:
+    - type: script
+      config:
+        script: |
+          function transform(record) {
+            // Initialize metadata
+            record._metadata = {};
+            
+            // Store routing information
+            record._metadata.region = record.country === "US" ? "us-east" : "eu-west";
+            record._metadata.priority = record.amount > 1000 ? "high" : "normal";
+            
+            // Store timing information
+            record._metadata.timing = {
+              received_at: new Date().toISOString(),
+              ttl_seconds: record.amount > 1000 ? 300 : 3600
+            };
+            
+            // Store error tracking placeholder
+            record._metadata.errors = [];
+            record._metadata.retry_count = 0;
+            
+            return record;
+          }
+
+  output:
+    type: http-request
+    connectionRef: target-api
+    config:
+      # Metadata values in endpoint URL
+      endpoint: /api/{{_metadata.region}}/orders
+      method: POST
+      
+      request:
+        bodyFrom: record
+        # _metadata field is always excluded from request body automatically
+        # The request body will NOT contain _metadata
+        
+        # Query parameters from metadata
+        queryFromRecord:
+          priority: _metadata.priority
+          
+        # Headers from metadata
+        headersFromRecord:
+          X-Region: _metadata.region
+          X-Priority: _metadata.priority
+          X-Received-At: _metadata.timing.received_at
+          X-TTL: _metadata.timing.ttl_seconds
+
+connections:
+  source-api:
+    type: http
+    baseUrl: https://source.example.com
+
+  target-api:
+    type: http
+    baseUrl: https://target.example.com

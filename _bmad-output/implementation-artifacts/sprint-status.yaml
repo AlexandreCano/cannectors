@@ -95,9 +95,10 @@ development_status:
   14-3-javascript-logging-integration: done
   14-4-dynamic-enrichment-inside-filters-input-inside-filter-cache: done
   14-5-last-timestamp-persistence-for-polling-inputs: done
-  14-6-output-templating-with-record-data: review
-  14-7-record-metadata-storage: ready-for-dev
-  14-8-distributed-scheduler-support: backlog
+  14-6-output-templating-with-record-data: done
+  14-7-record-metadata-storage: done
+  14-8-database-connections-input-filter-output: ready-for-dev
+  14-9-distributed-scheduler-support: backlog
   epic-14-retrospective: optional
 
   # Epic 4: Advanced Runtime Features (remaining stories - after Epic 14)

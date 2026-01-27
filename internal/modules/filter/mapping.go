@@ -26,6 +26,11 @@ const (
 	ErrCodeNestedPathFailed = "NESTED_PATH_FAILED"
 )
 
+// Error messages for path parsing
+const (
+	ErrMsgInvalidArrayIndex = "invalid array index in path segment %q"
+)
+
 // OnMissing behavior constants
 const (
 	OnMissingSetNull    = "setNull"
@@ -490,61 +495,86 @@ func (m *MappingModule) Process(_ context.Context, records []map[string]interfac
 
 // processRecord applies all mappings to a single record.
 func (m *MappingModule) processRecord(record map[string]interface{}, recordIdx int) (map[string]interface{}, error) {
-	target := make(map[string]interface{})
+	target := m.createTargetRecord(record)
 
 	for mappingIdx, mapping := range m.mappings {
-		// Get source value
-		value, found := getNestedValue(record, mapping.Source)
-
+		value, found, err := m.getSourceValue(record, mapping, recordIdx, mappingIdx)
+		if err != nil {
+			return target, err
+		}
 		if !found {
-			// Handle missing source field
-			switch mapping.OnMissing {
-			case OnMissingSetNull:
-				value = nil
-				found = true
-			case OnMissingSkipField:
-				continue
-			case OnMissingUseDefault:
-				value = mapping.DefaultValue
-				found = true
-			case OnMissingFail:
-				message := fmt.Sprintf("missing required field %q for target %q at record %d, mapping %d",
-					mapping.Source, mapping.Target, recordIdx, mappingIdx)
-				return target, newMappingError(ErrCodeMissingField, message, mapping, recordIdx, mappingIdx, nil, "")
-			}
+			continue
 		}
 
-		if found {
-			// Apply transforms if configured
-			transformedValue, err := m.applyTransforms(value, mapping)
-			if err != nil {
-				transformOp := ""
-				if transformErr, ok := err.(TransformError); ok {
-					transformOp = transformErr.Op
-				}
-				message := fmt.Sprintf("transform failed for field %q -> %q at record %d, mapping %d: %v",
-					mapping.Source, mapping.Target, recordIdx, mappingIdx, err)
-				code := ErrCodeTransformFailed
-				if typeConversionOps[transformOp] {
-					code = ErrCodeTypeConversion
-				}
-				return target, newMappingError(code, message, mapping, recordIdx, mappingIdx, value, transformOp)
-			}
+		transformedValue, err := m.applyTransforms(value, mapping)
+		if err != nil {
+			return m.handleTransformError(err, mapping, recordIdx, mappingIdx, value, target)
+		}
 
-			// Set target value
-			if err := setNestedValue(target, mapping.Target, transformedValue); err != nil {
-				message := fmt.Sprintf("failed to set target field %q at record %d, mapping %d: %v",
-					mapping.Target, recordIdx, mappingIdx, err)
-				return target, newMappingError(ErrCodeNestedPathFailed, message, mapping, recordIdx, mappingIdx, transformedValue, "")
-			}
+		if err := setNestedValue(target, mapping.Target, transformedValue); err != nil {
+			return m.handleSetValueError(err, mapping, recordIdx, mappingIdx, transformedValue, target)
 		}
 	}
 
 	return target, nil
 }
 
+// createTargetRecord creates a new target record and preserves metadata from source.
+func (m *MappingModule) createTargetRecord(record map[string]interface{}) map[string]interface{} {
+	target := make(map[string]interface{})
+	// Preserve _metadata field from source record
+	if metadata, exists := record["_metadata"]; exists {
+		target["_metadata"] = metadata
+	}
+	return target
+}
+
+// getSourceValue retrieves the source value for a mapping, handling missing field cases.
+func (m *MappingModule) getSourceValue(record map[string]interface{}, mapping MappingConfig, recordIdx, mappingIdx int) (interface{}, bool, error) {
+	value, found := getNestedValue(record, mapping.Source)
+
+	if !found {
+		switch mapping.OnMissing {
+		case OnMissingSetNull:
+			return nil, true, nil
+		case OnMissingSkipField:
+			return nil, false, nil
+		case OnMissingUseDefault:
+			return mapping.DefaultValue, true, nil
+		case OnMissingFail:
+			message := fmt.Sprintf("missing required field %q for target %q at record %d, mapping %d",
+				mapping.Source, mapping.Target, recordIdx, mappingIdx)
+			return nil, false, newMappingError(ErrCodeMissingField, message, mapping, recordIdx, mappingIdx, nil, "")
+		}
+	}
+
+	return value, found, nil
+}
+
+// handleTransformError creates an appropriate error for transform failures.
+func (m *MappingModule) handleTransformError(err error, mapping MappingConfig, recordIdx, mappingIdx int, value interface{}, target map[string]interface{}) (map[string]interface{}, error) {
+	transformOp := ""
+	if transformErr, ok := err.(TransformError); ok {
+		transformOp = transformErr.Op
+	}
+	message := fmt.Sprintf("transform failed for field %q -> %q at record %d, mapping %d: %v",
+		mapping.Source, mapping.Target, recordIdx, mappingIdx, err)
+	code := ErrCodeTransformFailed
+	if typeConversionOps[transformOp] {
+		code = ErrCodeTypeConversion
+	}
+	return target, newMappingError(code, message, mapping, recordIdx, mappingIdx, value, transformOp)
+}
+
+// handleSetValueError creates an appropriate error for set value failures.
+func (m *MappingModule) handleSetValueError(err error, mapping MappingConfig, recordIdx, mappingIdx int, value interface{}, target map[string]interface{}) (map[string]interface{}, error) {
+	message := fmt.Sprintf("failed to set target field %q at record %d, mapping %d: %v",
+		mapping.Target, recordIdx, mappingIdx, err)
+	return target, newMappingError(ErrCodeNestedPathFailed, message, mapping, recordIdx, mappingIdx, value, "")
+}
+
 // getNestedValue extracts a value from a nested object using dot notation.
-// Supports paths like "user.profile.name".
+// Supports paths like "user.profile.name" and array indexing like "items[0].name".
 func getNestedValue(obj map[string]interface{}, path string) (interface{}, bool) {
 	if path == "" {
 		return nil, false
@@ -554,44 +584,66 @@ func getNestedValue(obj map[string]interface{}, path string) (interface{}, bool)
 	current := interface{}(obj)
 
 	for _, part := range parts {
-		// Handle array indexing (e.g., "items[0]")
-		arrayIdx := -1
-		key, index, hasIndex, err := parsePathPart(part)
+		key, arrayIdx, err := parseAndExtractPathPart(part)
 		if err != nil {
 			return nil, false
 		}
-		part = key
-		if hasIndex {
-			arrayIdx = index
-		}
 
-		// Navigate to the field
-		switch v := current.(type) {
-		case map[string]interface{}:
-			val, ok := v[part]
-			if !ok {
-				return nil, false
-			}
-			current = val
-		default:
+		// Navigate to the field in current map
+		if !navigateToField(&current, key) {
 			return nil, false
 		}
 
-		// Handle array indexing
+		// Handle array indexing if present
 		if arrayIdx >= 0 {
-			switch arr := current.(type) {
-			case []interface{}:
-				if arrayIdx >= len(arr) {
-					return nil, false
-				}
-				current = arr[arrayIdx]
-			default:
+			if !navigateToArrayElement(&current, arrayIdx) {
 				return nil, false
 			}
 		}
 	}
 
 	return current, true
+}
+
+// parseAndExtractPathPart parses a path part and extracts the key and optional array index.
+func parseAndExtractPathPart(part string) (string, int, error) {
+	key, index, hasIndex, err := parsePathPart(part)
+	if err != nil {
+		return "", -1, err
+	}
+	if hasIndex {
+		return key, index, nil
+	}
+	return key, -1, nil
+}
+
+// navigateToField navigates to a field in the current map structure.
+func navigateToField(current *interface{}, key string) bool {
+	switch v := (*current).(type) {
+	case map[string]interface{}:
+		val, ok := v[key]
+		if !ok {
+			return false
+		}
+		*current = val
+		return true
+	default:
+		return false
+	}
+}
+
+// navigateToArrayElement navigates to an element in an array.
+func navigateToArrayElement(current *interface{}, index int) bool {
+	switch arr := (*current).(type) {
+	case []interface{}:
+		if index >= len(arr) {
+			return false
+		}
+		*current = arr[index]
+		return true
+	default:
+		return false
+	}
 }
 
 func parsePathPart(part string) (string, int, bool, error) {
@@ -601,14 +653,14 @@ func parsePathPart(part string) (string, int, bool, error) {
 	}
 	endIdx := strings.Index(part, "]")
 	if endIdx == -1 || endIdx < idx+1 {
-		return "", -1, false, fmt.Errorf("invalid array index in path segment %q", part)
+		return "", -1, false, fmt.Errorf(ErrMsgInvalidArrayIndex, part)
 	}
 	if endIdx != len(part)-1 {
-		return "", -1, false, fmt.Errorf("invalid array index in path segment %q", part)
+		return "", -1, false, fmt.Errorf(ErrMsgInvalidArrayIndex, part)
 	}
 	index, err := strconv.Atoi(part[idx+1 : endIdx])
 	if err != nil || index < 0 {
-		return "", -1, false, fmt.Errorf("invalid array index in path segment %q", part)
+		return "", -1, false, fmt.Errorf(ErrMsgInvalidArrayIndex, part)
 	}
 	return part[:idx], index, true, nil
 }
@@ -623,7 +675,6 @@ func setNestedValue(obj map[string]interface{}, path string, value interface{}) 
 	parts := strings.Split(path, ".")
 	current := obj
 
-	// Navigate/create intermediate objects
 	for i := 0; i < len(parts); i++ {
 		part, index, hasIndex, err := parsePathPart(parts[i])
 		if err != nil {
@@ -636,43 +687,67 @@ func setNestedValue(obj map[string]interface{}, path string, value interface{}) 
 				current[part] = value
 				return nil
 			}
-
-			next, ok := current[part].(map[string]interface{})
-			if !ok {
-				next = make(map[string]interface{})
-				current[part] = next
-			}
-			current = next
+			current = ensureMapAtPath(current, part)
 			continue
 		}
 
-		arr, ok := current[part].([]interface{})
-		if !ok {
-			arr = make([]interface{}, index+1)
-			current[part] = arr
-		}
-		if len(arr) <= index {
-			arr = append(arr, make([]interface{}, index+1-len(arr))...)
-			current[part] = arr
-		}
-
+		// Handle array indexing
 		if isLast {
-			arr[index] = value
-			return nil
+			return setArrayElement(current, part, index, value)
 		}
-
-		if arr[index] == nil {
-			arr[index] = make(map[string]interface{})
-		}
-		next, ok := arr[index].(map[string]interface{})
-		if !ok {
-			next = make(map[string]interface{})
-			arr[index] = next
-		}
-		current = next
+		current = ensureMapInArray(current, part, index)
 	}
 
 	return nil
+}
+
+// ensureMapAtPath ensures a map exists at the given path in the current object.
+func ensureMapAtPath(current map[string]interface{}, key string) map[string]interface{} {
+	next, ok := current[key].(map[string]interface{})
+	if !ok {
+		next = make(map[string]interface{})
+		current[key] = next
+	}
+	return next
+}
+
+// setArrayElement sets a value at a specific index in an array.
+func setArrayElement(current map[string]interface{}, key string, index int, value interface{}) error {
+	arr := ensureArrayAtPath(current, key)
+	if len(arr) <= index {
+		arr = append(arr, make([]interface{}, index+1-len(arr))...)
+		current[key] = arr
+	}
+	arr[index] = value
+	return nil
+}
+
+// ensureArrayAtPath ensures an array exists at the given path in the current object.
+func ensureArrayAtPath(current map[string]interface{}, key string) []interface{} {
+	arr, ok := current[key].([]interface{})
+	if !ok {
+		arr = make([]interface{}, 0)
+		current[key] = arr
+	}
+	return arr
+}
+
+// ensureMapInArray ensures a map exists at a specific index in an array.
+func ensureMapInArray(current map[string]interface{}, key string, index int) map[string]interface{} {
+	arr := ensureArrayAtPath(current, key)
+	if len(arr) <= index {
+		arr = append(arr, make([]interface{}, index+1-len(arr))...)
+		current[key] = arr
+	}
+	if arr[index] == nil {
+		arr[index] = make(map[string]interface{})
+	}
+	next, ok := arr[index].(map[string]interface{})
+	if !ok {
+		next = make(map[string]interface{})
+		arr[index] = next
+	}
+	return next
 }
 
 // applyTransforms applies transform operations to a value.

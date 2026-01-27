@@ -17,6 +17,7 @@ Portable runtime CLI for executing connector pipelines. Canectors is a cross-pla
 - **Resource Cleanup**: Automatic cleanup of module resources (connections, file handles)
 - **Error Handling & Retry**: Classified errors (network, auth, validation, server), configurable retry with exponential backoff, timeout handling, and structured error logging (Story 4.4)
 - **State Persistence**: Reliable resumption of polling after restarts by persisting execution timestamp and/or last processed ID (Story 14.5)
+- **Record Metadata Storage**: Store internal state in records (e.g., `_metadata.processed_at`) that persists through the pipeline but is excluded from output request body (Story 14.7)
 
 ## Project Status
 
@@ -321,6 +322,103 @@ input:
 - **ID extraction fails**: Verify `field` path matches your record structure (supports dot notation like `data.id`)
 
 See example configurations in `configs/examples/18-timestamp-persistence.yaml`, `19-id-persistence.yaml`, and `20-timestamp-and-id-persistence.yaml`.
+
+### Record Metadata Storage (Story 14.7)
+
+The runtime supports storing metadata in records using the `_metadata` field. This metadata persists through the entire pipeline (Input → Filter → Output) but is automatically excluded from the output request body.
+
+#### Key Features
+
+- **Fixed field name**: Always uses `_metadata` (not configurable)
+- **Persistent**: Metadata survives filter transformations and record cloning
+- **Excluded from body**: Automatically stripped from request body before sending
+- **Template access**: Can be used in endpoint URLs, headers, and query parameters via templating
+- **Nested support**: Supports nested objects for organizing related values
+
+#### Use Cases
+
+- **Execution tracking**: Store timestamps (`_metadata.processed_at`, `_metadata.received_at`)
+- **Processing flags**: Track validation status (`_metadata.validated`, `_metadata.enriched`)
+- **Error tracking**: Store error information (`_metadata.errors`, `_metadata.warnings`)
+- **Custom state**: Application-specific values (`_metadata.source_system`, `_metadata.batch_id`)
+- **Nested organization**: Group related values (`_metadata.timing.start`, `_metadata.timing.end`)
+
+#### Accessing Metadata in Filters
+
+Filter modules can read, write, and modify metadata values:
+
+**Script Filter:**
+```javascript
+function transform(record) {
+  // Initialize metadata
+  record._metadata = record._metadata || {};
+  
+  // Set metadata values
+  record._metadata.processed_at = new Date().toISOString();
+  record._metadata.source_system = "external-api";
+  record._metadata.validated = record.email && record.email.includes("@");
+  
+  return record;
+}
+```
+
+**Mapping Filter:**
+The mapping filter automatically preserves `_metadata` when transforming records. Metadata is available for use in mapping source paths.
+
+**Condition Filter:**
+Metadata can be used in condition expressions:
+```yaml
+filters:
+  - type: condition
+    config:
+      expression: _metadata.validated == true
+      onTrue: continue
+      onFalse: skip
+```
+
+#### Using Metadata in Templates
+
+Metadata values can be accessed in template expressions for dynamic content:
+
+**Endpoint URLs:**
+```yaml
+output:
+  type: http-request
+  config:
+    endpoint: /api/{{_metadata.region}}/orders
+```
+
+**HTTP Headers:**
+```yaml
+output:
+  type: http-request
+  config:
+    headers:
+      X-Processed-At: "{{_metadata.processed_at}}"
+      X-Source-System: "{{_metadata.source_system}}"
+      X-Batch-ID: "{{_metadata.batch_id}}"
+```
+
+**Query Parameters:**
+```yaml
+output:
+  type: http-request
+  config:
+    request:
+      queryFromRecord:
+        priority: _metadata.priority
+```
+
+#### Important Notes
+
+- **Always excluded**: The `_metadata` field is automatically stripped from request bodies before sending
+- **Not configurable**: The field name is fixed as `_metadata` and cannot be changed
+- **Template syntax**: Use `{{_metadata.field}}` or `{{_metadata.nested.field}}` in templates
+- **Preservation**: Metadata is preserved when records are cloned, duplicated, or transformed by filters
+
+#### Example Configuration
+
+See `configs/examples/25-record-metadata-storage.yaml` and `configs/examples/26-metadata-in-templates.yaml` for complete examples.
 
 ### Exit Codes
 

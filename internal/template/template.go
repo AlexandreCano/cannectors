@@ -33,9 +33,9 @@ const (
 
 // templateVarRegex matches template variables like {{record.field}} or {{record.field | default: "value"}}
 // Group 1: variable path (e.g., "record.user.id")
-// Group 2: optional default value clause including quotes (e.g., " | default: \"fallback\"")
+// Group 2: optional default value clause including quotes (supports both "value" and \"value\" forms)
 // Group 3: the default value itself (may be empty string)
-var templateVarRegex = regexp.MustCompile(`\{\{\s*([^|}]+?)(\s*\|\s*default:\s*"([^"]*)")?\s*\}\}`)
+var templateVarRegex = regexp.MustCompile(`\{\{\s*([^|}]+?)(\s*\|\s*default:\s*(?:\\?")([^"]*)(?:\\?"))?\s*\}\}`)
 
 // Variable represents a parsed template variable
 type Variable struct {

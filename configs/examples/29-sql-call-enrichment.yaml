@@ -63,6 +63,5 @@ connector:
 
   output:
     type: httpRequest
-    config:
-      endpoint: "https://api.destination.com/enriched-orders"
-      method: POST
+    endpoint: "https://api.destination.com/enriched-orders"
+    method: POST

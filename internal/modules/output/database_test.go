@@ -238,4 +238,3 @@ func TestGetDBFieldValue(t *testing.T) {
 		})
 	}
 }
-

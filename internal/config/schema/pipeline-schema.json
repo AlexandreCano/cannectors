@@ -447,12 +447,40 @@
 
     "httpRequestConfig": {
       "type": "object",
+      "description": "HTTP request configuration for output modules.",
       "properties": {
         "method": { "$ref": "#/$defs/httpMethod" },
-        "path": { "type": "string" },
-        "pathParams": { "type": "object", "additionalProperties": { "type": "string" } },
-        "query": { "type": "object", "additionalProperties": { "type": "string" } },
-        "bodyFrom": { "type": "string" },
+        "path": { "type": "string", "description": "URL path segment." },
+        "pathParams": {
+          "type": "object",
+          "description": "Path parameter substitutions from record fields. Key is placeholder, value is record field path.",
+          "additionalProperties": { "type": "string" }
+        },
+        "query": {
+          "type": "object",
+          "description": "Static query parameters.",
+          "additionalProperties": { "type": "string" }
+        },
+        "queryFromRecord": {
+          "type": "object",
+          "description": "Query parameters extracted from record data. Key is param name, value is record field path.",
+          "additionalProperties": { "type": "string" }
+        },
+        "headersFromRecord": {
+          "type": "object",
+          "description": "Headers extracted from record data. Key is header name, value is record field path.",
+          "additionalProperties": { "type": "string" }
+        },
+        "bodyFrom": {
+          "type": "string",
+          "description": "Body source: 'records' (batch mode, default) or 'record' (single record mode).",
+          "enum": ["records", "record"],
+          "default": "records"
+        },
+        "bodyTemplateFile": {
+          "type": "string",
+          "description": "Path to external template file for request body. Supports {{record.field}} placeholders."
+        },
         "headers": { "$ref": "#/$defs/httpHeaders" }
       },
       "additionalProperties": true
@@ -512,69 +540,203 @@
 
     "authentication": {
       "type": "object",
+      "description": "Authentication configuration. Supports api-key, bearer, basic, and oauth2 types.",
       "required": ["type"],
-      "oneOf": [
-        { "$ref": "#/$defs/apiKeyAuth" },
-        { "$ref": "#/$defs/bearerAuth" },
-        { "$ref": "#/$defs/oauth2Auth" },
-        { "$ref": "#/$defs/extensibleAuth" }
-      ]
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Authentication type.",
+          "enum": ["api-key", "bearer", "basic", "oauth2", "oauth2_client_credentials"]
+        },
+        "credentials": {
+          "type": "object",
+          "description": "Authentication credentials. Structure varies by type.",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "const": "api-key" } },
+            "required": ["type"]
+          },
+          "then": {
+            "properties": {
+              "credentials": {
+                "type": "object",
+                "description": "API key credentials.",
+                "required": ["key"],
+                "properties": {
+                  "key": { "type": "string", "description": "API key value or env reference (${VAR})." },
+                  "location": { "type": "string", "enum": ["header", "query"], "default": "header", "description": "Where to send the key." },
+                  "headerName": { "type": "string", "default": "X-API-Key", "description": "Header name when location=header." },
+                  "paramName": { "type": "string", "default": "api_key", "description": "Query param name when location=query." }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": ["credentials"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "bearer" } },
+            "required": ["type"]
+          },
+          "then": {
+            "properties": {
+              "credentials": {
+                "type": "object",
+                "description": "Bearer token credentials.",
+                "required": ["token"],
+                "properties": {
+                  "token": { "type": "string", "description": "Bearer token value or env reference (${VAR})." }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": ["credentials"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "basic" } },
+            "required": ["type"]
+          },
+          "then": {
+            "properties": {
+              "credentials": {
+                "type": "object",
+                "description": "Basic auth credentials.",
+                "required": ["username", "password"],
+                "properties": {
+                  "username": { "type": "string", "description": "Username or env reference (${VAR})." },
+                  "password": { "type": "string", "description": "Password or env reference (${VAR})." }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": ["credentials"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "enum": ["oauth2", "oauth2_client_credentials"] } },
+            "required": ["type"]
+          },
+          "then": {
+            "properties": {
+              "credentials": {
+                "type": "object",
+                "description": "OAuth2 client credentials.",
+                "required": ["tokenUrl", "clientId", "clientSecret"],
+                "properties": {
+                  "tokenUrl": { "type": "string", "format": "uri", "description": "Token endpoint URL." },
+                  "clientId": { "type": "string", "description": "Client ID or env reference (${VAR})." },
+                  "clientSecret": { "type": "string", "description": "Client secret or env reference (${VAR})." },
+                  "scope": { "type": "string", "description": "OAuth2 scope." }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": ["credentials"]
+          }
+        }
+      ],
+      "additionalProperties": false
     },
 
     "apiKeyAuth": {
       "type": "object",
-      "required": ["type", "header", "valueRef"],
+      "description": "DEPRECATED: Use authentication with type='api-key' instead.",
+      "required": ["type", "credentials"],
       "properties": {
-        "type": { "const": "apiKey" },
-        "header": { "type": "string" },
-        "valueRef": { "type": "string", "pattern": "^\\$\\{[A-Z_][A-Z0-9_]*\\}$" }
+        "type": { "const": "api-key" },
+        "credentials": {
+          "type": "object",
+          "required": ["key"],
+          "properties": {
+            "key": { "type": "string" },
+            "location": { "type": "string", "enum": ["header", "query"], "default": "header" },
+            "headerName": { "type": "string", "default": "X-API-Key" },
+            "paramName": { "type": "string", "default": "api_key" }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },
 
     "bearerAuth": {
       "type": "object",
-      "required": ["type", "token"],
+      "description": "DEPRECATED: Use authentication with type='bearer' instead.",
+      "required": ["type", "credentials"],
       "properties": {
         "type": { "const": "bearer" },
-        "token": { "type": "string" }
+        "credentials": {
+          "type": "object",
+          "required": ["token"],
+          "properties": {
+            "token": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "basicAuth": {
+      "type": "object",
+      "description": "Basic authentication with username and password.",
+      "required": ["type", "credentials"],
+      "properties": {
+        "type": { "const": "basic" },
+        "credentials": {
+          "type": "object",
+          "required": ["username", "password"],
+          "properties": {
+            "username": { "type": "string" },
+            "password": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },
 
     "oauth2Auth": {
       "type": "object",
-      "description": "OAuth2 authentication. Use either clientId or clientIdRef (not both), same for clientSecret.",
-      "required": ["type", "tokenUrl"],
+      "description": "OAuth2 client credentials authentication.",
+      "required": ["type", "credentials"],
       "properties": {
-        "type": { "enum": ["oauth2Basic", "oauth2_client_credentials"] },
-        "tokenUrl": { "type": "string", "format": "uri" },
-        "clientIdRef": { "type": "string", "description": "Reference to env var: ${VAR_NAME}" },
-        "clientId": { "type": "string", "description": "Direct value (avoid in production)" },
-        "clientSecretRef": { "type": "string", "description": "Reference to env var: ${VAR_NAME}" },
-        "clientSecret": { "type": "string", "description": "Direct value (avoid in production)" },
-        "scope": { "type": "string" }
-      },
-      "allOf": [
-        {
-          "not": { "required": ["clientId", "clientIdRef"] },
-          "errorMessage": "Use either clientId or clientIdRef, not both"
-        },
-        {
-          "not": { "required": ["clientSecret", "clientSecretRef"] },
-          "errorMessage": "Use either clientSecret or clientSecretRef, not both"
+        "type": { "enum": ["oauth2", "oauth2_client_credentials"] },
+        "credentials": {
+          "type": "object",
+          "required": ["tokenUrl", "clientId", "clientSecret"],
+          "properties": {
+            "tokenUrl": { "type": "string", "format": "uri" },
+            "clientId": { "type": "string" },
+            "clientSecret": { "type": "string" },
+            "scope": { "type": "string" }
+          },
+          "additionalProperties": false
         }
-      ],
+      },
       "additionalProperties": false
     },
 
     "extensibleAuth": {
       "type": "object",
+      "description": "Extensible authentication for custom auth types.",
       "required": ["type"],
       "properties": {
         "type": {
           "type": "string",
-          "not": { "enum": ["apiKey", "bearer", "oauth2Basic", "oauth2_client_credentials"] }
+          "not": { "enum": ["api-key", "bearer", "basic", "oauth2", "oauth2_client_credentials"] }
+        },
+        "credentials": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
         }
       },
       "additionalProperties": true
@@ -1068,6 +1230,14 @@
         "bodyTemplateFile": {
           "type": "string",
           "description": "Path to body template file (for POST/PUT requests)."
+        },
+        "authentication": {
+          "$ref": "#/$defs/authentication",
+          "description": "Authentication configuration for the HTTP call."
+        },
+        "auth": {
+          "$ref": "#/$defs/authentication",
+          "description": "Alias for authentication."
         },
         "onError": {
           "type": "string",

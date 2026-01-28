@@ -945,22 +945,21 @@ input:
 
 The database output module writes records to databases using SQL queries.
 
-**Configuration:**
+**Configuration:** (module fields at output level, no `config:` wrapper — see `configs/examples/30-database-output-insert.yaml`)
+
 ```yaml
 output:
   type: database
-  config:
-    connectionString: postgres://user:pass@localhost:5432/mydb
-    # Or use environment variable:
-    # connectionStringRef: ${DATABASE_URL}
-    query: |
-      INSERT INTO orders (order_id, customer_id, total)
-      VALUES ({{record.order_id}}, {{record.customer_id}}, {{record.total}})
-    # Or load from file:
-    # queryFile: ./queries/insert-order.sql
-    transaction: true          # Optional: wrap all inserts in transaction
-    onError: skip              # Optional: fail (default), skip, log
-    timeoutMs: 30000
+  connectionStringRef: ${DATABASE_URL}
+  # Or direct: connectionString: postgres://user:pass@localhost:5432/mydb
+  query: |
+    INSERT INTO orders (order_id, customer_id, total)
+    VALUES ({{record.order_id}}, {{record.customer_id}}, {{record.total}})
+  # Or load from file:
+  # queryFile: ./queries/insert-order.sql
+  transaction: true          # Optional: wrap all inserts in transaction
+  onError: skip              # Optional: fail (default), skip, log
+  timeoutMs: 30000
 ```
 
 **Query Templating:**
@@ -972,15 +971,14 @@ output:
 ```yaml
 output:
   type: database
-  config:
-    connectionString: postgres://localhost/db
-    query: |
-      INSERT INTO products (sku, name, price)
-      VALUES ({{record.sku}}, {{record.name}}, {{record.price}})
-      ON CONFLICT (sku) DO UPDATE SET
-        name = EXCLUDED.name,
-        price = EXCLUDED.price
-    transaction: true
+  connectionStringRef: ${DATABASE_URL}
+  query: |
+    INSERT INTO products (sku, name, price)
+    VALUES ({{record.sku}}, {{record.name}}, {{record.price}})
+    ON CONFLICT (sku) DO UPDATE SET
+      name = EXCLUDED.name,
+      price = EXCLUDED.price
+  transaction: true
 ```
 
 **Transaction Mode:**

@@ -8,12 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/canectors/runtime/internal/database"
 	"github.com/canectors/runtime/internal/logger"
+	"github.com/canectors/runtime/internal/pathutil"
 	"github.com/canectors/runtime/internal/persistence"
 	"github.com/canectors/runtime/pkg/connector"
 )
@@ -115,12 +115,8 @@ func NewDatabaseInputFromConfig(cfg *connector.ModuleConfig) (*DatabaseInput, er
 
 	// Load query from file if queryFile is specified
 	if config.QueryFile != "" && config.Query == "" {
-		// Validate file path to prevent path traversal attacks
-		if !filepath.IsAbs(config.QueryFile) {
-			// For relative paths, ensure they don't contain ".."
-			if strings.Contains(config.QueryFile, "..") {
-				return nil, fmt.Errorf("query file path contains invalid '..' component: %s", config.QueryFile)
-			}
+		if err := pathutil.ValidateFilePath(config.QueryFile); err != nil {
+			return nil, fmt.Errorf("query file path: %w", err)
 		}
 		queryBytes, readErr := os.ReadFile(config.QueryFile)
 		if readErr != nil {

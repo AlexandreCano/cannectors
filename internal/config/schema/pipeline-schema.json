@@ -692,7 +692,7 @@
           "default": 30000
         }
       },
-      "additionalProperties": false,
+      "additionalProperties": true,
       "oneOf": [
         { "required": ["connectionString"] },
         { "required": ["connectionStringRef"] }
@@ -725,7 +725,12 @@
         "incremental": {
           "$ref": "#/$defs/databaseIncrementalConfig"
         }
-      }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        { "required": ["query"] },
+        { "required": ["queryFile"] }
+      ]
     },
 
     "databasePaginationConfig": {
@@ -834,7 +839,13 @@
         "cache": {
           "$ref": "#/$defs/sqlCallCacheConfig"
         }
-      }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        { "required": ["query"] },
+        { "required": ["queryFile"] },
+        { "required": ["queries"] }
+      ]
     },
 
     "sqlCallCacheConfig": {
@@ -892,7 +903,8 @@
           "enum": ["fail", "skip", "log"],
           "default": "fail"
         }
-      }
+      },
+      "additionalProperties": false
     },
 
     "statePersistenceConfig": {

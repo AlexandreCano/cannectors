@@ -10,13 +10,13 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/canectors/runtime/internal/cache"
 	"github.com/canectors/runtime/internal/database"
 	"github.com/canectors/runtime/internal/logger"
+	"github.com/canectors/runtime/internal/pathutil"
 	"github.com/canectors/runtime/internal/template"
 )
 
@@ -164,11 +164,8 @@ func loadQueryFromFile(config *SQLCallConfig) error {
 		return nil
 	}
 
-	// Validate file path to prevent path traversal attacks
-	if !filepath.IsAbs(config.QueryFile) {
-		if strings.Contains(config.QueryFile, "..") {
-			return fmt.Errorf("query file path contains invalid '..' component: %s", config.QueryFile)
-		}
+	if err := pathutil.ValidateFilePath(config.QueryFile); err != nil {
+		return fmt.Errorf("query file path: %w", err)
 	}
 
 	queryBytes, err := os.ReadFile(config.QueryFile)

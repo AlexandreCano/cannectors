@@ -16,6 +16,7 @@ import (
 	"github.com/dop251/goja"
 
 	"github.com/canectors/runtime/internal/logger"
+	"github.com/canectors/runtime/internal/pathutil"
 )
 
 // Error codes for script module
@@ -244,35 +245,9 @@ func resolveScriptSource(config ScriptConfig) (string, error) {
 // BEFORE cleaning, to prevent bypasses like "scripts/../etc/passwd" which would
 // be normalized to "etc/passwd" and bypass the check.
 func validateScriptFilePath(filePath string) error {
-	if filePath == "" {
-		return newScriptError(ErrCodeInvalidScriptFile, "scriptFile path cannot be empty", -1, "", nil)
+	if err := pathutil.ValidateFilePath(filePath); err != nil {
+		return newScriptError(ErrCodeInvalidScriptFile, err.Error(), -1, "", nil)
 	}
-
-	// Validate path doesn't contain null bytes or other invalid characters
-	if strings.Contains(filePath, "\x00") {
-		return newScriptError(ErrCodeInvalidScriptFile, "scriptFile path contains invalid characters", -1, "", nil)
-	}
-
-	// Normalize separators to forward slashes for consistent checking across platforms
-	// Do this BEFORE cleaning to detect traversal attempts in the original path
-	normalized := filepath.ToSlash(filePath)
-
-	// Check for path traversal by examining path segments in the ORIGINAL path
-	// This prevents bypasses like "scripts/../etc/passwd" which would be cleaned
-	// to "etc/passwd" and bypass the check if we only checked after cleaning
-	segments := strings.Split(normalized, "/")
-	for _, segment := range segments {
-		if segment == ".." {
-			return newScriptError(ErrCodeInvalidScriptFile, fmt.Sprintf("scriptFile path contains path traversal: %q", filePath), -1, "", nil)
-		}
-	}
-
-	// Also check for leading ".." which is a common traversal pattern
-	if strings.HasPrefix(normalized, "../") || normalized == ".." {
-		return newScriptError(ErrCodeInvalidScriptFile, fmt.Sprintf("scriptFile path contains path traversal: %q", filePath), -1, "", nil)
-	}
-
-	// Now clean the path for final validation
 	cleaned := filepath.Clean(filePath)
 
 	// Check for absolute paths (optional - can be allowed if needed)

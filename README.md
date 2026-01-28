@@ -1487,7 +1487,7 @@ All tests pass with race detection enabled.
 
 ## License
 
-[MIT License](LICENSE)
+[Apache 2.0 License](LICENSE.md)
 
 ## Contributing
 
@@ -1498,3 +1498,68 @@ Contributions are welcome! Please read the [Contributing Guide](CONTRIBUTING.md)
 - **Canectors Web App**: Next.js application for managing connectors (separate project)
 - **Pipeline Schema**: JSON Schema for pipeline configurations (`internal/config/schema/pipeline-schema.json`)
 - **BMAD Planning**: Project planning artifacts in `canectors-BMAD/_bmad-output/`
+
+---
+
+## Community vs Commercial
+
+Canectors is an **open-source project** released under the **Apache License 2.0**.  
+You are free to use, modify, and distribute the software under the terms of that license.  
+That said, there is an important distinction between **community usage** and **commercial usage with support**.
+
+### Community Usage (Free)
+
+Community usage is intended for:
+- local development
+- testing and experimentation
+- proof-of-concepts
+- internal tools
+- learning and evaluation
+
+What you get:
+- the full CLI and runtime
+- all available input, filter and output modules
+- documentation and examples
+- community support via GitHub Issues and Discussions (best-effort)
+
+What you **don’t** get:
+- guaranteed response times
+- production support
+- priority bug fixes
+- operational guidance or commitments
+
+Community usage is provided on a **best-effort basis**, without SLA or guarantees.
+
+### Commercial Usage (Production & Support)
+
+Organizations that want to **rely on Canectors in production** may choose a **commercial agreement**.
+
+Commercial usage is intended for teams that need:
+- confidence to run Canectors in production environments
+- priority support and issue handling
+- guidance on operational best practices
+- predictable maintenance and fixes
+
+A commercial agreement does **not restrict your Apache 2.0 rights**.  
+It simply provides **additional services and commitments** on top of the open-source software.
+
+### Why a Commercial Offering?
+
+Canectors is maintained by a small team / individual.
+
+The commercial offering exists to:
+- ensure long-term sustainability of the project
+- provide reliable support to production users
+- keep the core runtime open and transparent
+- allow the project to evolve responsibly
+
+### Contact
+
+For commercial licensing or support inquiries:
+
+📧 **alexanndre.cano@gmail.com**
+
+### Disclaimer
+
+This section does **not modify the Apache License 2.0**.  
+It only describes optional commercial services offered by the maintainer.

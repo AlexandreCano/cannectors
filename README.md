@@ -366,7 +366,7 @@ cannectors run --log-file execution.log config.yaml
 
 ## Examples
 
-The `configs/examples/` directory contains comprehensive examples:
+The [`configs/examples/`](configs/examples) directory contains comprehensive examples:
 
 - **01-simple.yaml** - Minimal pipeline
 - **02-05** - Authentication types

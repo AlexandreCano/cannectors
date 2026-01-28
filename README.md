@@ -847,7 +847,6 @@ filters:
     mergeStrategy: merge       # Optional: merge (default), replace, append
     dataField: data            # Optional: extract from nested field
     resultKey: _db_data        # Optional: key for append mode
-    condition: "record.needs_enrichment == true"  # Optional: conditional execution
     onError: skip              # Optional: fail (default), skip, log
     cache:                     # Optional: cache configuration
       enabled: true

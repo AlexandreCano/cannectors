@@ -32,17 +32,15 @@ connector:
 
   filters:
     - type: mapping
-      config:
-        mappings:
-          - source: "id"
-            target: "order_id"
-          - source: "customer_id"
-            target: "customer_reference"
-          - source: "total_amount"
-            target: "amount"
-          - source: "status"
-            target: "order_status"
-
+      mappings:
+        - source: "id"
+          target: "order_id"
+        - source: "customer_id"
+          target: "customer_reference"
+        - source: "total_amount"
+          target: "amount"
+        - source: "status"
+          target: "order_status"
   output:
     type: httpRequest
     config:

@@ -271,7 +271,8 @@
           "additionalProperties": { "type": "string" }
         },
         "authentication": { "$ref": "#/$defs/authentication" },
-        "pagination": { "$ref": "#/$defs/pagination" }
+        "pagination": { "$ref": "#/$defs/pagination" },
+        "statePersistence": { "$ref": "#/$defs/statePersistenceConfig" }
       },
       "additionalProperties": true,
       "allOf": [
@@ -367,6 +368,14 @@
         {
           "if": { "properties": { "type": { "const": "sql_call" } }, "required": ["type"] },
           "then": { "$ref": "#/$defs/sqlCallFilterConfig" }
+        },
+        {
+          "if": { "properties": { "type": { "const": "script" } }, "required": ["type"] },
+          "then": { "$ref": "#/$defs/scriptFilterConfig" }
+        },
+        {
+          "if": { "properties": { "type": { "const": "http_call" } }, "required": ["type"] },
+          "then": { "$ref": "#/$defs/httpCallFilterConfig" }
         }
       ]
     },
@@ -884,6 +893,179 @@
           "default": "fail"
         }
       }
+    },
+
+    "statePersistenceConfig": {
+      "type": "object",
+      "description": "State persistence configuration for input modules. Tracks execution state between runs.",
+      "properties": {
+        "timestamp": {
+          "type": "object",
+          "description": "Timestamp-based state persistence.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable timestamp persistence.",
+              "default": false
+            },
+            "queryParam": {
+              "type": "string",
+              "description": "Query parameter name for API filtering (e.g., 'updated_after')."
+            }
+          },
+          "additionalProperties": false
+        },
+        "id": {
+          "type": "object",
+          "description": "ID-based state persistence.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable ID persistence.",
+              "default": false
+            },
+            "field": {
+              "type": "string",
+              "description": "Field path to extract ID from records (supports dot notation)."
+            },
+            "queryParam": {
+              "type": "string",
+              "description": "Query parameter name for API filtering (e.g., 'last_id')."
+            }
+          },
+          "additionalProperties": false
+        },
+        "storagePath": {
+          "type": "string",
+          "description": "Custom storage directory path for state files."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "scriptFilterConfig": {
+      "type": "object",
+      "description": "Script filter module configuration. Executes JavaScript transformations using Goja.",
+      "properties": {
+        "script": {
+          "type": "string",
+          "description": "Inline JavaScript source code containing a transform(record) function."
+        },
+        "scriptFile": {
+          "type": "string",
+          "description": "Path to JavaScript file containing the transform(record) function."
+        },
+        "onError": {
+          "type": "string",
+          "description": "Error handling strategy.",
+          "enum": ["fail", "skip", "log"],
+          "default": "fail"
+        }
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        { "required": ["script"] },
+        { "required": ["scriptFile"] }
+      ],
+      "not": {
+        "required": ["script", "scriptFile"],
+        "errorMessage": "Cannot specify both 'script' and 'scriptFile' - use only one"
+      }
+    },
+
+    "httpCallFilterConfig": {
+      "type": "object",
+      "description": "HTTP call filter module configuration. Makes HTTP requests to external APIs for record enrichment.",
+      "properties": {
+        "endpoint": {
+          "type": "string",
+          "description": "HTTP endpoint URL.",
+          "format": "uri"
+        },
+        "method": {
+          "type": "string",
+          "description": "HTTP method.",
+          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"],
+          "default": "GET"
+        },
+        "headers": {
+          "type": "object",
+          "description": "HTTP headers.",
+          "additionalProperties": { "type": "string" }
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "description": "Request timeout in milliseconds.",
+          "minimum": 0,
+          "default": 30000
+        },
+        "key": {
+          "type": "object",
+          "description": "Key configuration for extracting values from records and using them in requests.",
+          "properties": {
+            "field": {
+              "type": "string",
+              "description": "Dot-notation path to extract key value from record (e.g., 'customer.id')."
+            },
+            "paramType": {
+              "type": "string",
+              "description": "How to include key in request.",
+              "enum": ["query", "path", "header"]
+            },
+            "paramName": {
+              "type": "string",
+              "description": "Parameter name to use in request."
+            }
+          },
+          "required": ["field", "paramType", "paramName"],
+          "additionalProperties": false
+        },
+        "cache": {
+          "type": "object",
+          "description": "Cache configuration for HTTP call results.",
+          "properties": {
+            "maxSize": {
+              "type": "integer",
+              "description": "Maximum number of cached entries.",
+              "minimum": 1,
+              "default": 1000
+            },
+            "defaultTTL": {
+              "type": "integer",
+              "description": "Cache entry TTL in seconds.",
+              "minimum": 0,
+              "default": 300
+            },
+            "key": {
+              "type": "string",
+              "description": "Cache key template or JSON path expression."
+            }
+          },
+          "additionalProperties": false
+        },
+        "mergeStrategy": {
+          "type": "string",
+          "description": "How to merge HTTP response with input records.",
+          "enum": ["merge", "replace", "append"],
+          "default": "merge"
+        },
+        "dataField": {
+          "type": "string",
+          "description": "Field to extract from HTTP response."
+        },
+        "bodyTemplateFile": {
+          "type": "string",
+          "description": "Path to body template file (for POST/PUT requests)."
+        },
+        "onError": {
+          "type": "string",
+          "description": "Error handling strategy.",
+          "enum": ["fail", "skip", "log"],
+          "default": "fail"
+        }
+      },
+      "required": ["endpoint"],
+      "additionalProperties": true
     }
   }
 }

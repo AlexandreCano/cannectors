@@ -5,6 +5,7 @@ package filter
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -663,8 +664,17 @@ func (m *SQLCallModule) buildCacheKey(record map[string]interface{}) string {
 		return m.templateEvaluator.Evaluate(m.cacheKey, record)
 	}
 
-	// Default: use query hash + first few field values
-	return fmt.Sprintf("%s::%v", m.query, record)
+	// Default: use query + JSON-encoded record for deterministic key
+	// JSON marshal ensures deterministic key ordering regardless of map iteration order
+	recordJSON, err := json.Marshal(record)
+	if err != nil {
+		// Fallback to query only if JSON marshal fails (shouldn't happen with valid maps)
+		logger.Warn("failed to marshal record for cache key, using query only",
+			slog.String("error", err.Error()),
+		)
+		return m.query
+	}
+	return fmt.Sprintf("%s::%s", m.query, string(recordJSON))
 }
 
 // mergeData merges query result into the record.

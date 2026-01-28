@@ -350,43 +350,101 @@ func (d *DatabaseInput) buildQuery() (string, []interface{}) {
 	query := d.config.Query
 	var args []interface{}
 
-	// Replace {{lastRunTimestamp}} placeholder with parameterized value
-	// This allows injecting the last execution timestamp directly in the query
-	if strings.Contains(query, LastRunTimestampPlaceholder) {
-		if d.lastState != nil && d.lastState.LastTimestamp != nil {
-			query = strings.ReplaceAll(query, LastRunTimestampPlaceholder,
-				database.FormatPlaceholder(d.driver, len(args)+1))
-			args = append(args, *d.lastState.LastTimestamp)
-		} else {
-			// First run: use epoch time (1970-01-01) to get all records
-			query = strings.ReplaceAll(query, LastRunTimestampPlaceholder,
-				database.FormatPlaceholder(d.driver, len(args)+1))
-			args = append(args, time.Unix(0, 0))
-		}
+	// Replace {{lastRunTimestamp}} placeholder
+	query, args = d.replaceLastRunTimestamp(query, args)
+
+	// Add incremental parameters (legacy support)
+	query, args = d.replaceIncrementalParameters(query, args)
+
+	// Add static parameters
+	query, args = d.replaceStaticParameters(query, args)
+
+	return query, args
+}
+
+// replaceLastRunTimestamp replaces {{lastRunTimestamp}} placeholder with parameterized value.
+func (d *DatabaseInput) replaceLastRunTimestamp(query string, args []interface{}) (string, []interface{}) {
+	if !strings.Contains(query, LastRunTimestampPlaceholder) {
+		return query, args
 	}
 
-	// Add incremental parameters if configured (legacy support)
-	if d.config.Incremental != nil && d.config.Incremental.Enabled && d.lastState != nil {
-		if d.config.Incremental.TimestampParam != "" && d.lastState.LastTimestamp != nil {
-			query = strings.ReplaceAll(query, ":"+d.config.Incremental.TimestampParam,
-				database.FormatPlaceholder(d.driver, len(args)+1))
-			args = append(args, *d.lastState.LastTimestamp)
-		}
-		if d.config.Incremental.IDParam != "" && d.lastState.LastID != nil {
-			query = strings.ReplaceAll(query, ":"+d.config.Incremental.IDParam,
-				database.FormatPlaceholder(d.driver, len(args)+1))
-			args = append(args, *d.lastState.LastID)
-		}
+	var timestamp time.Time
+	if d.lastState != nil && d.lastState.LastTimestamp != nil {
+		timestamp = *d.lastState.LastTimestamp
+	} else {
+		// First run: use epoch time (1970-01-01) to get all records
+		timestamp = time.Unix(0, 0)
 	}
 
-	// Add static parameters - process in query order to maintain parameter order
-	// Scan query left-to-right for :paramName tokens and append args in that order
+	placeholder := database.FormatPlaceholder(d.driver, len(args)+1)
+	query = strings.ReplaceAll(query, LastRunTimestampPlaceholder, placeholder)
+	args = append(args, timestamp)
+
+	return query, args
+}
+
+// replaceIncrementalParameters replaces incremental parameter placeholders (legacy support).
+func (d *DatabaseInput) replaceIncrementalParameters(query string, args []interface{}) (string, []interface{}) {
+	if d.config.Incremental == nil || !d.config.Incremental.Enabled || d.lastState == nil {
+		return query, args
+	}
+
+	// Replace timestamp parameter if configured
+	if d.config.Incremental.TimestampParam != "" && d.lastState.LastTimestamp != nil {
+		placeholder := ":" + d.config.Incremental.TimestampParam
+		paramPlaceholder := database.FormatPlaceholder(d.driver, len(args)+1)
+		query = strings.ReplaceAll(query, placeholder, paramPlaceholder)
+		args = append(args, *d.lastState.LastTimestamp)
+	}
+
+	// Replace ID parameter if configured
+	if d.config.Incremental.IDParam != "" && d.lastState.LastID != nil {
+		placeholder := ":" + d.config.Incremental.IDParam
+		paramPlaceholder := database.FormatPlaceholder(d.driver, len(args)+1)
+		query = strings.ReplaceAll(query, placeholder, paramPlaceholder)
+		args = append(args, *d.lastState.LastID)
+	}
+
+	return query, args
+}
+
+// replaceStaticParameters replaces static parameter placeholders from config.Parameters.
+// For Postgres ($n): reuses same placeholder for all occurrences (append arg once).
+// For MySQL/SQLite (?): replaces each occurrence sequentially (append arg each time).
+func (d *DatabaseInput) replaceStaticParameters(query string, args []interface{}) (string, []interface{}) {
 	paramOrder := extractParameterOrder(query)
 	for _, paramName := range paramOrder {
-		if value, exists := d.config.Parameters[paramName]; exists {
-			placeholder := ":" + paramName
-			query = strings.ReplaceAll(query, placeholder,
-				database.FormatPlaceholder(d.driver, len(args)+1))
+		value, exists := d.config.Parameters[paramName]
+		if !exists {
+			continue
+		}
+
+		namedPlaceholder := ":" + paramName
+		query, args = d.replaceNamedParameter(query, args, namedPlaceholder, value)
+	}
+
+	return query, args
+}
+
+// replaceNamedParameter replaces a named parameter placeholder with a positional placeholder.
+// Handles driver-specific behavior:
+//   - Postgres: replaces all occurrences with same $n placeholder (reuses $1)
+//   - MySQL/SQLite: replaces each occurrence sequentially with separate ? placeholders
+func (d *DatabaseInput) replaceNamedParameter(query string, args []interface{}, namedPlaceholder string, value interface{}) (string, []interface{}) {
+	if !strings.Contains(query, namedPlaceholder) {
+		return query, args
+	}
+
+	if d.driver == "postgres" {
+		// Postgres: replace all occurrences with same placeholder, append arg once
+		paramPlaceholder := database.FormatPlaceholder(d.driver, len(args)+1)
+		query = strings.ReplaceAll(query, namedPlaceholder, paramPlaceholder)
+		args = append(args, value)
+	} else {
+		// MySQL/SQLite: replace each occurrence sequentially, append arg each time
+		for strings.Contains(query, namedPlaceholder) {
+			paramPlaceholder := database.FormatPlaceholder(d.driver, len(args)+1)
+			query = strings.Replace(query, namedPlaceholder, paramPlaceholder, 1)
 			args = append(args, value)
 		}
 	}

@@ -21,7 +21,6 @@ import (
 // Default configuration values for database output
 const (
 	defaultDatabaseOutputTimeout = 30 * time.Second
-	defaultBatchSize             = 100
 )
 
 // Template prefix constants
@@ -48,9 +47,8 @@ type DatabaseOutputConfig struct {
 	Query     string `json:"query"`     // Inline SQL query with {{record.field}} templates
 	QueryFile string `json:"queryFile"` // Path to SQL file with {{record.field}} templates
 
-	// Batch configuration
-	BatchSize   int  `json:"batchSize"`
-	Transaction bool `json:"transaction"` // Wrap batch in transaction
+	// Transaction configuration
+	Transaction bool `json:"transaction"` // Wrap operations in transaction
 
 	// Error handling
 	OnError string `json:"onError"` // "fail", "skip", "log"
@@ -113,10 +111,6 @@ func NewDatabaseOutputFromConfig(cfg *connector.ModuleConfig) (*DatabaseOutput, 
 		timeout = time.Duration(config.TimeoutMs) * time.Millisecond
 	}
 
-	if config.BatchSize <= 0 {
-		config.BatchSize = defaultBatchSize
-	}
-
 	if config.OnError == "" {
 		config.OnError = "fail"
 	}
@@ -148,7 +142,6 @@ func NewDatabaseOutputFromConfig(cfg *connector.ModuleConfig) (*DatabaseOutput, 
 
 	logger.Debug("database output module created",
 		slog.String("driver", driver),
-		slog.Int("batch_size", config.BatchSize),
 		slog.Bool("transaction", config.Transaction),
 		slog.String("on_error", config.OnError),
 	)
@@ -179,10 +172,7 @@ func parseDatabaseOutputConfig(cfg map[string]interface{}) DatabaseOutputConfig 
 		config.QueryFile = v
 	}
 
-	// Batch configuration
-	if v, ok := cfg["batchSize"].(float64); ok {
-		config.BatchSize = int(v)
-	}
+	// Transaction configuration
 	if v, ok := cfg["transaction"].(bool); ok {
 		config.Transaction = v
 	}
@@ -310,6 +300,8 @@ func (d *DatabaseOutput) processRecordInTransaction(ctx context.Context, tx *sql
 }
 
 // handleQueryBuildError handles errors during query building based on onError configuration.
+//
+//nolint:unparam // bool return is needed for interface consistency, even though it's always false for log/skip
 func (d *DatabaseOutput) handleQueryBuildError(err error, recordIndex int) (bool, error) {
 	switch d.config.OnError {
 	case "skip":
@@ -323,13 +315,15 @@ func (d *DatabaseOutput) handleQueryBuildError(err error, recordIndex int) (bool
 			slog.Int("record_index", recordIndex),
 			slog.String("error", err.Error()),
 		)
-		return true, nil
+		return false, nil
 	default: // "fail"
 		return false, fmt.Errorf("building parameterized query: %w", err)
 	}
 }
 
 // handleDatabaseError handles database execution errors based on onError configuration.
+//
+//nolint:unparam // bool return is needed for interface consistency, even though it's always false for log/skip
 func (d *DatabaseOutput) handleDatabaseError(err error, query string, argCount int, recordIndex int) (bool, error) {
 	dbErr := database.ClassifyDatabaseError(err, d.driver, "exec", query, argCount)
 
@@ -345,7 +339,7 @@ func (d *DatabaseOutput) handleDatabaseError(err error, query string, argCount i
 			slog.Int("record_index", recordIndex),
 			slog.String("error", dbErr.Error()),
 		)
-		return true, nil
+		return false, nil
 	default: // "fail"
 		return false, dbErr
 	}

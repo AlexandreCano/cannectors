@@ -985,9 +985,11 @@ output:
 ```
 
 **Transaction Mode:**
-- When `transaction: true`, all records are inserted within a single transaction
-- On error: entire transaction is rolled back (no partial writes)
-- Use `onError: skip` to continue processing after individual record failures
+- When `transaction: true`, all records are processed within a single transaction
+- **onError: fail** (default): On any error, entire transaction is rolled back (no partial writes)
+- **onError: skip**: Individual record failures are skipped, successful records are committed together
+- **onError: log**: Individual record failures are logged, successful records are committed together
+- Note: With `skip` or `log`, partial commits are allowed within the transaction
 
 **See also:** `configs/examples/30-database-output-insert.yaml`, `configs/examples/31-database-output-upsert.yaml`
 

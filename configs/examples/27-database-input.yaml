@@ -15,46 +15,44 @@ connector:
     connectionStringRef: "${DATABASE_URL}"
     # Or direct connection (avoid in production):
     # connectionString: "postgres://user:pass@localhost:5432/mydb?sslmode=disable"
-    
+
     # Driver auto-detected from connection string, or specify explicitly:
     # driver: postgres  # postgres, mysql, sqlite
-    
+
     # SQL query to execute
     query: |
       SELECT id, name, email, created_at, status
       FROM users
       WHERE status = 'active'
       ORDER BY created_at DESC
-    
+
     # Connection pool settings
     maxOpenConns: 10
     maxIdleConns: 5
     connMaxLifetimeSeconds: 1800
     connMaxIdleTimeSeconds: 300
-    
+
     # Query timeout
     timeoutMs: 30000
-    
+
     # Schedule periodic polling
     schedule: "*/5 * * * *"  # Every 5 minutes
 
   filters:
     - type: mapping
-      config:
-        mappings:
-          - source: "id"
-            target: "user_id"
-          - source: "name"
-            target: "full_name"
-          - source: "email"
-            target: "email_address"
-          - source: "created_at"
-            target: "registration_date"
+      mappings:
+        - source: "id"
+          target: "user_id"
+        - source: "name"
+          target: "full_name"
+        - source: "email"
+          target: "email_address"
+        - source: "created_at"
+          target: "registration_date"
 
   output:
     type: httpRequest
-    config:
-      endpoint: "https://api.example.com/users/sync"
-      method: POST
-      headers:
-        Content-Type: "application/json"
+    endpoint: "https://api.example.com/users/sync"
+    method: POST
+    headers:
+      Content-Type: "application/json"

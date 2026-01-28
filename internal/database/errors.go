@@ -350,6 +350,10 @@ func GetDatabaseError(err error) *DatabaseError {
 
 // IsRetryableError checks if a database error is retryable.
 func IsRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
 	dbErr := GetDatabaseError(err)
 	if dbErr != nil {
 		return dbErr.Retryable

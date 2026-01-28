@@ -10,28 +10,25 @@ connector:
 
   input:
     type: database
-    config:
-      connectionStringRef: "${DATABASE_URL}"
-      
-      # Query with {{lastRunTimestamp}} placeholder
-      # On first run: uses epoch time (1970-01-01) to get all records
-      # On subsequent runs: uses last successful execution timestamp
-      query: |
-        SELECT id, customer_id, total_amount, status, updated_at
-        FROM orders
-        WHERE updated_at > {{lastRunTimestamp}}
-        ORDER BY updated_at ASC
-        LIMIT 1000
-      
-      # Enable incremental mode to persist lastRunTimestamp between runs
-      incremental:
-        enabled: true
-        timestampField: "updated_at"  # Field to track for next run
-      
-      timeoutMs: 60000
-    
-    schedule:
-      cron: "*/1 * * * *"  # Every minute
+    connectionStringRef: "${DATABASE_URL}"
+
+    # Query with {{lastRunTimestamp}} placeholder
+    # On first run: uses epoch time (1970-01-01) to get all records
+    # On subsequent runs: uses last successful execution timestamp
+    query: |
+      SELECT id, customer_id, total_amount, status, updated_at
+      FROM orders
+      WHERE updated_at > {{lastRunTimestamp}}
+      ORDER BY updated_at ASC
+      LIMIT 1000
+
+    # Enable incremental mode to persist lastRunTimestamp between runs
+    incremental:
+      enabled: true
+      timestampField: "updated_at"  # Field to track for next run
+
+    timeoutMs: 60000
+    schedule: "*/1 * * * *"  # Every minute
 
   filters:
     - type: mapping

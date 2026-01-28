@@ -10,43 +10,39 @@ connector:
 
   input:
     type: httpPolling
-    config:
-      endpoint: "https://api.source.com/products"
-      method: GET
-    schedule:
-      cron: "*/10 * * * *"
+    endpoint: "https://api.source.com/products"
+    method: GET
+    schedule: "*/10 * * * *"
 
   filters:
     - type: mapping
-      config:
-        mappings:
-          - source: "id"
-            target: "product_id"
-          - source: "name"
-            target: "product_name"
-          - source: "price"
-            target: "unit_price"
-          - source: "stock"
-            target: "quantity_in_stock"
+      mappings:
+        - source: "id"
+          target: "product_id"
+        - source: "name"
+          target: "product_name"
+        - source: "price"
+          target: "unit_price"
+        - source: "stock"
+          target: "quantity_in_stock"
 
   output:
     type: database
-    config:
-      connectionStringRef: "${DATABASE_URL}"
-      
-      # SQL query with {{record.field}} placeholders
-      # Placeholders are replaced with parameterized values for security
-      query: |
-        INSERT INTO products (product_id, name, price, stock, updated_at)
-        VALUES ({{record.product_id}}, {{record.product_name}}, {{record.unit_price}}, {{record.quantity_in_stock}}, NOW())
-      
-      # Or use queryFile for complex queries:
-      # queryFile: "queries/insert-product.sql"
-      
-      # Transaction mode: wrap all inserts in a single transaction
-      transaction: true
-      
-      # Error handling: fail, skip, log
-      onError: skip
-      
-      timeoutMs: 30000
+    connectionStringRef: "${DATABASE_URL}"
+
+    # SQL query with {{record.field}} placeholders
+    # Placeholders are replaced with parameterized values for security
+    query: |
+      INSERT INTO products (product_id, name, price, stock, updated_at)
+      VALUES ({{record.product_id}}, {{record.product_name}}, {{record.unit_price}}, {{record.quantity_in_stock}}, NOW())
+
+    # Or use queryFile for complex queries:
+    # queryFile: "queries/insert-product.sql"
+
+    # Transaction mode: wrap all inserts in a single transaction
+    transaction: true
+
+    # Error handling: fail, skip, log
+    onError: skip
+
+    timeoutMs: 30000

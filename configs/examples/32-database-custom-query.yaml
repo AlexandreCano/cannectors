@@ -10,25 +10,22 @@ connector:
 
   input:
     type: httpPolling
-    config:
-      endpoint: "https://api.source.com/inventory-updates"
-      method: GET
-    schedule:
-      cron: "*/5 * * * *"
+    endpoint: "https://api.source.com/inventory-updates"
+    method: GET
+    schedule: "*/5 * * * *"
 
   filters: []
 
   output:
     type: database
-    config:
-      connectionStringRef: "${DATABASE_URL}"
-      
-      # Load SQL from external file
-      # File content uses same {{record.field}} syntax as inline queries
-      queryFile: "queries/inventory-upsert.sql"
-      
-      onError: log
-      timeoutMs: 10000
+    connectionStringRef: "${DATABASE_URL}"
+
+    # Load SQL from external file
+    # File content uses same {{record.field}} syntax as inline queries
+    queryFile: "queries/inventory-upsert.sql"
+
+    onError: log
+    timeoutMs: 10000
 
 ---
 # Example: Update with complex WHERE clause
@@ -39,27 +36,25 @@ connector:
 
   input:
     type: webhook
-    config:
-      path: "/stock-updates"
+    path: "/stock-updates"
 
   filters: []
 
   output:
     type: database
-    config:
-      connectionStringRef: "${DATABASE_URL}"
-      
-      # Inline query for simpler cases
-      query: |
-        UPDATE products
-        SET 
-          stock_quantity = stock_quantity + {{record.quantity_change}},
-          last_updated = CURRENT_TIMESTAMP,
-          updated_by = {{record.updated_by}}
-        WHERE 
-          sku = {{record.sku}}
-          AND warehouse_id = {{record.warehouse_id}}
-          AND status = 'active'
-      
-      transaction: true
-      onError: fail
+    connectionStringRef: "${DATABASE_URL}"
+
+    # Inline query for simpler cases
+    query: |
+      UPDATE products
+      SET
+        stock_quantity = stock_quantity + {{record.quantity_change}},
+        last_updated = CURRENT_TIMESTAMP,
+        updated_by = {{record.updated_by}}
+      WHERE
+        sku = {{record.sku}}
+        AND warehouse_id = {{record.warehouse_id}}
+        AND status = 'active'
+
+    transaction: true
+    onError: fail

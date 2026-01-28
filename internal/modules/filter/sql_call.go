@@ -55,9 +55,6 @@ type SQLCallConfig struct {
 	QueryFile string   `json:"queryFile"` // Path to SQL file with {{record.field}} templates
 	Queries   []string `json:"queries"`   // Multiple queries (executed sequentially)
 
-	// Conditional execution
-	Condition string `json:"condition"` // Expression to evaluate before executing query
-
 	// Result handling
 	MergeStrategy string `json:"mergeStrategy"` // "merge", "replace", "append"
 	DataField     string `json:"dataField"`     // Field to extract from result
@@ -93,7 +90,6 @@ type SQLCallModule struct {
 	driver            string
 	query             string
 	queries           []string
-	condition         string
 	mergeStrategy     string
 	dataField         string
 	resultKey         string
@@ -133,7 +129,6 @@ func NewSQLCallFromConfig(config SQLCallConfig) (*SQLCallModule, error) {
 		driver:            driver,
 		query:             config.Query,
 		queries:           queries,
-		condition:         config.Condition,
 		mergeStrategy:     mergeStrategy,
 		dataField:         config.DataField,
 		resultKey:         config.ResultKey,
@@ -278,7 +273,6 @@ func ParseSQLCallConfig(cfg map[string]interface{}) (SQLCallConfig, error) {
 
 	parseConnectionSettings(&config, cfg)
 	parseQuerySettings(&config, cfg)
-	parseConditionSettings(&config, cfg)
 	parseResultHandlingSettings(&config, cfg)
 	parseErrorHandlingSettings(&config, cfg)
 	parsePoolSettings(&config, cfg)
@@ -314,13 +308,6 @@ func parseQuerySettings(config *SQLCallConfig, cfg map[string]interface{}) {
 				config.Queries = append(config.Queries, qs)
 			}
 		}
-	}
-}
-
-// parseConditionSettings extracts condition-related settings from config.
-func parseConditionSettings(config *SQLCallConfig, cfg map[string]interface{}) {
-	if v, ok := cfg["condition"].(string); ok {
-		config.Condition = v
 	}
 }
 
@@ -418,15 +405,6 @@ func (m *SQLCallModule) Process(ctx context.Context, records []map[string]interf
 		default:
 		}
 
-		// Check condition if configured
-		if m.condition != "" {
-			shouldExecute := m.evaluateCondition(record)
-			if !shouldExecute {
-				result = append(result, record)
-				continue
-			}
-		}
-
 		enrichedRecord, wasCacheHit, err := m.processRecord(ctx, record, recordIdx)
 		if wasCacheHit {
 			cacheHits++
@@ -486,9 +464,10 @@ func (m *SQLCallModule) Process(ctx context.Context, records []map[string]interf
 
 // processRecord executes SQL queries for a single record.
 func (m *SQLCallModule) processRecord(ctx context.Context, record map[string]interface{}, recordIdx int) (map[string]interface{}, bool, error) {
-	// Check cache first
+	// Compute cache key once from original record (before any mutations)
+	var cacheKey string
 	if m.cacheEnabled {
-		cacheKey := m.buildCacheKey(record)
+		cacheKey = m.buildCacheKey(record)
 		if cachedData, found := m.cache.Get(cacheKey); found {
 			responseData, ok := cachedData.(map[string]interface{})
 			if ok {
@@ -503,22 +482,22 @@ func (m *SQLCallModule) processRecord(ctx context.Context, record map[string]int
 	// Execute queries
 	var resultData map[string]interface{}
 	var err error
+	workingRecord := record // Use a copy for intermediate merges
 
 	for i, query := range m.queries {
-		resultData, err = m.executeQuery(ctx, query, record)
+		resultData, err = m.executeQuery(ctx, query, workingRecord)
 		if err != nil {
 			return nil, false, fmt.Errorf("query %d failed: %w", i+1, err)
 		}
 
 		// Merge intermediate results for subsequent queries
 		if i < len(m.queries)-1 && resultData != nil {
-			record = m.mergeData(record, resultData)
+			workingRecord = m.mergeData(workingRecord, resultData)
 		}
 	}
 
-	// Cache successful result
+	// Cache successful result using original cache key
 	if m.cacheEnabled && resultData != nil {
-		cacheKey := m.buildCacheKey(record)
 		m.cache.Set(cacheKey, resultData, m.cacheTTL)
 	}
 
@@ -686,34 +665,6 @@ func (m *SQLCallModule) buildCacheKey(record map[string]interface{}) string {
 
 	// Default: use query hash + first few field values
 	return fmt.Sprintf("%s::%v", m.query, record)
-}
-
-// evaluateCondition evaluates a condition expression against the record.
-func (m *SQLCallModule) evaluateCondition(record map[string]interface{}) bool {
-	// Simple condition evaluation for now
-	// Supports patterns like: "record.field == 'value'" or "record.field != null"
-
-	condition := m.condition
-	condition = strings.TrimSpace(condition)
-
-	// Check for != null pattern
-	if strings.Contains(condition, "!= null") || strings.Contains(condition, "!== null") {
-		fieldPath := strings.TrimSpace(strings.Split(condition, "!=")[0])
-		fieldPath = strings.TrimPrefix(fieldPath, RecordFieldPrefix)
-		value := getSQLNestedValue(record, fieldPath)
-		return value != nil
-	}
-
-	// Check for == null pattern
-	if strings.Contains(condition, "== null") || strings.Contains(condition, "=== null") {
-		fieldPath := strings.TrimSpace(strings.Split(condition, "==")[0])
-		fieldPath = strings.TrimPrefix(fieldPath, RecordFieldPrefix)
-		value := getSQLNestedValue(record, fieldPath)
-		return value == nil
-	}
-
-	// Default: execute query
-	return true
 }
 
 // mergeData merges query result into the record.

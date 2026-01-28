@@ -10,54 +10,50 @@ connector:
 
   input:
     type: httpPolling
-    config:
-      endpoint: "https://api.source.com/products"
-      method: GET
-    schedule:
-      cron: "*/15 * * * *"
+    endpoint: "https://api.source.com/products"
+    method: GET
+    schedule: "*/15 * * * *"
 
   filters:
     - type: mapping
-      config:
-        mappings:
-          - source: "sku"
-            target: "sku"
-          - source: "name"
-            target: "product_name"
-          - source: "price"
-            target: "price"
-          - source: "stock"
-            target: "stock_quantity"
+      mappings:
+        - source: "sku"
+          target: "sku"
+        - source: "name"
+          target: "product_name"
+        - source: "price"
+          target: "price"
+        - source: "stock"
+          target: "stock_quantity"
 
   output:
     type: database
-    config:
-      connectionStringRef: "${DATABASE_URL}"
-      
-      # PostgreSQL upsert: ON CONFLICT DO UPDATE
-      query: |
-        INSERT INTO products (sku, name, price, stock, last_sync)
-        VALUES ({{record.sku}}, {{record.product_name}}, {{record.price}}, {{record.stock_quantity}}, NOW())
-        ON CONFLICT (sku) DO UPDATE SET
-          name = EXCLUDED.name,
-          price = EXCLUDED.price,
-          stock = EXCLUDED.stock,
-          last_sync = EXCLUDED.last_sync
-      
-      # For MySQL, use ON DUPLICATE KEY UPDATE:
-      # query: |
-      #   INSERT INTO products (sku, name, price, stock, last_sync)
-      #   VALUES ({{record.sku}}, {{record.product_name}}, {{record.price}}, {{record.stock_quantity}}, NOW())
-      #   ON DUPLICATE KEY UPDATE
-      #     name = VALUES(name),
-      #     price = VALUES(price),
-      #     stock = VALUES(stock),
-      #     last_sync = VALUES(last_sync)
-      
-      # For SQLite, use INSERT OR REPLACE:
-      # query: |
-      #   INSERT OR REPLACE INTO products (sku, name, price, stock, last_sync)
-      #   VALUES ({{record.sku}}, {{record.product_name}}, {{record.price}}, {{record.stock_quantity}}, datetime('now'))
-      
-      transaction: true
-      onError: fail
+    connectionStringRef: "${DATABASE_URL}"
+
+    # PostgreSQL upsert: ON CONFLICT DO UPDATE
+    query: |
+      INSERT INTO products (sku, name, price, stock, last_sync)
+      VALUES ({{record.sku}}, {{record.product_name}}, {{record.price}}, {{record.stock_quantity}}, NOW())
+      ON CONFLICT (sku) DO UPDATE SET
+        name = EXCLUDED.name,
+        price = EXCLUDED.price,
+        stock = EXCLUDED.stock,
+        last_sync = EXCLUDED.last_sync
+
+    # For MySQL, use ON DUPLICATE KEY UPDATE:
+    # query: |
+    #   INSERT INTO products (sku, name, price, stock, last_sync)
+    #   VALUES ({{record.sku}}, {{record.product_name}}, {{record.price}}, {{record.stock_quantity}}, NOW())
+    #   ON DUPLICATE KEY UPDATE
+    #     name = VALUES(name),
+    #     price = VALUES(price),
+    #     stock = VALUES(stock),
+    #     last_sync = VALUES(last_sync)
+
+    # For SQLite, use INSERT OR REPLACE:
+    # query: |
+    #   INSERT OR REPLACE INTO products (sku, name, price, stock, last_sync)
+    #   VALUES ({{record.sku}}, {{record.product_name}}, {{record.price}}, {{record.stock_quantity}}, datetime('now'))
+
+    transaction: true
+    onError: fail

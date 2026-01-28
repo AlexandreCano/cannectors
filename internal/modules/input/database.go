@@ -379,10 +379,12 @@ func (d *DatabaseInput) buildQuery() (string, []interface{}) {
 		}
 	}
 
-	// Add static parameters
-	for key, value := range d.config.Parameters {
-		placeholder := ":" + key
-		if strings.Contains(query, placeholder) {
+	// Add static parameters - process in query order to maintain parameter order
+	// Scan query left-to-right for :paramName tokens and append args in that order
+	paramOrder := extractParameterOrder(query)
+	for _, paramName := range paramOrder {
+		if value, exists := d.config.Parameters[paramName]; exists {
+			placeholder := ":" + paramName
 			query = strings.ReplaceAll(query, placeholder,
 				database.FormatPlaceholder(d.driver, len(args)+1))
 			args = append(args, value)
@@ -390,6 +392,46 @@ func (d *DatabaseInput) buildQuery() (string, []interface{}) {
 	}
 
 	return query, args
+}
+
+// extractParameterOrder extracts parameter names from query in left-to-right order.
+// This ensures args slice matches placeholder order for MySQL/SQLite compatibility.
+func extractParameterOrder(query string) []string {
+	var order []string
+	seen := make(map[string]bool)
+
+	// Find all :paramName patterns in order
+	start := 0
+	for {
+		idx := strings.Index(query[start:], ":")
+		if idx == -1 {
+			break
+		}
+		idx += start
+
+		// Find end of parameter name (alphanumeric + underscore)
+		end := idx + 1
+		for end < len(query) && (isAlphanumeric(query[end]) || query[end] == '_') {
+			end++
+		}
+
+		if end > idx+1 {
+			paramName := query[idx+1 : end]
+			if !seen[paramName] {
+				order = append(order, paramName)
+				seen[paramName] = true
+			}
+		}
+
+		start = end
+	}
+
+	return order
+}
+
+// isAlphanumeric checks if a byte is alphanumeric.
+func isAlphanumeric(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
 }
 
 // fetchSingle executes a single query without pagination.
@@ -430,14 +472,31 @@ func (d *DatabaseInput) fetchLimitOffset(ctx context.Context, query string, args
 		limit = defaultQueryLimit
 	}
 
+	// Check if query uses offsetParam placeholder
+	offsetParam := d.config.Pagination.OffsetParam
+	usesOffsetParam := offsetParam != "" && strings.Contains(query, ":"+offsetParam)
+
 	for {
-		paginatedQuery := fmt.Sprintf("%s LIMIT %d OFFSET %d", query, limit, offset)
+		var paginatedQuery string
+		var paginatedArgs []interface{}
+
+		if usesOffsetParam {
+			// Replace :offsetParam placeholder with parameterized value
+			paginatedQuery = strings.ReplaceAll(query, ":"+offsetParam,
+				database.FormatPlaceholder(d.driver, len(args)+1))
+			paginatedArgs = append(args, offset)
+			paginatedQuery = fmt.Sprintf("%s LIMIT %d", paginatedQuery, limit)
+		} else {
+			// Use literal LIMIT/OFFSET syntax
+			paginatedQuery = fmt.Sprintf("%s LIMIT %d OFFSET %d", query, limit, offset)
+			paginatedArgs = args
+		}
 
 		queryCtx, cancel := context.WithTimeout(ctx, d.timeout)
-		rows, err := d.db.QueryContext(queryCtx, paginatedQuery, args...)
+		rows, err := d.db.QueryContext(queryCtx, paginatedQuery, paginatedArgs...)
 		if err != nil {
 			cancel()
-			dbErr := database.ClassifyDatabaseError(err, d.driver, "select", paginatedQuery, len(args))
+			dbErr := database.ClassifyDatabaseError(err, d.driver, "select", paginatedQuery, len(paginatedArgs))
 			return nil, dbErr
 		}
 

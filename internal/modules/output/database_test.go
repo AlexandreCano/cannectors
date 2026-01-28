@@ -64,14 +64,10 @@ func TestParseDatabaseOutputConfig(t *testing.T) {
 				"connectionString": "postgres://localhost/db",
 				"query":            "INSERT INTO events (data) VALUES ({{record.data}})",
 				"transaction":      true,
-				"batchSize":        float64(500),
 			},
 			check: func(t *testing.T, config DatabaseOutputConfig) {
 				if !config.Transaction {
 					t.Error("Transaction should be true")
-				}
-				if config.BatchSize != 500 {
-					t.Errorf("BatchSize = %d, want 500", config.BatchSize)
 				}
 			},
 		},
@@ -246,8 +242,5 @@ func TestGetDBFieldValue(t *testing.T) {
 func TestDefaultValues(t *testing.T) {
 	t.Parallel()
 
-	// Verify default batch size
-	if defaultBatchSize != 100 {
-		t.Errorf("defaultBatchSize = %d, want 100", defaultBatchSize)
-	}
+	// batchSize removed - not used in implementation
 }

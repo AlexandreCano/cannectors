@@ -64,12 +64,9 @@ func TestParseSQLCallConfig(t *testing.T) {
 			cfg: map[string]interface{}{
 				"connectionString": "postgres://localhost/db",
 				"query":            "SELECT * FROM enrichment WHERE key = {{record.key}}",
-				"condition":        "record.needs_enrichment != null",
 			},
 			check: func(t *testing.T, config SQLCallConfig) {
-				if config.Condition != "record.needs_enrichment != null" {
-					t.Errorf("Condition = %q, want record.needs_enrichment != null", config.Condition)
-				}
+				// Condition support removed - use condition module instead
 			},
 		},
 		{

@@ -1,0 +1,40 @@
+{
+  "connector": {
+    "name": "filters-set-example",
+    "version": "1.0.0",
+    "description": "Example demonstrating the 'set' filter module for setting literal values on fields",
+    "input": {
+      "type": "httpPolling",
+      "endpoint": "https://api.source.com/orders",
+      "schedule": "*/5 * * * *",
+      "timeoutMs": 30000
+    },
+    "filters": [
+      {
+        "type": "set",
+        "target": "status",
+        "value": "pending"
+      },
+      {
+        "type": "set",
+        "target": "metadata.version",
+        "value": "1.0.0"
+      },
+      {
+        "type": "set",
+        "target": "priority",
+        "value": 1
+      },
+      {
+        "type": "set",
+        "target": "active",
+        "value": true
+      }
+    ],
+    "output": {
+      "type": "httpRequest",
+      "endpoint": "https://api.destination.com/orders",
+      "method": "POST"
+    }
+  }
+}

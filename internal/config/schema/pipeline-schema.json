@@ -318,7 +318,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "description": "Filter type. Canonical: mapping, condition.",
+          "description": "Filter type. Canonical: mapping, condition, set, script, http_call, sql_call.",
           "minLength": 1
         },
         "connectionRef": { "type": "string" },
@@ -376,8 +376,29 @@
         {
           "if": { "properties": { "type": { "const": "http_call" } }, "required": ["type"] },
           "then": { "$ref": "#/$defs/httpCallFilterConfig" }
+        },
+        {
+          "if": { "properties": { "type": { "const": "set" } }, "required": ["type"] },
+          "then": { "$ref": "#/$defs/setFilterConfig" }
         }
       ]
+    },
+
+    "setFilterConfig": {
+      "type": "object",
+      "description": "Set filter module configuration. Sets a field to a literal value on each record (create or overwrite).",
+      "required": ["target", "value"],
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Field path to set (e.g. id, user.id, metadata.version). Supports dot notation for nested paths."
+        },
+        "value": {
+          "description": "Literal value to set. Can be string, number, boolean, or null. Type is preserved."
+        }
+      },
+      "additionalProperties": true
     },
 
     "cloneCopy": {

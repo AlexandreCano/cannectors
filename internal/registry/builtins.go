@@ -134,6 +134,19 @@ func registerBuiltinFilterModules() {
 		}
 		return module, nil
 	})
+
+	// set - Set or modify a single field on each record
+	RegisterFilter("set", func(cfg connector.ModuleConfig, index int) (filter.Module, error) {
+		setConfig, err := filter.ParseSetConfig(cfg.Config)
+		if err != nil {
+			return nil, fmt.Errorf("invalid set config at index %d: %w", index, err)
+		}
+		module, err := filter.NewSetFromConfig(setConfig)
+		if err != nil {
+			return nil, fmt.Errorf("invalid set config at index %d: %w", index, err)
+		}
+		return module, nil
+	})
 }
 
 // registerBuiltinOutputModules registers all built-in output module types.

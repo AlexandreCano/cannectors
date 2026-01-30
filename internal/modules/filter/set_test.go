@@ -2,6 +2,7 @@ package filter
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -54,7 +55,7 @@ func TestParseSetConfig_Validation(t *testing.T) {
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("expected error containing %q, got nil", tt.errMsg)
-				} else if tt.errMsg != "" && !contains(err.Error(), tt.errMsg) {
+				} else if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
 					t.Errorf("expected error containing %q, got %q", tt.errMsg, err.Error())
 				}
 			} else {
@@ -95,7 +96,7 @@ func TestNewSetFromConfig_Validation(t *testing.T) {
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("expected error containing %q, got nil", tt.errMsg)
-				} else if tt.errMsg != "" && !contains(err.Error(), tt.errMsg) {
+				} else if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
 					t.Errorf("expected error containing %q, got %q", tt.errMsg, err.Error())
 				}
 			} else {
@@ -344,15 +345,6 @@ func TestSetModule_Process_ContextCancellation(t *testing.T) {
 }
 
 // Helper functions
-
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
 
 func equalValues(a, b interface{}) bool {
 	if a == nil && b == nil {

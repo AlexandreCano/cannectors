@@ -1702,79 +1702,6 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 		}
 	})
 
-	t.Run("cache key from JSON path expression with $.", func(t *testing.T) {
-		var requestCount int32
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			atomic.AddInt32(&requestCount, 1)
-			response := map[string]interface{}{"enriched": "data"}
-			w.Header().Set("Content-Type", "application/json")
-			if err := json.NewEncoder(w).Encode(response); err != nil {
-				t.Errorf("failed to encode response: %v", err)
-			}
-		}))
-		defer server.Close()
-
-		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Key: KeyConfig{
-				Field:     "id",
-				ParamType: "query",
-				ParamName: "id",
-			},
-			Cache: CacheConfig{
-				MaxSize:    10,
-				DefaultTTL: 300,
-				Key:        "$.customerId",
-			},
-		}
-
-		module, err := NewHTTPCallFromConfig(config)
-		if err != nil {
-			t.Fatalf("failed to create module: %v", err)
-		}
-
-		// Process records with same customerId - should use cache
-		records1 := []map[string]interface{}{
-			{"id": "123", "customerId": "CUST-001"},
-		}
-		records2 := []map[string]interface{}{
-			{"id": "456", "customerId": "CUST-001"}, // Same customerId
-		}
-
-		_, err = module.Process(context.Background(), records1)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-
-		if atomic.LoadInt32(&requestCount) != 1 {
-			t.Errorf("expected 1 request, got %d", requestCount)
-		}
-
-		// Second record with same customerId should use cache
-		_, err = module.Process(context.Background(), records2)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-
-		if atomic.LoadInt32(&requestCount) != 1 {
-			t.Errorf("expected 1 request (cache hit with same customerId), got %d", requestCount)
-		}
-
-		// Third record with different customerId should make new request
-		records3 := []map[string]interface{}{
-			{"id": "789", "customerId": "CUST-002"},
-		}
-		_, err = module.Process(context.Background(), records3)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-
-		if atomic.LoadInt32(&requestCount) != 2 {
-			t.Errorf("expected 2 requests (different customerId), got %d", requestCount)
-		}
-	})
-
 	t.Run("cache key from dot notation path", func(t *testing.T) {
 		var requestCount int32
 
@@ -1871,7 +1798,7 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 			Cache: CacheConfig{
 				MaxSize:    10,
 				DefaultTTL: 300,
-				Key:        "$.nonexistent",
+				Key:        "metadata.nonexistent",
 			},
 		}
 
@@ -1881,7 +1808,7 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 		}
 
 		records := []map[string]interface{}{
-			{"id": "123"}, // Missing "nonexistent" field
+			{"id": "123"}, // Missing "metadata.nonexistent" path
 		}
 
 		_, err = module.Process(context.Background(), records)

@@ -75,8 +75,7 @@ type CacheConfig struct {
 	// If not specified, uses default: endpoint + "::" + keyValue.
 	// Can be:
 	//   - A static string: "my-cache-key"
-	//   - A JSON path expression: "$.customerId" or "customerId" (extracts value from record)
-	//   - Dot notation path: "user.profile.id" (extracts nested value from record)
+	//   - A dot notation path: "customerId" or "user.profile.id" (extracts value from record)
 	Key string `json:"key"`
 }
 
@@ -638,7 +637,7 @@ func (m *HTTPCallModule) processRecord(ctx context.Context, record map[string]in
 
 // extractKeyValue extracts the key value from a record using the configured field path.
 func (m *HTTPCallModule) extractKeyValue(record map[string]interface{}, recordIdx int) (string, error) {
-	value, found := getNestedValue(record, m.keyField)
+	value, found := GetNestedValue(record, m.keyField)
 	if !found {
 		return "", newHTTPCallError(
 			ErrCodeHTTPCallKeyExtract,
@@ -685,29 +684,16 @@ func (m *HTTPCallModule) extractKeyValue(record map[string]interface{}, recordId
 // buildCacheKey creates a unique cache key from the key value and record.
 // If cacheKey is configured, it can be:
 //   - A static string: used as-is
-//   - A JSON path expression (starting with "$." or dot notation): extracts value from record
+//   - A dot notation path: "customerId" or "user.profile.id" (extracts value from record)
 //
 // If cacheKey is not configured, uses default: endpoint + "::" + keyValue
 func (m *HTTPCallModule) buildCacheKey(keyValue string, record map[string]interface{}) string {
 	// If cacheKey is configured, use it
 	if m.cacheKey != "" {
-		// Check if it's a JSON path expression (starts with "$." or contains ".")
-		if strings.HasPrefix(m.cacheKey, "$.") {
-			// Remove "$." prefix and use dot notation
-			path := strings.TrimPrefix(m.cacheKey, "$.")
-			if value, found := getNestedValue(record, path); found {
-				return fmt.Sprintf("%v", value)
-			}
-			// If path not found, log warning and fall back to default behavior
-			logger.Warn("http_call cache key path not found, using default key",
-				slog.String("module_type", "http_call"),
-				slog.String("configured_path", m.cacheKey),
-				slog.String("fallback_key", m.endpoint+"::"+keyValue),
-			)
-			return m.endpoint + "::" + keyValue
-		} else if strings.Contains(m.cacheKey, ".") {
+		// Check if it's a dot notation path (contains "." for nested fields)
+		if IsNestedPath(m.cacheKey) {
 			// Dot notation path (e.g., "user.profile.id")
-			if value, found := getNestedValue(record, m.cacheKey); found {
+			if value, found := GetNestedValue(record, m.cacheKey); found {
 				return fmt.Sprintf("%v", value)
 			}
 			// If path not found, log warning and fall back to default behavior

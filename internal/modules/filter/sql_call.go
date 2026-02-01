@@ -539,7 +539,7 @@ func (m *SQLCallModule) executeQuery(ctx context.Context, queryTemplate string, 
 
 	// If dataField is configured, extract from first record
 	if m.dataField != "" && len(records) > 0 {
-		if data, exists := getNestedValue(records[0], m.dataField); exists {
+		if data, exists := GetNestedValue(records[0], m.dataField); exists {
 			if dataMap, ok := data.(map[string]interface{}); ok {
 				return dataMap, nil
 			}

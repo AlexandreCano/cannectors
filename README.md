@@ -8,7 +8,7 @@ Cross-platform CLI for executing declarative data pipelines. Cannectors reads YA
 - **HTTP Polling Input**: Fetch data from REST APIs with pagination support (page, offset, cursor)
 - **Webhook Input**: Receive data via HTTP POST endpoints
 - **Database Input**: Query data from PostgreSQL, MySQL, or SQLite
-- **Transformation Filters**: Map fields, apply conditions, run JavaScript scripts, enrich with external data
+- **Transformation Filters**: Map fields, apply conditions, set/remove fields, run JavaScript scripts, enrich with external data
 - **HTTP Output**: Send data to REST APIs with templating support
 - **Database Output**: Write records to databases with transaction support
 - **Authentication**: API Key, Bearer Token, Basic Auth, OAuth2 (client credentials)
@@ -205,6 +205,35 @@ filters:
     mergeStrategy: merge
 ```
 
+### Set
+
+Sets a field to a literal value on each record. Supports nested paths with dot notation.
+
+```yaml
+filters:
+  - type: set
+    target: metadata.source
+    value: "api-v2"
+```
+
+### Remove
+
+Removes one or more fields from each record. Supports nested paths with dot notation and array indices.
+
+```yaml
+filters:
+  # Remove a single field
+  - type: remove
+    target: internalId
+
+  # Remove multiple fields
+  - type: remove
+    targets:
+      - password
+      - metadata.internal
+      - items[0].secret
+```
+
 ## Output Modules
 
 ### HTTP Request
@@ -382,6 +411,8 @@ The [`configs/examples/`](configs/examples) directory contains comprehensive exa
 - **21-24** - Output templating
 - **25-26** - Record metadata
 - **27-32** - Database modules
+- **35** - Set filter
+- **36** - Remove filter
 
 ## Development
 

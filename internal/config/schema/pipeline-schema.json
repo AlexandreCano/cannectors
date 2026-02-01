@@ -318,7 +318,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "description": "Filter type. Canonical: mapping, condition, set, script, http_call, sql_call.",
+          "description": "Filter type. Canonical: mapping, condition, set, remove, script, http_call, sql_call.",
           "minLength": 1
         },
         "connectionRef": { "type": "string" },
@@ -380,8 +380,35 @@
         {
           "if": { "properties": { "type": { "const": "set" } }, "required": ["type"] },
           "then": { "$ref": "#/$defs/setFilterConfig" }
+        },
+        {
+          "if": { "properties": { "type": { "const": "remove" } }, "required": ["type"] },
+          "then": { "$ref": "#/$defs/removeFilterConfig" }
         }
       ]
+    },
+
+    "removeFilterConfig": {
+      "type": "object",
+      "description": "Remove filter module configuration. Removes one or more fields from each record.",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Single field path to remove (e.g. id, user.email). Use 'targets' for multiple fields."
+        },
+        "targets": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "description": "List of field paths to remove. Supports dot notation for nested paths."
+        }
+      },
+      "anyOf": [
+        { "required": ["target"] },
+        { "required": ["targets"] }
+      ],
+      "additionalProperties": true
     },
 
     "setFilterConfig": {

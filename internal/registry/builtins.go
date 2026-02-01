@@ -147,6 +147,19 @@ func registerBuiltinFilterModules() {
 		}
 		return module, nil
 	})
+
+	// remove - Remove a single field from each record
+	RegisterFilter("remove", func(cfg connector.ModuleConfig, index int) (filter.Module, error) {
+		removeConfig, err := filter.ParseRemoveConfig(cfg.Config)
+		if err != nil {
+			return nil, fmt.Errorf("invalid remove config at index %d: %w", index, err)
+		}
+		module, err := filter.NewRemoveFromConfig(removeConfig)
+		if err != nil {
+			return nil, fmt.Errorf("invalid remove config at index %d: %w", index, err)
+		}
+		return module, nil
+	})
 }
 
 // registerBuiltinOutputModules registers all built-in output module types.

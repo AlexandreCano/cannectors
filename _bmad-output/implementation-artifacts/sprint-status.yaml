@@ -98,8 +98,9 @@ development_status:
   14-6-output-templating-with-record-data: done
   14-7-record-metadata-storage: done
   14-8-database-connections-input-filter-output: done
-  14-9-filter-module-set-record-field: review
-  14-10-distributed-scheduler-support: backlog
+  14-9-filter-module-set-record-field: done
+  14-10-filter-module-remove-record-field: review
+  14-11-distributed-scheduler-support: backlog
   epic-14-retrospective: optional
 
   # Epic 4: Advanced Runtime Features (remaining stories - after Epic 14)

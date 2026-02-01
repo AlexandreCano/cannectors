@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/cannectors/runtime/internal/logger"
 )
@@ -83,13 +82,13 @@ func (m *SetModule) processRecord(record map[string]interface{}) (map[string]int
 	value := m.config.Value
 
 	// Simple case: no dot notation (flat field)
-	if !strings.Contains(target, ".") && !strings.Contains(target, "[") {
+	if !IsNestedPath(target) {
 		record[target] = value
 		return record, nil
 	}
 
 	// Nested path - always create intermediate objects
-	if err := setNestedValue(record, target, value); err != nil {
+	if err := SetNestedValue(record, target, value); err != nil {
 		return nil, err
 	}
 	return record, nil

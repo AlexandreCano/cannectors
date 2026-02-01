@@ -1,0 +1,35 @@
+{
+  "connector": {
+    "name": "filters-remove-example",
+    "version": "1.0.0",
+    "description": "Example demonstrating the 'remove' filter module for removing fields from records",
+    "input": {
+      "type": "httpPolling",
+      "endpoint": "https://api.source.com/users",
+      "schedule": "*/5 * * * *",
+      "timeoutMs": 30000
+    },
+    "filters": [
+      {
+        "type": "remove",
+        "description": "Remove multiple sensitive fields in one filter",
+        "targets": ["password", "secret_key", "api_token"]
+      },
+      {
+        "type": "remove",
+        "description": "Remove single field (backward compatible syntax)",
+        "target": "internal_id"
+      },
+      {
+        "type": "remove",
+        "description": "Remove nested sensitive data",
+        "targets": ["metadata.secret", "user.private_key"]
+      }
+    ],
+    "output": {
+      "type": "httpRequest",
+      "endpoint": "https://api.destination.com/users",
+      "method": "POST"
+    }
+  }
+}

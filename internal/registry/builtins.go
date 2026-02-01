@@ -148,7 +148,7 @@ func registerBuiltinFilterModules() {
 		return module, nil
 	})
 
-	// remove - Remove a single field from each record
+	// remove - Remove one or more fields from each record
 	RegisterFilter("remove", func(cfg connector.ModuleConfig, index int) (filter.Module, error) {
 		removeConfig, err := filter.ParseRemoveConfig(cfg.Config)
 		if err != nil {

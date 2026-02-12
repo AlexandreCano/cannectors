@@ -52,13 +52,11 @@ type SQLCallConfig struct {
 	Driver              string `json:"driver"`
 
 	// Query configuration - use query OR queryFile
-	Query     string   `json:"query"`     // SQL query with {{record.field}} templates
-	QueryFile string   `json:"queryFile"` // Path to SQL file with {{record.field}} templates
-	Queries   []string `json:"queries"`   // Multiple queries (executed sequentially)
+	Query     string `json:"query"`     // SQL query with {{record.field}} templates
+	QueryFile string `json:"queryFile"` // Path to SQL file with {{record.field}} templates
 
 	// Result handling
 	MergeStrategy string `json:"mergeStrategy"` // "merge", "replace", "append"
-	DataField     string `json:"dataField"`     // Field to extract from result
 	ResultKey     string `json:"resultKey"`     // Key for storing result in "append" mode
 
 	// Error handling
@@ -90,9 +88,7 @@ type SQLCallModule struct {
 	db                *sql.DB
 	driver            string
 	query             string
-	queries           []string
 	mergeStrategy     string
-	dataField         string
 	resultKey         string
 	onError           string
 	cache             cache.Cache
@@ -123,15 +119,12 @@ func NewSQLCallFromConfig(config SQLCallConfig) (*SQLCallModule, error) {
 	}
 
 	cache, cacheTTL, cacheEnabled := setupCache(config)
-	queries := buildQueriesList(config)
 
 	module := &SQLCallModule{
 		db:                db,
 		driver:            driver,
 		query:             config.Query,
-		queries:           queries,
 		mergeStrategy:     mergeStrategy,
-		dataField:         config.DataField,
 		resultKey:         config.ResultKey,
 		onError:           onError,
 		cache:             cache,
@@ -142,7 +135,7 @@ func NewSQLCallFromConfig(config SQLCallConfig) (*SQLCallModule, error) {
 		templateEvaluator: template.NewEvaluator(),
 	}
 
-	logSQLCallModuleInitialization(driver, len(queries), mergeStrategy, onError, cacheEnabled, timeout)
+	logSQLCallModuleInitialization(driver, mergeStrategy, onError, cacheEnabled, timeout)
 
 	return module, nil
 }
@@ -152,7 +145,7 @@ func validateSQLCallConfig(config SQLCallConfig) error {
 	if config.ConnectionString == "" && config.ConnectionStringRef == "" {
 		return ErrSQLCallMissingConnection
 	}
-	if config.Query == "" && len(config.Queries) == 0 {
+	if config.Query == "" && config.QueryFile == "" {
 		return ErrSQLCallMissingQuery
 	}
 	return nil
@@ -244,20 +237,10 @@ func setupCache(config SQLCallConfig) (cache.Cache, time.Duration, bool) {
 	return lruCache, cacheTTL, true
 }
 
-// buildQueriesList builds the list of queries from config.
-func buildQueriesList(config SQLCallConfig) []string {
-	queries := config.Queries
-	if config.Query != "" {
-		queries = append([]string{config.Query}, queries...)
-	}
-	return queries
-}
-
 // logSQLCallModuleInitialization logs the module initialization details.
-func logSQLCallModuleInitialization(driver string, queryCount int, mergeStrategy, onError string, cacheEnabled bool, timeout time.Duration) {
+func logSQLCallModuleInitialization(driver, mergeStrategy, onError string, cacheEnabled bool, timeout time.Duration) {
 	logger.Debug("sql_call module initialized",
 		slog.String("driver", driver),
-		slog.Int("query_count", queryCount),
 		slog.String("merge_strategy", mergeStrategy),
 		slog.String("on_error", onError),
 		slog.Bool("cache_enabled", cacheEnabled),
@@ -300,22 +283,12 @@ func parseQuerySettings(config *SQLCallConfig, cfg map[string]interface{}) {
 	if v, ok := cfg["queryFile"].(string); ok {
 		config.QueryFile = v
 	}
-	if v, ok := cfg["queries"].([]interface{}); ok {
-		for _, q := range v {
-			if qs, ok := q.(string); ok {
-				config.Queries = append(config.Queries, qs)
-			}
-		}
-	}
 }
 
 // parseResultHandlingSettings extracts result handling settings from config.
 func parseResultHandlingSettings(config *SQLCallConfig, cfg map[string]interface{}) {
 	if v, ok := cfg["mergeStrategy"].(string); ok {
 		config.MergeStrategy = v
-	}
-	if v, ok := cfg["dataField"].(string); ok {
-		config.DataField = v
 	}
 	if v, ok := cfg["resultKey"].(string); ok {
 		config.ResultKey = v
@@ -460,7 +433,7 @@ func (m *SQLCallModule) Process(ctx context.Context, records []map[string]interf
 	return result, nil
 }
 
-// processRecord executes SQL queries for a single record.
+// processRecord executes the SQL query for a single record.
 func (m *SQLCallModule) processRecord(ctx context.Context, record map[string]interface{}, recordIdx int) (map[string]interface{}, bool, error) {
 	// Compute cache key once from original record (before any mutations)
 	var cacheKey string
@@ -477,21 +450,10 @@ func (m *SQLCallModule) processRecord(ctx context.Context, record map[string]int
 		}
 	}
 
-	// Execute queries
-	var resultData map[string]interface{}
-	var err error
-	workingRecord := record // Use a copy for intermediate merges
-
-	for i, query := range m.queries {
-		resultData, err = m.executeQuery(ctx, query, workingRecord)
-		if err != nil {
-			return nil, false, fmt.Errorf("query %d failed: %w", i+1, err)
-		}
-
-		// Merge intermediate results for subsequent queries
-		if i < len(m.queries)-1 && resultData != nil {
-			workingRecord = m.mergeData(workingRecord, resultData)
-		}
+	// Execute query
+	resultData, err := m.executeQuery(ctx, m.query, record)
+	if err != nil {
+		return nil, false, err
 	}
 
 	// Cache successful result using original cache key
@@ -537,17 +499,6 @@ func (m *SQLCallModule) executeQuery(ctx context.Context, queryTemplate string, 
 		return make(map[string]interface{}), nil
 	}
 
-	// If dataField is configured, extract from first record
-	if m.dataField != "" && len(records) > 0 {
-		if data, exists := GetNestedValue(records[0], m.dataField); exists {
-			if dataMap, ok := data.(map[string]interface{}); ok {
-				return dataMap, nil
-			}
-		}
-		return records[0], nil
-	}
-
-	// Return first record
 	return records[0], nil
 }
 

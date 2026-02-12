@@ -102,9 +102,7 @@ Complete pipeline example with all features.
 - Page-based pagination
 - Multiple filters (condition + mapping)
 - Nested field mappings (`customer.id` → `customerId`)
-- Output path parameters from record data
-- Query parameters from record data
-- Headers from record data
+- Keys for path, query, and header extraction from record data
 - Retry configuration with exponential backoff
 - Custom success status codes
 - Error handling configuration
@@ -114,8 +112,8 @@ Complete pipeline example with all features.
 Single record mode output example.
 
 **Features:**
-- One request per record (`bodyFrom: record`)
-- Path parameter substitution from record data
+- One request per record (`requestMode: single`)
+- Keys for path, query, and header extraction from record data
 - Query parameters configuration
 - Retry logic with custom backoff
 - PATCH method for updates
@@ -278,7 +276,7 @@ Dynamic output templating with record data.
 **Template Locations:**
 - `endpoint`: Inline template in endpoint URL (e.g., `/customers/{{record.id}}/orders`)
 - `headers`: Inline templates in header values (e.g., `X-User-ID: {{record.user_id}}`)
-- `request.bodyTemplateFile`: External file with template (supports JSON, XML, SOAP, etc.)
+- `bodyTemplateFile`: External file with template (supports JSON, XML, SOAP, etc.)
 
 **Usage:**
 ```bash
@@ -287,7 +285,7 @@ cannectors run --dry-run ./configs/examples/21-output-templating.yaml
 ```
 
 #### 22-output-templating-batch.yaml
-Templating in batch mode (`bodyFrom: "records"`).
+Templating in batch mode (`requestMode: "batch"`).
 
 **Features:**
 - Batch mode templating: Templates use the FIRST record's data
@@ -537,8 +535,8 @@ cannectors run my-pipeline.json
 
 | Mode | Description |
 |------|-------------|
-| `records` (default) | Send all records in single request as JSON array |
-| `record` | Send one request per record with path/query parameters |
+| `batch` (default) | Send all records in single request as JSON array |
+| `single` | Send one request per record with path/query parameters |
 
 ### Input/Output Types
 

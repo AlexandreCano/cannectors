@@ -151,15 +151,10 @@ func PrintConfigSummary(data map[string]interface{}) {
 		return
 	}
 
-	conn, ok := data["connector"].(map[string]interface{})
-	if !ok {
-		return
-	}
-
-	if name, ok := conn["name"].(string); ok {
+	if name, ok := data["name"].(string); ok {
 		fmt.Printf("  Connector: %s\n", name)
 	}
-	if version, ok := conn["version"].(string); ok {
+	if version, ok := data["version"].(string); ok {
 		fmt.Printf("  Version: %s\n", version)
 	}
 }

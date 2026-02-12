@@ -42,23 +42,22 @@ type BodyTemplateConfig struct {
 	BodyTemplateFile string `json:"bodyTemplateFile,omitempty"`
 }
 
-// DynamicParamsConfig contains configuration for dynamic request parameters.
-// These parameters can be extracted from record data at runtime.
-type DynamicParamsConfig struct {
-	// PathParams are path parameter substitutions from record fields.
-	// Key is the placeholder name, value is the record field path.
-	PathParams map[string]string `json:"pathParams,omitempty"`
+// KeyConfig defines how to extract a value from a record and use it in HTTP requests.
+// Used by http_call filter and httpRequest output modules.
+type KeyConfig struct {
+	// Field is the dot-notation path to extract the value from the record (e.g., "customer.id").
+	Field string `json:"field"`
+	// ParamType specifies how to include the value: "query", "path", or "header".
+	ParamType string `json:"paramType"`
+	// ParamName is the parameter name (path placeholder, query param, or header name).
+	ParamName string `json:"paramName"`
+}
 
+// DynamicParamsConfig contains configuration for dynamic request parameters.
+// Deprecated: Use KeyConfig/keys instead. Kept for queryParams (static) extraction.
+type DynamicParamsConfig struct {
 	// QueryParams are static query parameters.
 	QueryParams map[string]string `json:"queryParams,omitempty"`
-
-	// QueryFromRecord are query parameters extracted from record data.
-	// Key is the query param name, value is the record field path.
-	QueryFromRecord map[string]string `json:"queryFromRecord,omitempty"`
-
-	// HeadersFromRecord are headers extracted from record data.
-	// Key is the header name, value is the record field path.
-	HeadersFromRecord map[string]string `json:"headersFromRecord,omitempty"`
 }
 
 // ErrorHandlingConfig contains error handling configuration.

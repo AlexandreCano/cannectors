@@ -15,6 +15,18 @@ import (
 //go:embed schema/pipeline-schema.json
 var embeddedSchema []byte
 
+//go:embed schema/common-schema.json
+var embeddedCommonSchema []byte
+
+//go:embed schema/input-schema.json
+var embeddedInputSchema []byte
+
+//go:embed schema/filter-schema.json
+var embeddedFilterSchema []byte
+
+//go:embed schema/output-schema.json
+var embeddedOutputSchema []byte
+
 // schemaOnce ensures thread-safe initialization of the compiled schema.
 var schemaOnce sync.Once
 
@@ -29,30 +41,37 @@ func GetEmbeddedSchema() []byte {
 	return embeddedSchema
 }
 
+// schemaFiles maps schema URLs to their embedded content.
+var schemaFiles = map[string]*[]byte{
+	"https://cannectors.io/schemas/pipeline/v1.1.0/pipeline-schema.json": &embeddedSchema,
+	"https://cannectors.io/schemas/pipeline/v1.1.0/common-schema.json":   &embeddedCommonSchema,
+	"https://cannectors.io/schemas/pipeline/v1.1.0/input-schema.json":    &embeddedInputSchema,
+	"https://cannectors.io/schemas/pipeline/v1.1.0/filter-schema.json":   &embeddedFilterSchema,
+	"https://cannectors.io/schemas/pipeline/v1.1.0/output-schema.json":   &embeddedOutputSchema,
+}
+
 // getCompiledSchema returns the compiled JSON schema, compiling it if necessary.
 // Thread-safe via sync.Once.
 func getCompiledSchema() (*jsonschema.Schema, error) {
 	schemaOnce.Do(func() {
-		// Parse the schema JSON
-		var schemaDoc interface{}
-		if err := json.Unmarshal(embeddedSchema, &schemaDoc); err != nil {
-			schemaInitErr = fmt.Errorf("failed to parse embedded schema: %w", err)
-			return
-		}
-
-		// Create a new compiler
 		compiler := jsonschema.NewCompiler()
 
-		// Add the schema to the compiler
-		schemaURL := "https://cannectors.io/schemas/pipeline/v1.1.0/pipeline-schema.json"
-		if err := compiler.AddResource(schemaURL, schemaDoc); err != nil {
-			schemaInitErr = fmt.Errorf("failed to add schema resource: %w", err)
-			return
+		// Add all schema files to the compiler
+		for schemaURL, schemaBytes := range schemaFiles {
+			var schemaDoc interface{}
+			if err := json.Unmarshal(*schemaBytes, &schemaDoc); err != nil {
+				schemaInitErr = fmt.Errorf("failed to parse schema %s: %w", schemaURL, err)
+				return
+			}
+			if err := compiler.AddResource(schemaURL, schemaDoc); err != nil {
+				schemaInitErr = fmt.Errorf("failed to add schema resource %s: %w", schemaURL, err)
+				return
+			}
 		}
 
-		// Compile the schema
+		// Compile the main pipeline schema
 		var err error
-		compiledSchema, err = compiler.Compile(schemaURL)
+		compiledSchema, err = compiler.Compile("https://cannectors.io/schemas/pipeline/v1.1.0/pipeline-schema.json")
 		if err != nil {
 			schemaInitErr = fmt.Errorf("failed to compile schema: %w", err)
 			return

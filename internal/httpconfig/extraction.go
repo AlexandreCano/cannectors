@@ -45,60 +45,47 @@ func ExtractBodyTemplateConfig(config map[string]interface{}) BodyTemplateConfig
 	return btc
 }
 
-// ExtractBodyTemplateConfigFromRequest extracts BodyTemplateConfig from a request sub-config.
-func ExtractBodyTemplateConfigFromRequest(config map[string]interface{}) BodyTemplateConfig {
-	btc := BodyTemplateConfig{}
-	if config == nil {
-		return btc
-	}
-
-	requestVal, ok := config["request"].(map[string]interface{})
-	if !ok {
-		return btc
-	}
-
-	if bodyTemplateFile, ok := requestVal["bodyTemplateFile"].(string); ok {
-		btc.BodyTemplateFile = bodyTemplateFile
-	}
-
-	return btc
-}
-
 // ExtractDynamicParamsConfig extracts DynamicParamsConfig from a config map.
-// It looks for parameters in both root level and "request" sub-object.
 func ExtractDynamicParamsConfig(config map[string]interface{}) DynamicParamsConfig {
 	dpc := DynamicParamsConfig{}
 	if config == nil {
 		return dpc
 	}
-
-	// First try root level
-	dpc.PathParams = ExtractStringMap(config, "pathParams")
 	dpc.QueryParams = ExtractStringMap(config, "queryParams")
-	dpc.QueryFromRecord = ExtractStringMap(config, "queryFromRecord")
-	dpc.HeadersFromRecord = ExtractStringMap(config, "headersFromRecord")
+	return dpc
+}
 
-	// If not found at root, try "request" sub-object
-	if requestVal, ok := config["request"].(map[string]interface{}); ok {
-		if len(dpc.PathParams) == 0 {
-			dpc.PathParams = ExtractStringMap(requestVal, "pathParams")
-		}
-		if len(dpc.QueryParams) == 0 {
-			// Support both "query" and "queryParams" keys
-			dpc.QueryParams = ExtractStringMap(requestVal, "query")
-			if len(dpc.QueryParams) == 0 {
-				dpc.QueryParams = ExtractStringMap(requestVal, "queryParams")
-			}
-		}
-		if len(dpc.QueryFromRecord) == 0 {
-			dpc.QueryFromRecord = ExtractStringMap(requestVal, "queryFromRecord")
-		}
-		if len(dpc.HeadersFromRecord) == 0 {
-			dpc.HeadersFromRecord = ExtractStringMap(requestVal, "headersFromRecord")
+// ExtractKeysConfig extracts keys configuration from a config map.
+func ExtractKeysConfig(config map[string]interface{}) []KeyConfig {
+	if config == nil {
+		return nil
+	}
+	keysRaw, ok := config["keys"].([]interface{})
+	if !ok {
+		return nil
+	}
+	result := make([]KeyConfig, 0, len(keysRaw))
+	for _, item := range keysRaw {
+		if m, ok := item.(map[string]interface{}); ok {
+			result = append(result, keyConfigFromMap(m))
 		}
 	}
+	return result
+}
 
-	return dpc
+func keyConfigFromMap(m map[string]interface{}) KeyConfig {
+	return KeyConfig{
+		Field:     extractStringField(m, "field"),
+		ParamType: extractStringField(m, "paramType"),
+		ParamName: extractStringField(m, "paramName"),
+	}
+}
+
+func extractStringField(m map[string]interface{}, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
 }
 
 // ExtractErrorHandlingConfig extracts ErrorHandlingConfig from a config map.

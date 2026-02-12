@@ -45,21 +45,6 @@ func TestParseSQLCallConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "config with multiple queries",
-			cfg: map[string]interface{}{
-				"connectionString": "postgres://localhost/db",
-				"queries": []interface{}{
-					"SELECT a FROM t1 WHERE id = {{record.id}}",
-					"SELECT b FROM t2 WHERE a_id = {{record.a}}",
-				},
-			},
-			check: func(t *testing.T, config SQLCallConfig) {
-				if len(config.Queries) != 2 {
-					t.Errorf("Queries length = %d, want 2", len(config.Queries))
-				}
-			},
-		},
-		{
 			name: "config with condition",
 			cfg: map[string]interface{}{
 				"connectionString": "postgres://localhost/db",

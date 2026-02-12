@@ -60,13 +60,13 @@ var (
 
 // FieldMapping represents a field mapping configuration.
 // This is the input format from the pipeline configuration.
+// Source is a pointer to distinguish "not declared" (nil = delete field) from "empty string".
 type FieldMapping struct {
-	Source       string        `json:"source"`
+	Source       *string       `json:"source,omitempty"`
 	Target       string        `json:"target"`
 	DefaultValue interface{}   `json:"defaultValue,omitempty"`
 	OnMissing    string        `json:"onMissing,omitempty"`
 	Transforms   []TransformOp `json:"transforms,omitempty"`
-	Confidence   float64       `json:"confidence,omitempty"`
 }
 
 // TransformOp represents a transform operation configuration.
@@ -85,7 +85,6 @@ type MappingConfig struct {
 	DefaultValue interface{}
 	OnMissing    string
 	Transforms   []TransformConfig
-	Confidence   float64
 }
 
 // TransformConfig represents a transform operation configuration.
@@ -185,15 +184,24 @@ func parseMappingConfig(m FieldMapping, index int) (MappingConfig, error) {
 	config := MappingConfig{
 		DefaultValue: m.DefaultValue,
 		OnMissing:    m.OnMissing,
-		Confidence:   m.Confidence,
 	}
 
-	// Validate source and target are provided
-	if m.Source == "" || m.Target == "" {
-		return config, fmt.Errorf("%w at index %d: mapping must have both source and target fields", ErrInvalidMapping, index)
+	// Validate target is provided
+	if m.Target == "" {
+		return config, fmt.Errorf("%w at index %d: mapping must have a target field", ErrInvalidMapping, index)
 	}
 
-	config.Source = m.Source
+	// Handle source field:
+	// - nil (not declared) = delete the target field
+	// - empty string = error (invalid)
+	// - non-empty string = normal mapping
+	if m.Source == nil {
+		config.Source = "" // Empty string internally means "delete"
+	} else if *m.Source == "" {
+		return config, fmt.Errorf("%w at index %d: source cannot be empty string, omit it to delete the field", ErrInvalidMapping, index)
+	} else {
+		config.Source = *m.Source
+	}
 	config.Target = m.Target
 
 	// Set default onMissing behavior
@@ -252,7 +260,6 @@ func ParseFieldMappings(raw interface{}) ([]FieldMapping, error) {
 					"defaultValue": m.DefaultValue,
 					"onMissing":    m.OnMissing,
 					"transforms":   m.Transforms,
-					"confidence":   m.Confidence,
 				})
 			default:
 				return nil, fmt.Errorf("mapping at index %d must be an object", i)
@@ -279,8 +286,9 @@ func parseFieldMappingList(raw []map[string]interface{}) ([]FieldMapping, error)
 func parseFieldMappingMap(data map[string]interface{}, index int) (FieldMapping, error) {
 	mapping := FieldMapping{}
 
+	// Source is a pointer: nil means "not declared" (delete), non-nil is the value
 	if source, ok := data["source"].(string); ok {
-		mapping.Source = source
+		mapping.Source = &source
 	}
 	if target, ok := data["target"].(string); ok {
 		mapping.Target = target
@@ -290,9 +298,6 @@ func parseFieldMappingMap(data map[string]interface{}, index int) (FieldMapping,
 	}
 	if onMissing, ok := data["onMissing"].(string); ok {
 		mapping.OnMissing = onMissing
-	}
-	if confidence, ok := parseFloatValue(data["confidence"]); ok {
-		mapping.Confidence = confidence
 	}
 	if rawTransforms, ok := data["transforms"]; ok {
 		transforms, err := parseTransformOps(rawTransforms, index)
@@ -341,32 +346,6 @@ func parseTransformOps(raw interface{}, mappingIndex int) ([]TransformOp, error)
 	}
 
 	return ops, nil
-}
-
-func parseFloatValue(value interface{}) (float64, bool) {
-	switch v := value.(type) {
-	case float64:
-		return v, true
-	case float32:
-		return float64(v), true
-	case int:
-		return float64(v), true
-	case int64:
-		return float64(v), true
-	case int32:
-		return float64(v), true
-	case uint:
-		return float64(v), true
-	case uint64:
-		return float64(v), true
-	case uint32:
-		return float64(v), true
-	case json.Number:
-		if f, err := v.Float64(); err == nil {
-			return f, true
-		}
-	}
-	return 0, false
 }
 
 func stringValue(value interface{}) string {
@@ -488,14 +467,18 @@ func (m *MappingModule) Process(_ context.Context, records []map[string]interfac
 	return result, nil
 }
 
-// processRecord applies all mappings to a single record.
+// processRecord applies all mappings to a single record in-place.
 func (m *MappingModule) processRecord(record map[string]interface{}, recordIdx int) (map[string]interface{}, error) {
-	target := m.createTargetRecord(record)
-
 	for mappingIdx, mapping := range m.mappings {
+		// Empty source means delete the target field
+		if mapping.Source == "" {
+			DeleteNestedValue(record, mapping.Target)
+			continue
+		}
+
 		value, found, err := m.getSourceValue(record, mapping, recordIdx, mappingIdx)
 		if err != nil {
-			return target, err
+			return record, err
 		}
 		if !found {
 			continue
@@ -503,46 +486,15 @@ func (m *MappingModule) processRecord(record map[string]interface{}, recordIdx i
 
 		transformedValue, err := m.applyTransforms(value, mapping)
 		if err != nil {
-			return m.handleTransformError(err, mapping, recordIdx, mappingIdx, value, target)
+			return m.handleTransformError(err, mapping, recordIdx, mappingIdx, value, record)
 		}
 
-		if err := SetNestedValue(target, mapping.Target, transformedValue); err != nil {
-			return m.handleSetValueError(err, mapping, recordIdx, mappingIdx, transformedValue, target)
+		if err := SetNestedValue(record, mapping.Target, transformedValue); err != nil {
+			return m.handleSetValueError(err, mapping, recordIdx, mappingIdx, transformedValue, record)
 		}
 	}
 
-	return target, nil
-}
-
-// createTargetRecord creates a new target record and preserves metadata from source.
-func (m *MappingModule) createTargetRecord(record map[string]interface{}) map[string]interface{} {
-	target := make(map[string]interface{})
-	// Preserve _metadata field from source record, but avoid sharing mutable state.
-	if metadata, exists := record["_metadata"]; exists {
-		target["_metadata"] = deepCopyMetadata(metadata)
-	}
-	return target
-}
-
-// deepCopyMetadata performs a deep copy of common metadata structures to avoid shared mutable state.
-// It handles map[string]interface{} and []interface{} recursively and returns other types as-is.
-func deepCopyMetadata(value interface{}) interface{} {
-	switch v := value.(type) {
-	case map[string]interface{}:
-		copied := make(map[string]interface{}, len(v))
-		for key, val := range v {
-			copied[key] = deepCopyMetadata(val)
-		}
-		return copied
-	case []interface{}:
-		copied := make([]interface{}, len(v))
-		for i, val := range v {
-			copied[i] = deepCopyMetadata(val)
-		}
-		return copied
-	default:
-		return v
-	}
+	return record, nil
 }
 
 // getSourceValue retrieves the source value for a mapping, handling missing field cases.

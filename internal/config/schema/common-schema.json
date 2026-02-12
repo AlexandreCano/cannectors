@@ -1,0 +1,510 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://cannectors.io/schemas/pipeline/v1.1.0/common-schema.json",
+	"title": "Cannectors Common Schema Definitions",
+	"description": "Common definitions shared across pipeline modules.",
+	"$defs": {
+		"moduleBase": {
+			"type": "object",
+			"description": "Common properties for all modules.",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique identifier within the pipeline.",
+					"pattern": "^[a-z][a-z0-9_-]*$"
+				},
+				"name": {
+					"type": "string",
+					"description": "Human-readable name.",
+					"maxLength": 128
+				},
+				"description": {
+					"type": "string",
+					"maxLength": 1024
+				},
+				"enabled": {
+					"type": "boolean",
+					"description": "Whether module is active.",
+					"default": true
+				},
+				"tags": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"onError": {
+					"type": "string",
+					"description": "Default error action.",
+					"enum": [
+						"fail",
+						"skip",
+						"log"
+					],
+					"default": "fail"
+				}
+			}
+		},
+
+		"moduleDefaults": {
+			"type": "object",
+			"description": "Default settings applied to Input and Output modules unless overridden at module level.",
+			"properties": {
+				"timeoutMs": {
+					"type": "integer",
+					"description": "Default timeout in milliseconds.",
+					"minimum": 0,
+					"default": 30000
+				},
+				"retry": {
+					"$ref": "#/$defs/retryConfig"
+				}
+			},
+			"additionalProperties": false
+		},
+
+		"retryConfig": {
+			"type": "object",
+			"description": "Retry configuration. Precedence: module > defaults.",
+			"properties": {
+				"maxAttempts": {
+					"type": "integer",
+					"description": "Maximum retry attempts (0 = no retry).",
+					"minimum": 0,
+					"maximum": 10,
+					"default": 3
+				},
+				"delayMs": {
+					"type": "integer",
+					"description": "Initial delay between retries in milliseconds.",
+					"minimum": 0,
+					"default": 1000
+				},
+				"backoffMultiplier": {
+					"type": "number",
+					"description": "Multiplier for exponential backoff.",
+					"minimum": 1,
+					"maximum": 10,
+					"default": 2
+				},
+				"maxDelayMs": {
+					"type": "integer",
+					"description": "Maximum delay between retries.",
+					"minimum": 0,
+					"default": 30000
+				},
+				"retryableStatusCodes": {
+					"type": "array",
+					"description": "HTTP status codes that trigger retry.",
+					"items": {
+						"type": "integer",
+						"minimum": 100,
+						"maximum": 599
+					},
+					"default": [
+						429,
+						500,
+						502,
+						503,
+						504
+					]
+				},
+				"useRetryAfterHeader": {
+					"type": "boolean",
+					"description": "Use Retry-After response header to determine delay before retrying. Supports seconds format (e.g., '120') or HTTP-date format (e.g., 'Fri, 31 Dec 2025 23:59:59 GMT'). The delay is capped by maxDelayMs. If header is invalid or absent, falls back to exponential backoff.",
+					"default": false
+				},
+				"retryHintFromBody": {
+					"type": "string",
+					"description": "expr expression to evaluate against JSON response body. The parsed JSON body is available as the 'body' variable. If expression returns true, error is retryable (if status code is in retryableStatusCodes). If false, error is NOT retryable (overrides status code). If body is not valid JSON, falls back to status code only. Example: 'body.retryable == true' or 'body.error.code != \"PERMANENT\"'.",
+					"default": ""
+				}
+			},
+			"additionalProperties": false
+		},
+
+		"httpMethod": {
+			"type": "string",
+			"enum": [
+				"GET",
+				"POST",
+				"PUT",
+				"PATCH",
+				"DELETE"
+			],
+			"default": "GET"
+		},
+
+		"httpHeaders": {
+			"type": "object",
+			"additionalProperties": {
+				"type": "string"
+			}
+		},
+
+		"httpCallKeyConfig": {
+			"type": "object",
+			"description": "Key configuration for extracting a value from a record and using it in HTTP requests (path, query, or header).",
+			"required": [
+				"field",
+				"paramType",
+				"paramName"
+			],
+			"additionalProperties": false,
+			"properties": {
+				"field": {
+					"type": "string",
+					"description": "Dot-notation path to extract value from record (e.g., 'customer.id')."
+				},
+				"paramType": {
+					"type": "string",
+					"description": "How to include value in request.",
+					"enum": [
+						"query",
+						"path",
+						"header"
+					]
+				},
+				"paramName": {
+					"type": "string",
+					"description": "Parameter name (path placeholder, query param, or header name)."
+				}
+			}
+		},
+
+		"httpRequestBase": {
+			"type": "object",
+			"description": "Common HTTP request configuration shared by httpPolling, httpCall, and httpRequest modules.",
+			"required": [ "endpoint" ],
+			"properties": {
+				"endpoint": {
+					"type": "string",
+					"description": "HTTP endpoint URL.",
+					"format": "uri"
+				},
+				"method": {
+					"$ref": "#/$defs/httpMethod"
+				},
+				"headers": {
+					"$ref": "#/$defs/httpHeaders"
+				},
+				"queryParams": {
+					"type": "object",
+					"description": "Query parameters.",
+					"additionalProperties": {
+						"type": "string"
+					}
+				},
+				"authentication": {
+					"$ref": "auth-schema.json#/$defs/auth"
+				},
+				"timeoutMs": {
+					"type": "integer",
+					"description": "Request timeout in milliseconds.",
+					"minimum": 0,
+					"default": 30000
+				}
+			}
+		},
+
+		"pagination": {
+			"type": "object",
+			"description": "Pagination configuration for HTTP polling.",
+			"unevaluatedProperties": false,
+			"properties": {
+				"type": {
+					"type": "string",
+					"description": "Pagination type.",
+					"enum": ["cursor", "offset", "page"]
+				},
+				"limitParam": {
+					"type": "string",
+					"description": "Query parameter name for limit."
+				},
+				"limit": {
+					"type": "integer",
+					"minimum": 1,
+					"default": 100,
+					"description": "Number of items per page."
+				},
+				"cursorParam": {
+					"type": "string",
+					"description": "Query parameter name for cursor."
+				},
+				"nextCursorField": {
+					"type": "string",
+					"description": "Field containing next cursor value."
+				},
+				"pageParam": {
+					"type": "string",
+					"description": "Query parameter name for page number."
+				},
+				"totalPagesField": {
+					"type": "string",
+					"description": "Field containing total pages count."
+				},
+				"offsetParam": {
+					"type": "string",
+					"description": "Query parameter name for offset."
+				},
+				"totalField": {
+					"type": "string",
+					"description": "Field containing total items count."
+				}
+			},
+			"allOf": [
+				{
+					"required": ["type", "limit", "limitParam"],
+					"oneOf": [
+						{
+							"allOf": [
+								{ "properties": { "type": { "const": "cursor" } } },
+								{ "required": ["cursorParam", "nextCursorField"] }
+							]
+						},
+						{
+							"allOf": [
+								{ "properties": { "type": { "const": "page" } } },
+								{ "required": ["pageParam", "totalPagesField"] }
+							]
+						},
+						{
+							"allOf": [
+								{ "properties": { "type": { "const": "offset" } } },
+								{ "required": ["offsetParam", "totalField"] }
+							]
+						}
+					]
+				}
+			]
+		},
+
+		"databaseConnectionConfig": {
+			"type": "object",
+			"description": "Database connection configuration. Supports PostgreSQL, MySQL, SQLite.",
+			"additionalProperties": false,
+			"properties": {
+				"connectionString": {
+					"type": "string",
+					"description": "Database connection string (DSN). Avoid in production - use connectionStringRef instead.",
+					"examples": [
+						"postgres://user:pass@host:5432/db?sslmode=require",
+						"user:pass@tcp(host:3306)/db?tls=true",
+						"file:./database.db"
+					]
+				},
+				"connectionStringRef": {
+					"type": "string",
+					"description": "Environment variable reference for connection string. Format: ${ENV_VAR_NAME}",
+					"pattern": "^\\$\\{[A-Z_][A-Z0-9_]*\\}$",
+					"examples": [
+						"${DATABASE_URL}",
+						"${POSTGRES_CONNECTION_STRING}"
+					]
+				},
+				"driver": {
+					"type": "string",
+					"description": "Database driver. Auto-detected from connection string if not specified.",
+					"enum": [
+						"postgres",
+						"mysql",
+						"sqlite"
+					]
+				},
+				"maxOpenConns": {
+					"type": "integer",
+					"description": "Maximum number of open connections in the pool.",
+					"minimum": 1,
+					"default": 10
+				},
+				"maxIdleConns": {
+					"type": "integer",
+					"description": "Maximum number of idle connections in the pool.",
+					"minimum": 0,
+					"default": 5
+				},
+				"connMaxLifetimeSeconds": {
+					"type": "integer",
+					"description": "Maximum lifetime of a connection in seconds.",
+					"minimum": 0,
+					"default": 1800
+				},
+				"connMaxIdleTimeSeconds": {
+					"type": "integer",
+					"description": "Maximum idle time for a connection in seconds.",
+					"minimum": 0,
+					"default": 300
+				},
+				"timeoutMs": {
+					"type": "integer",
+					"description": "Query timeout in milliseconds.",
+					"minimum": 0,
+					"default": 30000
+				}
+			},
+			"oneOf": [
+				{ "required": [ "connectionString" ] },
+				{ "required": [ "connectionStringRef" ] }
+			]
+		},
+
+		"sqlRequestBase": {
+			"type": "object",
+			"description": "Base configuration for SQL-based modules. Combines database connection with query or queryFile.",
+			"properties": {
+				"query": {
+					"type": "string",
+					"description": "SQL query. Supports module-specific placeholders (e.g. {{record.field}}, {{lastRunTimestamp}})."
+				},
+				"queryFile": {
+					"type": "string",
+					"description": "Path to SQL file. Supports module-specific placeholders."
+				}
+			},
+			"allOf": [
+				{ "$ref": "#/$defs/databaseConnectionConfig" },
+				{
+					"oneOf": [
+						{ "required": [ "query" ] },
+						{ "required": [ "queryFile" ] }
+					]
+				},
+				{
+					"not": {
+						"required": [
+							"query",
+							"queryFile"
+						]
+					}
+				}
+			]
+		},
+
+		"databasePaginationConfig": {
+			"type": "object",
+			"description": "Pagination configuration for database queries.",
+			"unevaluatedProperties": false,
+			"properties": {
+				"type": {
+					"type": "string",
+					"description": "Pagination type.",
+					"enum": ["limit-offset", "cursor"]
+				},
+				"limit": {
+					"type": "integer",
+					"description": "Number of records per page.",
+					"minimum": 1,
+					"default": 1000
+				},
+				"offsetParam": {
+					"type": "string",
+					"description": "Parameter name for offset (limit-offset pagination)."
+				},
+				"cursorField": {
+					"type": "string",
+					"description": "Field to use for cursor value (cursor pagination)."
+				},
+				"cursorParam": {
+					"type": "string",
+					"description": "Parameter name for cursor value (cursor pagination)."
+				}
+			},
+			"allOf": [
+				{
+					"required": ["type", "limit"],
+					"oneOf": [
+						{
+							"allOf": [
+								{ "properties": { "type": { "const": "limit-offset" } } },
+								{ "required": ["offsetParam"] }
+							]
+						},
+						{
+							"allOf": [
+								{ "properties": { "type": { "const": "cursor" } } },
+								{ "required": ["cursorField", "cursorParam"] }
+							]
+						}
+					]
+				}
+			]
+		},
+
+		"databaseIncrementalConfig": {
+			"type": "object",
+			"description": "Incremental query configuration. Tracks last processed timestamp or ID.",
+			"properties": {
+				"enabled": {
+					"type": "boolean",
+					"description": "Enable incremental queries.",
+					"default": false
+				},
+				"timestampField": {
+					"type": "string",
+					"description": "Field name for timestamp-based incremental queries."
+				},
+				"timestampParam": {
+					"type": "string",
+					"description": "Parameter name for timestamp in query."
+				},
+				"idField": {
+					"type": "string",
+					"description": "Field name for ID-based incremental queries."
+				},
+				"idParam": {
+					"type": "string",
+					"description": "Parameter name for ID in query."
+				}
+			},
+			"additionalProperties": false
+		},
+
+		"statePersistenceConfig": {
+			"type": "object",
+			"description": "State persistence configuration for input modules. Tracks execution state between runs.",
+			"properties": {
+				"timestamp": {
+					"type": "object",
+					"description": "Timestamp-based state persistence.",
+					"properties": {
+						"enabled": {
+							"type": "boolean",
+							"description": "Enable timestamp persistence.",
+							"default": false
+						},
+						"queryParam": {
+							"type": "string",
+							"description": "Query parameter name for API filtering (e.g., 'updated_after')."
+						}
+					},
+					"additionalProperties": false
+				},
+				"id": {
+					"type": "object",
+					"description": "ID-based state persistence.",
+					"properties": {
+						"enabled": {
+							"type": "boolean",
+							"description": "Enable ID persistence.",
+							"default": false
+						},
+						"field": {
+							"type": "string",
+							"description": "Field path to extract ID from records (supports dot notation)."
+						},
+						"queryParam": {
+							"type": "string",
+							"description": "Query parameter name for API filtering (e.g., 'last_id')."
+						}
+					},
+					"additionalProperties": false
+				},
+				"storagePath": {
+					"type": "string",
+					"description": "Custom storage directory path for state files."
+				}
+			},
+			"additionalProperties": false
+		}
+	}
+}

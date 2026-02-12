@@ -334,11 +334,9 @@ func TestHTTPRequest_Send_SingleRecordMode(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/data",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record", // Single record per request
-		},
+		"endpoint":    ts.URL + "/api/data",
+		"method":      "POST",
+		"requestMode": "single", // Single record per request
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -1012,14 +1010,12 @@ func TestHTTPRequest_Send_PathParameterSubstitution(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/users/{userId}/orders/{orderId}",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-			"pathParams": map[string]interface{}{
-				"userId":  "user.id",
-				"orderId": "order_id",
-			},
+		"endpoint":    ts.URL + "/api/users/{userId}/orders/{orderId}",
+		"method":      "POST",
+		"requestMode": "single",
+		"keys": []interface{}{
+			map[string]interface{}{"field": "user.id", "paramType": "path", "paramName": "userId"},
+			map[string]interface{}{"field": "order_id", "paramType": "path", "paramName": "orderId"},
 		},
 	})
 
@@ -1058,13 +1054,11 @@ func TestHTTPRequest_Send_PathParameterWithNilMap(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/users/{userId}",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-			"pathParams": map[string]interface{}{
-				"userId": "user.id",
-			},
+		"endpoint":    ts.URL + "/api/users/{userId}",
+		"method":      "POST",
+		"requestMode": "single",
+		"keys": []interface{}{
+			map[string]interface{}{"field": "user.id", "paramType": "path", "paramName": "userId"},
 		},
 	})
 
@@ -1105,11 +1099,9 @@ func TestHTTPRequest_Send_QueryParameters(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"request": map[string]interface{}{
-			"query": map[string]interface{}{
-				"status": "active",
-				"limit":  "100",
-			},
+		"queryParams": map[string]interface{}{
+			"status": "active",
+			"limit":  "100",
 		},
 	})
 
@@ -1143,14 +1135,12 @@ func TestHTTPRequest_Send_QueryParametersFromRecordData(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/data",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-			"queryFromRecord": map[string]interface{}{
-				"filter_status": "status",
-				"user_type":     "type",
-			},
+		"endpoint":    ts.URL + "/api/data",
+		"method":      "POST",
+		"requestMode": "single",
+		"keys": []interface{}{
+			map[string]interface{}{"field": "status", "paramType": "query", "paramName": "filter_status"},
+			map[string]interface{}{"field": "type", "paramType": "query", "paramName": "user_type"},
 		},
 	})
 
@@ -1187,14 +1177,12 @@ func TestHTTPRequest_Send_HeadersFromRecordData(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/data",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-			"headersFromRecord": map[string]interface{}{
-				"X-Correlation-ID": "correlation_id",
-				"X-Request-Source": "source",
-			},
+		"endpoint":    ts.URL + "/api/data",
+		"method":      "POST",
+		"requestMode": "single",
+		"keys": []interface{}{
+			map[string]interface{}{"field": "correlation_id", "paramType": "header", "paramName": "X-Correlation-ID"},
+			map[string]interface{}{"field": "source", "paramType": "header", "paramName": "X-Request-Source"},
 		},
 	})
 
@@ -1237,7 +1225,7 @@ func TestHTTPRequest_Send_JSONArrayFormat(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		// Default: bodyFrom = "records" (batch mode)
+		// Default: requestMode = "batch" (batch mode)
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -1275,11 +1263,9 @@ func TestHTTPRequest_Send_JSONObjectFormat(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/data",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record", // Single record mode
-		},
+		"endpoint":    ts.URL + "/api/data",
+		"method":      "POST",
+		"requestMode": "single", // Single record mode
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -1435,11 +1421,9 @@ func TestHTTPRequest_Send_SpecialCharactersInQueryParams(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"request": map[string]interface{}{
-			"query": map[string]interface{}{
-				"filter": "value with spaces & special=chars",
-				"email":  "user@example.com",
-			},
+		"queryParams": map[string]interface{}{
+			"filter": "value with spaces & special=chars",
+			"email":  "user@example.com",
 		},
 	})
 
@@ -1478,14 +1462,12 @@ func TestHTTPRequest_Send_SpecialCharactersInPathParams(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/users/{userId}/posts/{postId}",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-			"pathParams": map[string]interface{}{
-				"userId": "id",
-				"postId": "post.id",
-			},
+		"endpoint":    ts.URL + "/api/users/{userId}/posts/{postId}",
+		"method":      "POST",
+		"requestMode": "single",
+		"keys": []interface{}{
+			map[string]interface{}{"field": "id", "paramType": "path", "paramName": "userId"},
+			map[string]interface{}{"field": "post.id", "paramType": "path", "paramName": "postId"},
 		},
 	})
 
@@ -2103,12 +2085,10 @@ func TestHTTPRequest_Send_OnErrorSkip_SingleRecordMode(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/data",
-		"method":   "POST",
-		"onError":  "skip",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-		},
+		"endpoint":    ts.URL + "/api/data",
+		"method":      "POST",
+		"onError":     "skip",
+		"requestMode": "single",
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -2148,12 +2128,10 @@ func TestHTTPRequest_Send_OnErrorLog_SingleRecordMode(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/data",
-		"method":   "POST",
-		"onError":  "log",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-		},
+		"endpoint":    ts.URL + "/api/data",
+		"method":      "POST",
+		"onError":     "log",
+		"requestMode": "single",
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -2284,12 +2262,10 @@ func TestHTTPRequest_Send_ReturnsCorrectCount_PartialFailure(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/data",
-		"method":   "POST",
-		"onError":  "skip", // Skip failed records
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-		},
+		"endpoint":    ts.URL + "/api/data",
+		"method":      "POST",
+		"onError":     "skip", // Skip failed records
+		"requestMode": "single",
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -2426,11 +2402,9 @@ func TestHTTPRequest_Send_SingleRecordMode_CorrectCount(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/data",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-		},
+		"endpoint":    ts.URL + "/api/data",
+		"method":      "POST",
+		"requestMode": "single",
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -2606,13 +2580,11 @@ func TestHTTPRequest_Deterministic_PathParams(t *testing.T) {
 		ts := newTestServer()
 
 		config := newModuleConfig(map[string]interface{}{
-			"endpoint": ts.URL + "/api/users/{userId}",
-			"method":   "POST",
-			"request": map[string]interface{}{
-				"bodyFrom": "record",
-				"pathParams": map[string]interface{}{
-					"userId": "id",
-				},
+			"endpoint":    ts.URL + "/api/users/{userId}",
+			"method":      "POST",
+			"requestMode": "single",
+			"keys": []interface{}{
+				map[string]interface{}{"field": "id", "paramType": "path", "paramName": "userId"},
 			},
 		})
 
@@ -2799,11 +2771,9 @@ func TestHTTPRequest_PreviewRequest_BatchMode(t *testing.T) {
 
 func TestHTTPRequest_PreviewRequest_SingleRecordMode(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": "https://api.example.com/data",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-		},
+		"endpoint":    "https://api.example.com/data",
+		"method":      "POST",
+		"requestMode": "single",
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -2854,14 +2824,12 @@ func TestHTTPRequest_PreviewRequest_SingleRecordMode(t *testing.T) {
 
 func TestHTTPRequest_PreviewRequest_PathParameters(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": "https://api.example.com/users/{userId}/orders/{orderId}",
-		"method":   "PUT",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-			"pathParams": map[string]interface{}{
-				"userId":  "user.id",
-				"orderId": "order_id",
-			},
+		"endpoint":    "https://api.example.com/users/{userId}/orders/{orderId}",
+		"method":      "PUT",
+		"requestMode": "single",
+		"keys": []interface{}{
+			map[string]interface{}{"field": "user.id", "paramType": "path", "paramName": "userId"},
+			map[string]interface{}{"field": "order_id", "paramType": "path", "paramName": "orderId"},
 		},
 	})
 
@@ -2898,11 +2866,9 @@ func TestHTTPRequest_PreviewRequest_QueryParameters(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
 		"endpoint": "https://api.example.com/data",
 		"method":   "POST",
-		"request": map[string]interface{}{
-			"query": map[string]interface{}{
-				"status": "active",
-				"limit":  "100",
-			},
+		"queryParams": map[string]interface{}{
+			"status": "active",
+			"limit":  "100",
 		},
 	})
 
@@ -2934,14 +2900,12 @@ func TestHTTPRequest_PreviewRequest_QueryParameters(t *testing.T) {
 
 func TestHTTPRequest_PreviewRequest_QueryParametersFromRecord(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": "https://api.example.com/data",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-			"queryFromRecord": map[string]interface{}{
-				"filter_status": "status",
-				"user_type":     "type",
-			},
+		"endpoint":    "https://api.example.com/data",
+		"method":      "POST",
+		"requestMode": "single",
+		"keys": []interface{}{
+			map[string]interface{}{"field": "status", "paramType": "query", "paramName": "filter_status"},
+			map[string]interface{}{"field": "type", "paramType": "query", "paramName": "user_type"},
 		},
 	})
 
@@ -3289,14 +3253,12 @@ func TestHTTPRequest_PreviewRequest_BodyPreviewFormatted(t *testing.T) {
 
 func TestHTTPRequest_PreviewRequest_HeadersFromRecord(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": "https://api.example.com/data",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-			"headersFromRecord": map[string]interface{}{
-				"X-Correlation-ID": "correlation_id",
-				"X-Request-Source": "source",
-			},
+		"endpoint":    "https://api.example.com/data",
+		"method":      "POST",
+		"requestMode": "single",
+		"keys": []interface{}{
+			map[string]interface{}{"field": "correlation_id", "paramType": "header", "paramName": "X-Correlation-ID"},
+			map[string]interface{}{"field": "source", "paramType": "header", "paramName": "X-Request-Source"},
 		},
 	})
 
@@ -4451,11 +4413,9 @@ func TestHTTPRequest_MetadataExclusion(t *testing.T) {
 		defer ts.Close()
 
 		config := newModuleConfig(map[string]interface{}{
-			"endpoint": ts.URL + "/api/data",
-			"method":   "POST",
-			"request": map[string]interface{}{
-				"bodyFrom": "record",
-			},
+			"endpoint":    ts.URL + "/api/data",
+			"method":      "POST",
+			"requestMode": "single",
 		})
 
 		module, err := NewHTTPRequestFromConfig(config)

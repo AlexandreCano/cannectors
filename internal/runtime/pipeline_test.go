@@ -18,6 +18,11 @@ import (
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
+// strPtrRuntime is a helper to create string pointers for test cases.
+func strPtrRuntime(s string) *string {
+	return &s
+}
+
 // =============================================================================
 // Mock Implementations for Testing
 // =============================================================================
@@ -189,7 +194,7 @@ func TestExecutor_Execute_MappingFilterIntegration(t *testing.T) {
 
 	mappings := []filter.FieldMapping{
 		{
-			Source: "user.name",
+			Source: strPtrRuntime("user.name"),
 			Target: "contact.name",
 			Transforms: []filter.TransformOp{
 				{Op: "trim"},
@@ -197,7 +202,7 @@ func TestExecutor_Execute_MappingFilterIntegration(t *testing.T) {
 			},
 		},
 		{
-			Source:     "id",
+			Source:     strPtrRuntime("id"),
 			Target:     "contact.id",
 			Transforms: []filter.TransformOp{{Op: "toInt"}},
 		},
@@ -288,8 +293,8 @@ func TestExecutor_Execute_MappingThenConditionIntegration(t *testing.T) {
 	mockOutput := NewMockOutputModule(nil)
 
 	mapper, err := filter.NewMappingFromConfig([]filter.FieldMapping{
-		{Source: "id", Target: "id"},
-		{Source: "amount", Target: "value"},
+		{Source: strPtrRuntime("id"), Target: "id"},
+		{Source: strPtrRuntime("amount"), Target: "value"},
 	}, "fail")
 	if err != nil {
 		t.Fatalf("NewMappingFromConfig() error = %v", err)

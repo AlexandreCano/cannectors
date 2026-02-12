@@ -1,0 +1,117 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://cannectors.io/schemas/pipeline/v1.1.0/output-schema.json",
+	"title": "Cannectors Output Module Schema",
+	"description": "Schema definitions for output modules.",
+	"$defs": {
+		"outputModule": {
+			"type": "object",
+			"description": "Output module configuration.",
+			"required": [ "type" ],
+			"unevaluatedProperties": false,
+			"properties": {
+				"type": {
+					"type": "string",
+					"description": "Output type. Canonical: httpRequest, database.",
+					"minLength": 1
+				}
+			},
+			"allOf": [
+				{ "$ref": "common-schema.json#/$defs/moduleBase" },
+				{ "oneOf": [
+					{ "allOf": [ { "$ref": "#/$defs/httpRequestOutputConfig" }, { "properties": { "type": { "const": "httpRequest" } }, "required": [ "type" ] } ] },
+					{ "allOf": [ { "$ref": "#/$defs/databaseOutputConfig" }, { "properties": { "type": { "const": "database" } }, "required": [ "type" ] } ] }
+				] }
+			]
+		},
+
+		"httpRequestOutputConfig": {
+			"allOf": [
+				{ "$ref": "common-schema.json#/$defs/httpRequestBase" },
+				{
+					"type": "object",
+					"description": "HTTP request output module configuration. Sends records to an HTTP endpoint.",
+					"properties": {
+						"success": {
+							"$ref": "#/$defs/successCondition"
+						},
+						"retry": {
+							"$ref": "common-schema.json#/$defs/retryConfig"
+						},
+						"timeout": {
+							"type": "number",
+							"description": "Legacy timeout in seconds. Use timeoutMs instead.",
+							"minimum": 0,
+							"deprecated": true
+						},
+						"keys": {
+							"type": "array",
+							"description": "List of key configurations for extracting values from records and using them in path, query, or headers.",
+							"items": {
+								"$ref": "common-schema.json#/$defs/httpCallKeyConfig"
+							}
+						},
+						"requestMode": {
+							"type": "string",
+							"description": "Request mode: 'batch' (all records in one request, default) or 'single' (one request per record).",
+							"enum": [ "batch", "single" ],
+							"default": "batch"
+						},
+						"bodyTemplateFile": {
+							"type": "string",
+							"description": "Path to external template file for request body. Supports {{record.field}} placeholders."
+						}
+					}
+				}
+			]
+		},
+
+		"databaseOutputConfig": {
+			"type": "object",
+			"description": "Database output module configuration. Executes SQL queries to write records.",
+			"allOf": [
+				{ "$ref": "common-schema.json#/$defs/sqlRequestBase" }
+			],
+			"properties": {
+				"transaction": {
+					"type": "boolean",
+					"description": "Wrap operations in a transaction.",
+					"default": false
+				}
+			}
+		},
+
+		"successCondition": {
+			"type": "object",
+			"properties": {
+				"lang": {
+					"type": "string",
+					"enum": [
+						"cel",
+						"jsonata",
+						"simple"
+					],
+					"default": "simple"
+				},
+				"expression": {
+					"type": "string"
+				},
+				"statusCodes": {
+					"type": "array",
+					"description": "HTTP status codes considered successful.",
+					"items": {
+						"type": "integer",
+						"minimum": 100,
+						"maximum": 599
+					},
+					"default": [
+						200,
+						201,
+						202,
+						204
+					]
+				}
+			}
+		}
+	}
+}

@@ -52,7 +52,7 @@ func TestExecutor_StatePersistence_ID_WithFilterRenaming(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig() error = %v", err)
 	}
 
-	// Create mapping filter that renames "id" to "transactionId"
+	// Create mapping filter that renames "id" to "transactionId" and deletes the original "id"
 	// This would break ID extraction if we used filteredRecords instead of rawRecords
 	mappingConfig := &connector.ModuleConfig{
 		Type: "mapping",
@@ -61,6 +61,10 @@ func TestExecutor_StatePersistence_ID_WithFilterRenaming(t *testing.T) {
 				{
 					"source": "id",
 					"target": "transactionId", // Rename id to transactionId
+				},
+				{
+					// Omit "source" = delete field
+					"target": "id", // Delete the original id field
 				},
 			},
 		},
@@ -160,20 +164,16 @@ func TestExecutor_StatePersistence_ID_WithFilterRemoving(t *testing.T) {
 		t.Fatalf("NewHTTPPollingFromConfig() error = %v", err)
 	}
 
-	// Create mapping filter that only keeps "name" and "status" (removes "id")
+	// Create mapping filter that explicitly removes "id" field
+	// (In-place mapping preserves all fields, so we must explicitly delete unwanted ones)
 	mappingConfig := &connector.ModuleConfig{
 		Type: "mapping",
 		Config: map[string]interface{}{
 			"mappings": []map[string]interface{}{
 				{
-					"source": "name",
-					"target": "name",
+					// Omit "source" = delete field
+					"target": "id", // Delete the id field
 				},
-				{
-					"source": "status",
-					"target": "status",
-				},
-				// Note: "id" is NOT mapped, so it will be removed from filtered records
 			},
 		},
 	}

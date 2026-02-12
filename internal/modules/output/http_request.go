@@ -32,7 +32,7 @@ const (
 	defaultHTTPTimeout = 30 * time.Second
 	defaultUserAgent   = "Cannectors-Runtime/1.0"
 	defaultContentType = "application/json"
-	defaultBodyFrom    = "records" // batch mode by default
+	defaultRequestMode = "batch" // batch mode by default
 	// MaxRetryHintExpressionLength is the maximum allowed length for retryHintFromBody expressions
 	// to prevent DoS attacks through extremely long expressions.
 	MaxRetryHintExpressionLength = 10000
@@ -96,15 +96,20 @@ func (e *HTTPError) GetRetryAfter() string {
 	return e.ResponseHeaders.Get("Retry-After")
 }
 
+// keyEntry holds parsed key config for request building (internal use).
+type keyEntry struct {
+	field     string
+	paramType string
+	paramName string
+}
+
 // RequestConfig holds request-specific configuration
 type RequestConfig struct {
-	BodyFrom          string            // "records" (batch) or "record" (single)
-	PathParams        map[string]string // Path parameter substitution from record
-	QueryParams       map[string]string // Static query parameters
-	QueryFromRecord   map[string]string // Query parameters extracted from record data
-	HeadersFromRecord map[string]string // Headers extracted from record data
-	BodyTemplateFile  string            // Path to external template file for request body
-	bodyTemplateRaw   string            // Loaded template content (internal use)
+	RequestMode      string            // "batch" or "single"
+	Keys             []keyEntry        // Dynamic params from record (path, query, header)
+	QueryParams      map[string]string // Static query parameters
+	BodyTemplateFile string            // Path to external template file for request body
+	bodyTemplateRaw  string            // Loaded template content (internal use)
 }
 
 // RetryConfig is an alias for errhandling.RetryConfig for backward compatibility.
@@ -142,7 +147,7 @@ var defaultSuccessCodes = []int{200, 201, 202, 204}
 // Optional config fields:
 //   - headers: Custom HTTP headers (map[string]string)
 //   - timeoutMs: Request timeout in milliseconds (default 30000)
-//   - request: Request configuration (bodyFrom, pathParams, query)
+//   - requestMode, keys, queryParams, bodyTemplateFile
 //   - onError: Error handling mode ("fail", "skip", "log")
 func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModule, error) {
 	if config == nil {
@@ -233,7 +238,7 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 		slog.String("method", method),
 		slog.String("timeout", timeout.String()),
 		slog.Bool("has_auth", authHandler != nil),
-		slog.String("body_from", reqConfig.BodyFrom),
+		slog.String("request_mode", reqConfig.RequestMode),
 		slog.Bool("has_templating", hasTemplating),
 		slog.String("body_template_file", reqConfig.BodyTemplateFile),
 	)
@@ -292,25 +297,23 @@ func extractHeaders(config map[string]interface{}) map[string]string {
 // extractRequestConfig extracts request-specific configuration
 func extractRequestConfig(config map[string]interface{}) RequestConfig {
 	reqConfig := RequestConfig{
-		BodyFrom: defaultBodyFrom,
+		RequestMode: defaultRequestMode,
 	}
 
-	// Extract dynamic params using httpconfig
-	dynamicParams := httpconfig.ExtractDynamicParamsConfig(config)
-	reqConfig.PathParams = dynamicParams.PathParams
-	reqConfig.QueryParams = dynamicParams.QueryParams
-	reqConfig.QueryFromRecord = dynamicParams.QueryFromRecord
-	reqConfig.HeadersFromRecord = dynamicParams.HeadersFromRecord
+	// Extract keys and static query params
+	keys := httpconfig.ExtractKeysConfig(config)
+	reqConfig.Keys = make([]keyEntry, len(keys))
+	for i, k := range keys {
+		reqConfig.Keys[i] = keyEntry{field: k.Field, paramType: k.ParamType, paramName: k.ParamName}
+	}
+	reqConfig.QueryParams = httpconfig.ExtractStringMap(config, "queryParams")
 
-	// Extract body template from request sub-object
-	bodyTemplateConfig := httpconfig.ExtractBodyTemplateConfigFromRequest(config)
+	// Extract body template and requestMode from root
+	bodyTemplateConfig := httpconfig.ExtractBodyTemplateConfig(config)
 	reqConfig.BodyTemplateFile = bodyTemplateConfig.BodyTemplateFile
 
-	// Extract bodyFrom from request sub-object
-	if requestVal, ok := config["request"].(map[string]interface{}); ok {
-		if bodyFrom, ok := requestVal["bodyFrom"].(string); ok {
-			reqConfig.BodyFrom = bodyFrom
-		}
+	if requestMode, ok := config["requestMode"].(string); ok {
+		reqConfig.RequestMode = requestMode
 	}
 
 	return reqConfig
@@ -378,9 +381,9 @@ func createHTTPClient(timeout time.Duration) *http.Client {
 //
 // The context can be used to cancel long-running operations.
 //
-// Behavior depends on request.bodyFrom configuration:
-//   - "records" (default): Sends all records in a single request as JSON array
-//   - "record": Sends one request per record, body is single JSON object
+// Behavior depends on requestMode configuration:
+//   - "batch" (default): Sends all records in a single request as JSON array
+//   - "single": Sends one request per record, body is single JSON object
 //
 // Empty or nil records return success with 0 sent.
 func (h *HTTPRequestModule) Send(ctx context.Context, records []map[string]interface{}) (int, error) {
@@ -400,7 +403,7 @@ func (h *HTTPRequestModule) Send(ctx context.Context, records []map[string]inter
 		slog.String("endpoint", h.endpoint),
 		slog.String("method", h.method),
 		slog.Int("record_count", len(records)),
-		slog.String("body_from", h.request.BodyFrom),
+		slog.String("request_mode", h.request.RequestMode),
 		slog.Bool("has_auth", h.authHandler != nil),
 	)
 
@@ -408,7 +411,7 @@ func (h *HTTPRequestModule) Send(ctx context.Context, records []map[string]inter
 	var err error
 
 	// Choose send mode based on configuration
-	if h.request.BodyFrom == "record" {
+	if h.request.RequestMode == "single" {
 		sent, err = h.sendSingleRecordMode(ctx, records)
 	} else {
 		sent, err = h.sendBatchMode(ctx, records)
@@ -1159,29 +1162,14 @@ func (h *HTTPRequestModule) resolveEndpointWithStaticQuery(endpoint string) stri
 	return parsedURL.String()
 }
 
-// resolveEndpointForBatch resolves template variables in endpoint for batch mode.
-// Uses the first record for template evaluation when in batch mode.
+// resolveEndpointForBatch resolves template variables and keys in endpoint for batch mode.
+// Uses the first record for template evaluation and key extraction when in batch mode.
 func (h *HTTPRequestModule) resolveEndpointForBatch(endpoint string, records []map[string]interface{}) string {
-	// Evaluate template variables using first record (for batch mode)
-	if HasTemplateVariables(endpoint) && len(records) > 0 {
-		endpoint = h.templateEvaluator.EvaluateTemplateForURL(endpoint, records[0])
-		logger.Debug("batch mode: evaluated endpoint template using first record",
-			slog.String("endpoint", endpoint),
-		)
+	if len(records) == 0 {
+		return h.resolveEndpointWithStaticQuery(endpoint)
 	}
-
-	finalURL := h.resolveEndpointWithStaticQuery(endpoint)
-
-	// Validate the resulting URL is well-formed (AC #2)
-	if err := validateURL(finalURL); err != nil {
-		logger.Warn("invalid URL after template evaluation",
-			slog.String("url", finalURL),
-			slog.String("error", err.Error()),
-		)
-		// Return the URL anyway to avoid breaking execution, but log the issue
-	}
-
-	return finalURL
+	// Use first record for path/query from keys (same as single-record resolution)
+	return h.resolveEndpointForRecord(records[0])
 }
 
 // resolveEndpointForRecord resolves path parameters, template variables, and query params for a single record.
@@ -1195,14 +1183,15 @@ func (h *HTTPRequestModule) resolveEndpointForRecord(record map[string]interface
 		endpoint = h.templateEvaluator.EvaluateTemplateForURL(endpoint, record)
 	}
 
-	// Substitute path parameters (properly URL-encoded) - legacy {param} syntax
-	for param, fieldPath := range h.request.PathParams {
-		value := getFieldValue(record, fieldPath)
-		if value != "" {
-			// URL-encode path parameter values
-			encodedValue := url.PathEscape(value)
-			placeholder := "{" + param + "}"
-			endpoint = strings.ReplaceAll(endpoint, placeholder, encodedValue)
+	// Substitute path parameters from keys (paramType=path)
+	for _, k := range h.request.Keys {
+		if k.paramType == "path" {
+			value := getFieldValue(record, k.field)
+			if value != "" {
+				encodedValue := url.PathEscape(value)
+				placeholder := "{" + k.paramName + "}"
+				endpoint = strings.ReplaceAll(endpoint, placeholder, encodedValue)
+			}
 		}
 	}
 
@@ -1217,17 +1206,19 @@ func (h *HTTPRequestModule) resolveEndpointForRecord(record map[string]interface
 		return endpoint
 	}
 
-	// Add static query parameters using url.Values for proper encoding
+	// Add static query parameters
 	q := parsedURL.Query()
 	for param, value := range h.request.QueryParams {
 		q.Set(param, value)
 	}
 
-	// Add query parameters from record data
-	for param, fieldPath := range h.request.QueryFromRecord {
-		value := getFieldValue(record, fieldPath)
-		if value != "" {
-			q.Set(param, value)
+	// Add query parameters from keys (paramType=query)
+	for _, k := range h.request.Keys {
+		if k.paramType == "query" {
+			value := getFieldValue(record, k.field)
+			if value != "" {
+				q.Set(k.paramName, value)
+			}
 		}
 	}
 
@@ -1345,10 +1336,13 @@ func (h *HTTPRequestModule) extractHeadersFromRecord(record map[string]interface
 		tryAddValidHeader(headers, headerName, value)
 	}
 
-	for headerName, fieldPath := range h.request.HeadersFromRecord {
-		value := getFieldValue(record, fieldPath)
-		if value != "" {
-			tryAddValidHeader(headers, headerName, value)
+	// Add headers from keys (paramType=header)
+	for _, k := range h.request.Keys {
+		if k.paramType == "header" {
+			value := getFieldValue(record, k.field)
+			if value != "" {
+				tryAddValidHeader(headers, k.paramName, value)
+			}
 		}
 	}
 
@@ -1503,8 +1497,8 @@ func (h *HTTPRequestModule) Close() error {
 // This is used in dry-run mode to show what would be sent to the target system.
 //
 // Returns one preview per request that would be made:
-//   - Batch mode (bodyFrom="records"): returns 1 preview for all records
-//   - Single record mode (bodyFrom="record"): returns N previews (one per record)
+//   - Batch mode (requestMode="batch"): returns 1 preview for all records
+//   - Single record mode (requestMode="single"): returns N previews (one per record)
 //
 // By default, authentication headers are masked for security.
 // Set opts.ShowCredentials to true to display actual credential values (for debugging).
@@ -1515,7 +1509,7 @@ func (h *HTTPRequestModule) PreviewRequest(records []map[string]interface{}, opt
 	}
 
 	// Choose preview mode based on configuration
-	if h.request.BodyFrom == "record" {
+	if h.request.RequestMode == "single" {
 		return h.previewSingleRecordMode(records, opts)
 	}
 

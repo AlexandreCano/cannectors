@@ -1,0 +1,157 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://cannectors.io/schemas/pipeline/v1.1.0/input-schema.json",
+	"title": "Cannectors Input Module Schema",
+	"description": "Schema definitions for input modules.",
+	"$defs": {
+		"inputModule": {
+			"type": "object",
+			"description": "Input module configuration.",
+			"required": [ "type" ],
+			"unevaluatedProperties": false,
+			"properties": {
+				"type": {
+					"type": "string",
+					"description": "Input type. Canonical: httpPolling, webhook, database.",
+					"minLength": 1
+				}
+			},
+			"allOf": [
+				{ "$ref": "common-schema.json#/$defs/moduleBase" },
+				{ "oneOf": [
+					{ "allOf": [ { "$ref": "#/$defs/webhookInputConfig" }, { "properties": { "type": { "const": "webhook" } }, "required": [ "type" ] } ] },
+					{ "allOf": [ { "$ref": "#/$defs/httpPollingInputConfig" }, { "properties": { "type": { "const": "httpPolling" } }, "required": [ "type" ] } ] },
+					{ "allOf": [ { "$ref": "#/$defs/databaseInputConfig" }, { "properties": { "type": { "const": "database" } }, "required": [ "type" ] } ] }
+				] }
+			]
+		},
+
+		"httpPollingInputConfig": {
+			"allOf": [
+				{ "$ref": "common-schema.json#/$defs/httpRequestBase" },
+				{
+					"type": "object",
+					"description": "HTTP polling input module configuration. Polls an HTTP endpoint on a schedule.",
+					"required": [ "schedule" ],
+					"properties": {
+						"schedule": {
+							"type": "string",
+							"description": "CRON expression for polling. Validated at runtime.",
+							"minLength": 9
+						},
+						"pagination": {
+							"$ref": "common-schema.json#/$defs/pagination"
+						},
+						"statePersistence": {
+							"$ref": "common-schema.json#/$defs/statePersistenceConfig"
+						},
+						"dataField": {
+							"type": "string",
+							"description": "JSON field path containing the array of records to extract from the response."
+						}
+					}
+				}
+			]
+		},
+
+		"webhookInputConfig": {
+			"type": "object",
+			"description": "Webhook input module configuration. Listens for incoming HTTP requests.",
+			"required": [ "path" ],
+			"properties": {
+				"path": {
+					"type": "string",
+					"description": "Webhook path."
+				},
+				"listenAddress": {
+					"type": "string",
+					"description": "Webhook server listen address.",
+					"default": "0.0.0.0:8080"
+				},
+				"signature": {
+					"$ref": "#/$defs/webhookSignature"
+				},
+				"rateLimit": {
+					"$ref": "#/$defs/webhookRateLimit"
+				},
+				"queueSize": {
+					"type": "integer",
+					"description": "Queue size for async webhook processing.",
+					"minimum": 1
+				},
+				"maxConcurrent": {
+					"type": "integer",
+					"description": "Maximum concurrent webhook workers.",
+					"minimum": 1
+				},
+				"dataField": {
+					"type": "string",
+					"description": "JSON field path containing the array of records to extract from the request body."
+				}
+			}
+		},
+
+		"databaseInputConfig": {
+			"type": "object",
+			"description": "Database input module configuration. Executes SQL queries to fetch data. Supports {{lastRunTimestamp}} placeholder for incremental queries.",
+			"allOf": [ { "$ref": "common-schema.json#/$defs/sqlRequestBase" } ],
+			"properties": {
+				"parameters": {
+					"type": "object",
+					"description": "Query parameters. Keys are parameter names (used with :paramName syntax).",
+					"additionalProperties": true
+				},
+				"pagination": {
+					"$ref": "common-schema.json#/$defs/databasePaginationConfig"
+				},
+				"incremental": {
+					"$ref": "common-schema.json#/$defs/databaseIncrementalConfig"
+				}
+			}
+		},
+
+		"webhookSignature": {
+			"type": "object",
+			"description": "Webhook signature validation configuration.",
+			"properties": {
+				"type": {
+					"type": "string",
+					"description": "Signature algorithm.",
+					"enum": [ "hmac-sha256" ]
+				},
+				"header": {
+					"type": "string",
+					"description": "Header name containing the signature."
+				},
+				"secret": {
+					"type": "string",
+					"description": "Secret key for signature validation."
+				}
+			},
+			"required": [
+				"type",
+				"header",
+				"secret"
+			],
+			"additionalProperties": false
+		},
+
+		"webhookRateLimit": {
+			"type": "object",
+			"description": "Webhook rate limiting configuration.",
+			"properties": {
+				"requestsPerSecond": {
+					"type": "number",
+					"description": "Maximum requests per second.",
+					"minimum": 0
+				},
+				"burst": {
+					"type": "number",
+					"description": "Maximum burst size.",
+					"minimum": 1
+				}
+			},
+			"additionalProperties": false
+		}
+	}
+}

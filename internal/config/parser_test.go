@@ -23,19 +23,13 @@ func TestParseJSONFile_ValidJSON(t *testing.T) {
 		t.Fatal("expected data to be non-nil")
 	}
 
-	// Check connector object exists
-	connector, ok := result.Data["connector"]
+	// Check name exists at root
+	name, ok := result.Data["name"]
 	if !ok {
-		t.Error("expected connector field in parsed data")
+		t.Error("expected name field in parsed data")
 	}
-
-	// Check connector.name
-	connMap, ok := connector.(map[string]interface{})
-	if !ok {
-		t.Error("expected connector to be a map")
-	}
-	if name, ok := connMap["name"]; !ok || name != "test-connector" {
-		t.Errorf("expected connector.name to be 'test-connector', got '%v'", name)
+	if name != "test-connector" {
+		t.Errorf("expected name to be 'test-connector', got '%v'", name)
 	}
 }
 
@@ -205,19 +199,13 @@ func TestParseYAMLFile_ValidYAML(t *testing.T) {
 		t.Fatal("expected data to be non-nil")
 	}
 
-	// Check connector object exists
-	connector, ok := result.Data["connector"]
+	// Check name exists at root
+	name, ok := result.Data["name"]
 	if !ok {
-		t.Error("expected connector field in parsed data")
+		t.Error("expected name field in parsed data")
 	}
-
-	// Check connector.name
-	connMap, ok := connector.(map[string]interface{})
-	if !ok {
-		t.Error("expected connector to be a map")
-	}
-	if name, ok := connMap["name"]; !ok || name != "test-yaml-connector" {
-		t.Errorf("expected connector.name to be 'test-yaml-connector', got '%v'", name)
+	if name != "test-yaml-connector" {
+		t.Errorf("expected name to be 'test-yaml-connector', got '%v'", name)
 	}
 }
 
@@ -489,7 +477,7 @@ func TestParseConfig_UnknownExtension(t *testing.T) {
 	// Create a temp file with unknown extension
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.txt")
-	content := `{"connector": {"name": "test", "version": "1.0.0", "input": {"type": "httpPolling"}, "filters": [], "output": {"type": "httpRequest"}}}`
+	content := `{"name": "test", "version": "1.0.0", "input": {"type": "httpPolling"}, "filters": [], "output": {"type": "httpRequest"}}`
 	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
 	}
@@ -576,7 +564,7 @@ func TestDetectFormat(t *testing.T) {
 }
 
 func TestParseConfigString_JSON(t *testing.T) {
-	content := `{"connector": {"name": "test", "version": "1.0.0", "input": {"type": "httpPolling", "endpoint": "http://example.com", "schedule": "* * * * *"}, "filters": [], "output": {"type": "httpRequest", "endpoint": "http://example.com", "method": "POST"}}}`
+	content := `{"name": "test", "version": "1.0.0", "input": {"type": "httpPolling", "endpoint": "http://example.com", "schedule": "* * * * *"}, "filters": [], "output": {"type": "httpRequest", "endpoint": "http://example.com", "method": "POST"}}`
 	result := ParseConfigString(content, "json")
 
 	if len(result.ParseErrors) > 0 {
@@ -589,18 +577,17 @@ func TestParseConfigString_JSON(t *testing.T) {
 }
 
 func TestParseConfigString_YAML(t *testing.T) {
-	content := `connector:
-  name: test
-  version: "1.0.0"
-  input:
-    type: httpPolling
-    endpoint: http://example.com
-    schedule: "* * * * *"
-  filters: []
-  output:
-    type: httpRequest
-    endpoint: http://example.com
-    method: POST`
+	content := `name: test
+version: "1.0.0"
+input:
+  type: httpPolling
+  endpoint: http://example.com
+  schedule: "* * * * *"
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://example.com
+  method: POST`
 	result := ParseConfigString(content, "yaml")
 
 	if len(result.ParseErrors) > 0 {
@@ -629,16 +616,15 @@ func TestParseConfigString_AutoDetect(t *testing.T) {
 func generateLargeJSONConfig(lines int) string {
 	var sb strings.Builder
 	sb.WriteString(`{
-  "connector": {
-    "name": "large-test-connector",
-    "version": "1.0.0",
-    "description": "A large connector configuration for performance testing",
-    "input": {
-      "type": "httpPolling",
-      "endpoint": "https://api.example.com/data",
-      "schedule": "*/5 * * * *"
-    },
-    "filters": [`)
+  "name": "large-test-connector",
+  "version": "1.0.0",
+  "description": "A large connector configuration for performance testing",
+  "input": {
+    "type": "httpPolling",
+    "endpoint": "https://api.example.com/data",
+    "schedule": "*/5 * * * *"
+  },
+  "filters": [`)
 
 	// Generate many filter entries
 	numFilters := (lines - 30) / 10 // roughly 10 lines per filter
@@ -647,28 +633,27 @@ func generateLargeJSONConfig(lines int) string {
 			sb.WriteString(",")
 		}
 		sb.WriteString(`
-      {
-        "type": "mapping",
-        "id": "filter-`)
+    {
+      "type": "mapping",
+      "id": "filter-`)
 		sb.WriteString(strings.Repeat("0", 5))
 		sb.WriteString(`",
-        "mappings": [
-          { "source": "field_`)
+      "mappings": [
+        { "source": "field_`)
 		sb.WriteString(strings.Repeat("0", 5))
 		sb.WriteString(`", "target": "target_`)
 		sb.WriteString(strings.Repeat("0", 5))
 		sb.WriteString(`" }
-        ]
-      }`)
+      ]
+    }`)
 	}
 
 	sb.WriteString(`
-    ],
-    "output": {
-      "type": "httpRequest",
-      "endpoint": "https://api.destination.com/import",
-      "method": "POST"
-    }
+  ],
+  "output": {
+    "type": "httpRequest",
+    "endpoint": "https://api.destination.com/import",
+    "method": "POST"
   }
 }`)
 
@@ -772,8 +757,8 @@ func TestResult_AllErrors(t *testing.T) {
 			{Message: "parse error 2", Type: ErrorTypeIO},
 		},
 		ValidationErrors: []ValidationError{
-			{Path: "/connector", Message: "validation error 1", Type: "required"},
-			{Path: "/schemaVersion", Message: "validation error 2", Type: "pattern"},
+			{Path: "/name", Message: "validation error 1", Type: "required"},
+			{Path: "/version", Message: "validation error 2", Type: "pattern"},
 		},
 	}
 
@@ -787,7 +772,7 @@ func TestResult_AllErrors(t *testing.T) {
 	if allErrors[0].Error() != "parse error 1" {
 		t.Errorf("expected first error to be parse error 1, got: %s", allErrors[0].Error())
 	}
-	if allErrors[2].Error() != "/connector: validation error 1" {
+	if allErrors[2].Error() != "/name: validation error 1" {
 		t.Errorf("expected third error to be validation error 1, got: %s", allErrors[2].Error())
 	}
 }

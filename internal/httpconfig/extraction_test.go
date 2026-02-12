@@ -120,54 +120,20 @@ func TestExtractDynamicParamsConfig(t *testing.T) {
 			name:   "nil config",
 			config: nil,
 			want: DynamicParamsConfig{
-				PathParams:        map[string]string{},
-				QueryParams:       map[string]string{},
-				QueryFromRecord:   map[string]string{},
-				HeadersFromRecord: map[string]string{},
+				QueryParams: map[string]string{},
 			},
 		},
 		{
-			name: "root level params",
+			name: "query params",
 			config: map[string]interface{}{
-				"pathParams": map[string]interface{}{
-					"id": "record.id",
-				},
 				"queryParams": map[string]interface{}{
 					"format": "json",
 				},
 			},
 			want: DynamicParamsConfig{
-				PathParams: map[string]string{
-					"id": "record.id",
-				},
 				QueryParams: map[string]string{
 					"format": "json",
 				},
-				QueryFromRecord:   map[string]string{},
-				HeadersFromRecord: map[string]string{},
-			},
-		},
-		{
-			name: "request sub-object params",
-			config: map[string]interface{}{
-				"request": map[string]interface{}{
-					"pathParams": map[string]interface{}{
-						"id": "record.id",
-					},
-					"query": map[string]interface{}{
-						"format": "json",
-					},
-				},
-			},
-			want: DynamicParamsConfig{
-				PathParams: map[string]string{
-					"id": "record.id",
-				},
-				QueryParams: map[string]string{
-					"format": "json",
-				},
-				QueryFromRecord:   map[string]string{},
-				HeadersFromRecord: map[string]string{},
 			},
 		},
 	}
@@ -175,11 +141,58 @@ func TestExtractDynamicParamsConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := ExtractDynamicParamsConfig(tt.config)
-			if len(got.PathParams) != len(tt.want.PathParams) {
-				t.Errorf("PathParams length = %v, want %v", len(got.PathParams), len(tt.want.PathParams))
-			}
 			if len(got.QueryParams) != len(tt.want.QueryParams) {
 				t.Errorf("QueryParams length = %v, want %v", len(got.QueryParams), len(tt.want.QueryParams))
+			}
+		})
+	}
+}
+
+func TestExtractKeysConfig(t *testing.T) {
+	tests := []struct {
+		name   string
+		config map[string]interface{}
+		want   []KeyConfig
+	}{
+		{
+			name:   "nil config",
+			config: nil,
+			want:   nil,
+		},
+		{
+			name: "keys config",
+			config: map[string]interface{}{
+				"keys": []interface{}{
+					map[string]interface{}{
+						"field":     "orderId",
+						"paramType": "path",
+						"paramName": "orderId",
+					},
+					map[string]interface{}{
+						"field":     "customerId",
+						"paramType": "header",
+						"paramName": "X-Customer-ID",
+					},
+				},
+			},
+			want: []KeyConfig{
+				{Field: "orderId", ParamType: "path", ParamName: "orderId"},
+				{Field: "customerId", ParamType: "header", ParamName: "X-Customer-ID"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ExtractKeysConfig(tt.config)
+			if len(got) != len(tt.want) {
+				t.Errorf("keys length = %v, want %v", len(got), len(tt.want))
+				return
+			}
+			for i := range got {
+				if got[i].Field != tt.want[i].Field || got[i].ParamType != tt.want[i].ParamType || got[i].ParamName != tt.want[i].ParamName {
+					t.Errorf("keys[%d] = %+v, want %+v", i, got[i], tt.want[i])
+				}
 			}
 		})
 	}

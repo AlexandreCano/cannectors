@@ -1,0 +1,146 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://cannectors.io/schemas/pipeline/v1.1.0/auth-schema.json",
+	"title": "Cannectors Authentication Schema Definitions",
+	"description": "Authentication definitions shared across pipeline modules.",
+	"$defs": {
+		"auth": {
+			"description": "Authentication configuration. Supports api-key, bearer, basic, and oauth2 types.",
+			"oneOf": [
+				{ "$ref": "#/$defs/authApiKey" },
+				{ "$ref": "#/$defs/authBearer" },
+				{ "$ref": "#/$defs/authBasic" },
+				{ "$ref": "#/$defs/authOAuth2" }
+			]
+		},
+
+		"authApiKey": {
+			"type": "object",
+			"description": "API key authentication.",
+			"required": ["type", "credentials"],
+			"properties": {
+				"type": { "const": "api-key" },
+				"credentials": { "$ref": "#/$defs/credentialsApiKey" }
+			},
+			"additionalProperties": false
+		},
+
+		"authBearer": {
+			"type": "object",
+			"description": "Bearer token authentication.",
+			"required": ["type", "credentials"],
+			"properties": {
+				"type": { "const": "bearer" },
+				"credentials": { "$ref": "#/$defs/credentialsBearer" }
+			},
+			"additionalProperties": false
+		},
+
+		"authBasic": {
+			"type": "object",
+			"description": "HTTP Basic authentication.",
+			"required": ["type", "credentials"],
+			"properties": {
+				"type": { "const": "basic" },
+				"credentials": { "$ref": "#/$defs/credentialsBasic" }
+			},
+			"additionalProperties": false
+		},
+
+		"authOAuth2": {
+			"type": "object",
+			"description": "OAuth2 client credentials authentication.",
+			"required": ["type", "credentials"],
+			"properties": {
+				"type": { "const": "oauth2" },
+				"credentials": { "$ref": "#/$defs/credentialsOAuth2" }
+			},
+			"additionalProperties": false
+		},
+
+		"credentialsApiKey": {
+			"type": "object",
+			"description": "API key credentials.",
+			"required": ["key"],
+			"properties": {
+				"key": {
+					"type": "string",
+					"description": "API key value or env reference (${VAR})."
+				},
+				"location": {
+					"type": "string",
+					"enum": ["header", "query"],
+					"default": "header",
+					"description": "Where to send the key."
+				},
+				"headerName": {
+					"type": "string",
+					"default": "X-API-Key",
+					"description": "Header name when location=header."
+				},
+				"paramName": {
+					"type": "string",
+					"default": "api_key",
+					"description": "Query param name when location=query."
+				}
+			},
+			"additionalProperties": false
+		},
+
+		"credentialsBearer": {
+			"type": "object",
+			"description": "Bearer token credentials.",
+			"required": ["token"],
+			"properties": {
+				"token": {
+					"type": "string",
+					"description": "Bearer token value or env reference (${VAR})."
+				}
+			},
+			"additionalProperties": false
+		},
+
+		"credentialsBasic": {
+			"type": "object",
+			"description": "Basic auth credentials.",
+			"required": ["username", "password"],
+			"properties": {
+				"username": {
+					"type": "string",
+					"description": "Username or env reference (${VAR})."
+				},
+				"password": {
+					"type": "string",
+					"description": "Password or env reference (${VAR})."
+				}
+			},
+			"additionalProperties": false
+		},
+
+		"credentialsOAuth2": {
+			"type": "object",
+			"description": "OAuth2 client credentials.",
+			"required": ["tokenUrl", "clientId", "clientSecret"],
+			"properties": {
+				"tokenUrl": {
+					"type": "string",
+					"format": "uri",
+					"description": "Token endpoint URL."
+				},
+				"clientId": {
+					"type": "string",
+					"description": "Client ID or env reference (${VAR})."
+				},
+				"clientSecret": {
+					"type": "string",
+					"description": "Client secret or env reference (${VAR})."
+				},
+				"scope": {
+					"type": "string",
+					"description": "OAuth2 scope."
+				}
+			},
+			"additionalProperties": false
+		}
+	}
+}

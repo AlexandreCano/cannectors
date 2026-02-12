@@ -13,7 +13,7 @@
 # Templating is supported in:
 #   - endpoint: URL with dynamic path segments (inline)
 #   - headers: HTTP header values (inline)
-#   - request.bodyTemplateFile: External file for body template (JSON, XML, SOAP, etc.)
+#   - bodyTemplateFile: External file for body template (JSON, XML, SOAP, etc.)
 
 schemaVersion: "1.1.0"
 
@@ -55,7 +55,6 @@ connector:
       X-Customer-Name: "{{record.customer_name}}"
       X-Request-Source: "cannectors-pipeline"  # Static header value
 
-    request:
-      bodyFrom: "record"  # One request per record
-      # External template file - allows any format (JSON, XML, etc.)
-      bodyTemplateFile: "./templates/order-body.json"
+    requestMode: "single"  # One request per record
+    # External template file - allows any format (JSON, XML, etc.)
+    bodyTemplateFile: "./templates/order-body.json"

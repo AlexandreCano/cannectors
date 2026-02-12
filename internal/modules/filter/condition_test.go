@@ -7,6 +7,11 @@ import (
 	"testing"
 )
 
+// strPtr is a helper to create string pointers for test cases.
+func strPtrCond(s string) *string {
+	return &s
+}
+
 // TestConditionBasicEquality tests basic equality comparisons (==, !=)
 func TestConditionBasicEquality(t *testing.T) {
 	tests := []struct {
@@ -831,8 +836,8 @@ func TestConditionNestedThenMapping(t *testing.T) {
 		Then: &NestedModuleConfig{
 			Type: "mapping",
 			Mappings: []FieldMapping{
-				{Source: "name", Target: "displayName"},
-				{Source: "id", Target: "userId"},
+				{Source: strPtrCond("name"), Target: "displayName"},
+				{Source: strPtrCond("id"), Target: "userId"},
 			},
 		},
 		OnFalse: "skip",
@@ -862,9 +867,12 @@ func TestConditionNestedThenMapping(t *testing.T) {
 		t.Errorf("expected userId=1, got %v", result[0]["userId"])
 	}
 
-	// Original fields should not be present (mapping only produces target fields)
-	if _, exists := result[0]["name"]; exists {
-		t.Errorf("expected 'name' field to not exist in output")
+	// Original fields should be preserved (in-place mapping)
+	if result[0]["name"] != "Alice" {
+		t.Errorf("expected 'name' field to be preserved, got %v", result[0]["name"])
+	}
+	if result[0]["status"] != "active" {
+		t.Errorf("expected 'status' field to be preserved, got %v", result[0]["status"])
 	}
 }
 
@@ -876,8 +884,8 @@ func TestConditionNestedElseMapping(t *testing.T) {
 		Else: &NestedModuleConfig{
 			Type: "mapping",
 			Mappings: []FieldMapping{
-				{Source: "id", Target: "inactiveUserId"},
-				{Source: "status", Target: "currentStatus"},
+				{Source: strPtrCond("id"), Target: "inactiveUserId"},
+				{Source: strPtrCond("status"), Target: "currentStatus"},
 			},
 		},
 	})
@@ -915,15 +923,15 @@ func TestConditionNestedBothThenElse(t *testing.T) {
 		Then: &NestedModuleConfig{
 			Type: "mapping",
 			Mappings: []FieldMapping{
-				{Source: "id", Target: "premiumId"},
-				{Source: "name", Target: "premiumName"},
+				{Source: strPtrCond("id"), Target: "premiumId"},
+				{Source: strPtrCond("name"), Target: "premiumName"},
 			},
 		},
 		Else: &NestedModuleConfig{
 			Type: "mapping",
 			Mappings: []FieldMapping{
-				{Source: "id", Target: "standardId"},
-				{Source: "name", Target: "standardName"},
+				{Source: strPtrCond("id"), Target: "standardId"},
+				{Source: strPtrCond("name"), Target: "standardName"},
 			},
 		},
 	})
@@ -1007,7 +1015,7 @@ func TestConditionNestedPriorityOverOnTrue(t *testing.T) {
 		Then: &NestedModuleConfig{
 			Type: "mapping",
 			Mappings: []FieldMapping{
-				{Source: "id", Target: "mappedId"},
+				{Source: strPtrCond("id"), Target: "mappedId"},
 			},
 		},
 		OnFalse: "skip",
@@ -1044,7 +1052,7 @@ func TestConditionNestedPriorityOverOnFalse(t *testing.T) {
 		Else: &NestedModuleConfig{
 			Type: "mapping",
 			Mappings: []FieldMapping{
-				{Source: "id", Target: "elseId"},
+				{Source: strPtrCond("id"), Target: "elseId"},
 			},
 		},
 	})
@@ -1891,8 +1899,8 @@ func TestConditionOutputFormat(t *testing.T) {
 func TestConditionChainWithMapping(t *testing.T) {
 	// First apply mapping
 	mapper, err := NewMappingFromConfig([]FieldMapping{
-		{Source: "status", Target: "currentStatus"},
-		{Source: "amount", Target: "value"},
+		{Source: strPtrCond("status"), Target: "currentStatus"},
+		{Source: strPtrCond("amount"), Target: "value"},
 	}, "fail")
 	if err != nil {
 		t.Fatalf("NewMappingFromConfig() error = %v", err)

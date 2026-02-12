@@ -20,18 +20,19 @@ func TestValidateConfig_ValidConfig(t *testing.T) {
 	}
 }
 
-func TestValidateConfig_ValidConfigWithoutSchemaVersion(t *testing.T) {
-	// Parse valid config without schemaVersion field
-	parseResult := ParseJSONFile("testdata/valid-config-no-schemaversion.json")
-	if !parseResult.IsValid() {
-		t.Fatalf("failed to parse valid config: %v", parseResult.Errors)
+func TestValidateConfig_ValidConfigWithoutVersion(t *testing.T) {
+	// Config without version field should be valid
+	data := map[string]interface{}{
+		"name":    "test-no-version",
+		"input":   map[string]interface{}{"type": "httpPolling", "endpoint": "https://example.com", "schedule": "* * * * *"},
+		"filters": []interface{}{},
+		"output":  map[string]interface{}{"type": "httpRequest", "endpoint": "https://example.com", "method": "POST"},
 	}
 
-	// Validate against schema - should pass (schemaVersion is now optional)
-	result := ValidateConfig(parseResult.Data)
+	result := ValidateConfig(data)
 
 	if !result.Valid {
-		t.Errorf("expected valid config without schemaVersion, got errors: %v", result.Errors)
+		t.Errorf("expected valid config without version, got errors: %v", result.Errors)
 	}
 }
 
@@ -150,20 +151,18 @@ func TestGetSchema_ReturnsSchema(t *testing.T) {
 func TestValidateConfig_WebhookWithSchedule_Rejected(t *testing.T) {
 	// Webhook input must not have schedule (AC#2, #4). Schema rejects it.
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "webhook-schedule-test",
-			"version": "1.0.0",
-			"input": map[string]interface{}{
-				"type":     "webhook",
-				"path":     "/webhook",
-				"schedule": "0 * * * *",
-			},
-			"filters": []interface{}{},
-			"output": map[string]interface{}{
-				"type":     "httpRequest",
-				"endpoint": "https://example.com",
-				"method":   "POST",
-			},
+		"name":    "webhook-schedule-test",
+		"version": "1.0.0",
+		"input": map[string]interface{}{
+			"type":     "webhook",
+			"path":     "/webhook",
+			"schedule": "0 * * * *",
+		},
+		"filters": []interface{}{},
+		"output": map[string]interface{}{
+			"type":     "httpRequest",
+			"endpoint": "https://example.com",
+			"method":   "POST",
 		},
 	}
 	result := ValidateConfig(data)
@@ -176,23 +175,21 @@ func TestValidateConfig_WebhookWithSchedule_Rejected(t *testing.T) {
 }
 
 func TestValidateConfig_ConnectorLevelSchedule_Rejected(t *testing.T) {
-	// Schedule must not be at connector root; only in input module (polling types).
+	// Schedule must not be at root; only in input module (polling types).
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":     "connector-schedule-test",
-			"version":  "1.0.0",
-			"schedule": "0 * * * *",
-			"input": map[string]interface{}{
-				"type":     "httpPolling",
-				"endpoint": "https://example.com",
-				"schedule": "*/5 * * * *",
-			},
-			"filters": []interface{}{},
-			"output": map[string]interface{}{
-				"type":     "httpRequest",
-				"endpoint": "https://example.com",
-				"method":   "POST",
-			},
+		"name":     "connector-schedule-test",
+		"version":  "1.0.0",
+		"schedule": "0 * * * *",
+		"input": map[string]interface{}{
+			"type":     "httpPolling",
+			"endpoint": "https://example.com",
+			"schedule": "*/5 * * * *",
+		},
+		"filters": []interface{}{},
+		"output": map[string]interface{}{
+			"type":     "httpRequest",
+			"endpoint": "https://example.com",
+			"method":   "POST",
 		},
 	}
 	result := ValidateConfig(data)

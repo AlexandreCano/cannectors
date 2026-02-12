@@ -2,7 +2,7 @@
   "connector": {
     "name": "output-single-record-example",
     "version": "1.0.0",
-    "description": "Example with single record mode (bodyFrom: record)",
+    "description": "Example with single record mode (requestMode: single)",
     "input": {
       "type": "httpPolling",
       "endpoint": "https://api.example.com/users",
@@ -14,14 +14,9 @@
       "type": "httpRequest",
       "endpoint": "https://api.destination.com/users/{userId}",
       "method": "PATCH",
-      "request": {
-        "bodyFrom": "record",
-        "pathParams": {
-          "userId": "id"
-        },
-        "query": {
-          "updateSource": "cannectors"
-        }
+      "requestMode": "single",
+      "queryParams": {
+        "updateSource": "cannectors"
       },
       "retry": {
         "maxAttempts": 2,
@@ -35,7 +30,14 @@
           "location": "header",
           "headerName": "X-API-Key"
         }
-      }
+      },
+      "keys": [
+        {
+          "field": "id",
+          "paramType": "path",
+          "paramName": "userId"
+        }
+      ]
     }
   }
 }

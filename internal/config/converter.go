@@ -15,36 +15,29 @@ import (
 // The configuration is expected to have this structure:
 //
 //	{
-//	  "connector": {
-//	    "name": "...",
-//	    "version": "...",
-//	    "input": {...},
-//	    "filters": [...],
-//	    "output": {...}
-//	  }
+//	  "name": "...",
+//	  "version": "...",
+//	  "input": {...},
+//	  "filters": [...],
+//	  "output": {...}
 //	}
 //
-// Note: schemaVersion is optional and ignored if present (backward compatibility).
+// Note: version is optional.
 func ConvertToPipeline(data map[string]interface{}) (*connector.Pipeline, error) {
 	if data == nil {
 		return nil, fmt.Errorf("configuration data is nil")
 	}
 
-	connectorData, ok := data["connector"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("missing or invalid 'connector' section")
-	}
-
 	pipeline := newPipeline()
-	if err := extractPipelineMetadata(pipeline, connectorData); err != nil {
+	if err := extractPipelineMetadata(pipeline, data); err != nil {
 		return nil, fmt.Errorf("extracting pipeline metadata: %w", err)
 	}
 
-	if err := extractModules(pipeline, connectorData); err != nil {
+	if err := extractModules(pipeline, data); err != nil {
 		return nil, fmt.Errorf("extracting modules: %w", err)
 	}
 
-	extractDefaultsAndErrorHandling(pipeline, connectorData)
+	extractDefaultsAndErrorHandling(pipeline, data)
 	applyErrorHandling(pipeline)
 
 	return pipeline, nil
@@ -60,25 +53,23 @@ func newPipeline() *connector.Pipeline {
 }
 
 // extractPipelineMetadata extracts name, version, description, and id.
-func extractPipelineMetadata(p *connector.Pipeline, connectorData map[string]interface{}) error {
-	name, ok := connectorData["name"].(string)
+func extractPipelineMetadata(p *connector.Pipeline, data map[string]interface{}) error {
+	name, ok := data["name"].(string)
 	if !ok {
-		return fmt.Errorf("missing required field 'connector.name'")
+		return fmt.Errorf("missing required field 'name'")
 	}
 	p.Name = name
 	p.ID = name // Use name as ID if not specified
 
-	version, ok := connectorData["version"].(string)
-	if !ok {
-		return fmt.Errorf("missing required field 'connector.version'")
+	if version, ok := data["version"].(string); ok {
+		p.Version = version
 	}
-	p.Version = version
 
-	if description, ok := connectorData["description"].(string); ok {
+	if description, ok := data["description"].(string); ok {
 		p.Description = description
 	}
 
-	if id, ok := connectorData["id"].(string); ok {
+	if id, ok := data["id"].(string); ok {
 		p.ID = id
 	}
 
@@ -86,11 +77,11 @@ func extractPipelineMetadata(p *connector.Pipeline, connectorData map[string]int
 }
 
 // extractModules extracts input, filters, and output modules.
-func extractModules(p *connector.Pipeline, connectorData map[string]interface{}) error {
+func extractModules(p *connector.Pipeline, data map[string]interface{}) error {
 	// Extract input
-	inputData, ok := connectorData["input"].(map[string]interface{})
+	inputData, ok := data["input"].(map[string]interface{})
 	if !ok {
-		return fmt.Errorf("missing or invalid 'connector.input' section")
+		return fmt.Errorf("missing or invalid 'input' section")
 	}
 	inputConfig, err := convertModuleConfig(inputData)
 	if err != nil {
@@ -99,7 +90,7 @@ func extractModules(p *connector.Pipeline, connectorData map[string]interface{})
 	p.Input = inputConfig
 
 	// Extract filters
-	if filtersData, okFilters := connectorData["filters"].([]interface{}); okFilters {
+	if filtersData, okFilters := data["filters"].([]interface{}); okFilters {
 		for i, filterData := range filtersData {
 			filterMap, isMap := filterData.(map[string]interface{})
 			if !isMap {
@@ -114,9 +105,9 @@ func extractModules(p *connector.Pipeline, connectorData map[string]interface{})
 	}
 
 	// Extract output
-	outputData, ok := connectorData["output"].(map[string]interface{})
+	outputData, ok := data["output"].(map[string]interface{})
 	if !ok {
-		return fmt.Errorf("missing or invalid 'connector.output' section")
+		return fmt.Errorf("missing or invalid 'output' section")
 	}
 	outputConfig, err := convertModuleConfig(outputData)
 	if err != nil {
@@ -128,12 +119,12 @@ func extractModules(p *connector.Pipeline, connectorData map[string]interface{})
 }
 
 // extractDefaultsAndErrorHandling extracts defaults and errorHandling (optional).
-func extractDefaultsAndErrorHandling(p *connector.Pipeline, connectorData map[string]interface{}) {
-	if defaults, ok := connectorData["defaults"].(map[string]interface{}); ok {
+func extractDefaultsAndErrorHandling(p *connector.Pipeline, data map[string]interface{}) {
+	if defaults, ok := data["defaults"].(map[string]interface{}); ok {
 		p.Defaults = convertModuleDefaults(defaults)
 	}
 
-	if errorHandling, ok := connectorData["errorHandling"].(map[string]interface{}); ok {
+	if errorHandling, ok := data["errorHandling"].(map[string]interface{}); ok {
 		p.ErrorHandling = convertErrorHandling(errorHandling)
 	}
 }

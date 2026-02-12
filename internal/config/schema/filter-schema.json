@@ -1,0 +1,383 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://cannectors.io/schemas/pipeline/v1.1.0/filter-schema.json",
+	"title": "Cannectors Filter Module Schema",
+	"description": "Schema definitions for filter modules.",
+	"$defs": {
+		"filterModule": {
+			"type": "object",
+			"description": "Filter module configuration.",
+			"required": [ "type" ],
+			"unevaluatedProperties": false,
+			"properties": {
+				"type": {
+					"type": "string",
+					"description": "Filter type. Canonical: mapping, condition, set, remove, script, http_call, sql_call.",
+					"minLength": 1
+				}
+			},
+			"allOf": [
+				{ "$ref": "common-schema.json#/$defs/moduleBase" },
+				{
+					"oneOf": [
+						{
+							"allOf": [
+								{ "$ref": "#/$defs/mappingFilterConfig" },
+								{ "properties": { "type": { "const": "mapping" } }, "required": [ "type" ] }
+							]
+						},
+						{
+							"allOf": [
+								{ "$ref": "#/$defs/conditionFilterConfig" },
+								{ "properties": { "type": { "const": "condition" } }, "required": [ "type" ] }
+							]
+						},
+						{
+							"allOf": [
+								{ "$ref": "#/$defs/sqlCallFilterConfig" },
+								{ "properties": { "type": { "const": "sql_call" } }, "required": [ "type" ] }
+							]
+						},
+						{
+							"allOf": [
+								{ "$ref": "#/$defs/scriptFilterConfig" },
+								{ "properties": { "type": { "const": "script" } }, "required": [ "type" ] }
+							]
+						},
+						{
+							"allOf": [
+								{ "$ref": "#/$defs/httpCallFilterConfig" },
+								{ "properties": { "type": { "const": "http_call" } }, "required": [ "type" ] }
+							]
+						},
+						{
+							"allOf": [
+								{ "$ref": "#/$defs/setFilterConfig" },
+								{ "properties": { "type": { "const": "set" } }, "required": [ "type" ] }
+							]
+						},
+						{
+							"allOf": [
+								{ "$ref": "#/$defs/removeFilterConfig" },
+								{ "properties": { "type": { "const": "remove" } }, "required": [ "type" ] }
+							]
+						}
+					]
+				}
+			]
+		},
+
+		"mappingFilterConfig": {
+			"type": "object",
+			"description": "Mapping filter module configuration. Maps fields from source to target paths.",
+			"required": [ "mappings" ],
+			"properties": {
+				"mappings": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/fieldMapping"
+					}
+				}
+			}
+		},
+
+		"conditionFilterConfig": {
+			"type": "object",
+			"description": "Condition filter module configuration. Conditionally processes records based on expressions.",
+			"required": [ "expression" ],
+			"properties": {
+				"lang": {
+					"type": "string",
+					"description": "Expression language for conditions.",
+					"enum": [
+						"cel",
+						"jsonata",
+						"jmespath",
+						"simple"
+					],
+					"default": "simple"
+				},
+				"expression": {
+					"type": "string",
+					"description": "Condition expression."
+				},
+				"onTrue": {
+					"type": "string",
+					"enum": [
+						"continue",
+						"skip"
+					],
+					"default": "continue"
+				},
+				"onFalse": {
+					"type": "string",
+					"enum": [
+						"continue",
+						"skip"
+					],
+					"default": "skip"
+				},
+				"then": {
+					"type": "array",
+					"description": "Nested filters to execute when condition is true.",
+					"items": {
+						"$ref": "#/$defs/filterModule"
+					}
+				},
+				"else": {
+					"type": "array",
+					"description": "Nested filters to execute when condition is false.",
+					"items": {
+						"$ref": "#/$defs/filterModule"
+					}
+				}
+			}
+		},
+
+		"setFilterConfig": {
+			"type": "object",
+			"description": "Set filter module configuration. Sets a field to a literal value on each record (create or overwrite).",
+			"required": [ "target", "value" ],
+			"properties": {
+				"target": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Field path to set (e.g. id, user.id, metadata.version). Supports dot notation for nested paths."
+				},
+				"value": {
+					"description": "Literal value to set. Can be string, number, boolean, or null. Type is preserved."
+				}
+			}
+		},
+
+		"removeFilterConfig": {
+			"type": "object",
+			"description": "Remove filter module configuration. Removes one or more fields from each record.",
+			"properties": {
+				"target": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Single field path to remove (e.g. id, user.email). Use 'targets' for multiple fields."
+				},
+				"targets": {
+					"type": "array",
+					"items": {
+						"type": "string",
+						"minLength": 1
+					},
+					"minItems": 1,
+					"description": "List of field paths to remove. Supports dot notation for nested paths."
+				}
+			},
+			"anyOf": [
+				{ "required": [ "target" ] },
+				{ "required": [ "targets" ] }
+			]
+		},
+
+		"scriptFilterConfig": {
+			"type": "object",
+			"description": "Script filter module configuration. Executes JavaScript transformations using Goja.",
+			"properties": {
+				"script": {
+					"type": "string",
+					"description": "Inline JavaScript source code containing a transform(record) function."
+				},
+				"scriptFile": {
+					"type": "string",
+					"description": "Path to JavaScript file containing the transform(record) function."
+				}
+			},
+			"allOf": [
+				{
+					"oneOf": [
+						{ "required": [ "script" ] },
+						{ "required": [ "scriptFile" ] }
+					]
+				},
+				{
+					"not": {
+						"required": [
+							"script",
+							"scriptFile"
+						]
+					}
+				}
+			]
+		},
+
+		"httpCallFilterConfig": {
+			"allOf": [
+				{ "$ref": "common-schema.json#/$defs/httpRequestBase" },
+				{
+					"type": "object",
+					"description": "HTTP call filter module configuration. Makes HTTP requests to external APIs for record enrichment.",
+					"properties": {
+						"keys": {
+							"type": "array",
+							"description": "List of key configurations for extracting values from records and using them in requests.",
+							"items": {
+								"$ref": "common-schema.json#/$defs/httpCallKeyConfig"
+							}
+						},
+						"cache": {
+							"$ref": "#/$defs/cacheConfig"
+						},
+						"mergeStrategy": {
+							"type": "string",
+							"description": "How to merge HTTP response with input records.",
+							"enum": [
+								"merge",
+								"replace",
+								"append"
+							],
+							"default": "merge"
+						},
+						"dataField": {
+							"type": "string",
+							"description": "Field to extract from HTTP response."
+						},
+						"bodyTemplateFile": {
+							"type": "string",
+							"description": "Path to body template file (for POST/PUT requests)."
+						}
+					}
+				}
+			]
+		},
+
+		"sqlCallFilterConfig": {
+			"type": "object",
+			"description": "SQL call filter module configuration. Executes SQL queries for record enrichment.",
+			"allOf": [
+				{ "$ref": "common-schema.json#/$defs/sqlRequestBase" }
+			],
+			"properties": {
+				"mergeStrategy": {
+					"type": "string",
+					"description": "How to merge query results with input records.",
+					"enum": [
+						"merge",
+						"replace",
+						"append"
+					],
+					"default": "merge"
+				},
+				"resultKey": {
+					"type": "string",
+					"description": "Key for storing result in append mode."
+				},
+				"cache": {
+					"$ref": "#/$defs/cacheConfig"
+				}
+			}
+		},
+
+		"cacheConfig": {
+			"type": "object",
+			"description": "Cache configuration for SQL call filter.",
+			"properties": {
+				"enabled": {
+					"type": "boolean",
+					"description": "Enable caching of query results.",
+					"default": false
+				},
+				"maxSize": {
+					"type": "integer",
+					"description": "Maximum number of cached entries.",
+					"minimum": 1,
+					"default": 1000
+				},
+				"defaultTTL": {
+					"type": "integer",
+					"description": "Cache entry TTL in seconds.",
+					"minimum": 0,
+					"default": 300
+				},
+				"key": {
+					"type": "string",
+					"description": "Cache key template using {{record.field}} syntax."
+				}
+			},
+			"additionalProperties": false
+		},
+
+		"fieldMapping": {
+			"type": "object",
+			"description": "Field mapping. Requires target. Omit source to delete the target field.",
+			"required": [ "target" ],
+			"properties": {
+				"source": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Source field path. Omit to delete the target field."
+				},
+				"target": {
+					"type": "string",
+					"description": "Target field path."
+				},
+				"transforms": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/transformOp"
+					}
+				},
+				"defaultValue": {},
+				"onMissing": {
+					"type": "string",
+					"enum": [
+						"setNull",
+						"skipField",
+						"useDefault",
+						"fail"
+					],
+					"default": "setNull"
+				}
+			}
+		},
+
+		"transformOp": {
+			"type": "object",
+			"required": [
+				"op"
+			],
+			"properties": {
+				"op": {
+					"type": "string",
+					"description": "Operation name.",
+					"examples": [
+						"trim",
+						"lowercase",
+						"uppercase",
+						"dateFormat",
+						"replace",
+						"split",
+						"join",
+						"toString",
+						"toInt",
+						"toFloat",
+						"toBool",
+						"toArray",
+						"toObject"
+					]
+				},
+				"format": {
+					"type": "string",
+					"description": "Date format pattern."
+				},
+				"pattern": {
+					"type": "string",
+					"description": "Regex pattern for replace/match operations."
+				},
+				"replacement": {
+					"type": "string",
+					"description": "Replacement string."
+				},
+				"separator": {
+					"type": "string",
+					"description": "Separator for split/join operations."
+				}
+			}
+		}
+	}
+}

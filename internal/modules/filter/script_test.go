@@ -11,6 +11,11 @@ import (
 	"time"
 )
 
+// strPtrScript is a helper to create string pointers for test cases.
+func strPtrScript(s string) *string {
+	return &s
+}
+
 // TestScriptModuleCreation tests creating a script module with valid script.
 func TestScriptModuleCreation(t *testing.T) {
 	config := ScriptConfig{
@@ -975,8 +980,8 @@ func TestScriptModule_InPipeline(t *testing.T) {
 
 	// Create a mapping module to rename fields after script processing
 	mappingConfig := []FieldMapping{
-		{Source: "total", Target: "amount"},
-		{Source: "currency", Target: "currencyCode"},
+		{Source: strPtrScript("total"), Target: "amount"},
+		{Source: strPtrScript("currency"), Target: "currencyCode"},
 	}
 	mappingModule, err := NewMappingFromConfig(mappingConfig, OnErrorFail)
 	if err != nil {

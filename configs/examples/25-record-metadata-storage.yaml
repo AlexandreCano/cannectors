@@ -73,10 +73,9 @@ connector:
       X-Processed-At: "{{_metadata.processed_at}}"
       X-Source-System: "{{_metadata.source_system}}"
       X-Batch-ID: "{{_metadata.batch_id}}"
-    request:
-      bodyFrom: record
-      # _metadata field is always excluded from request body automatically
-      # But can be accessed in templates for headers/URLs
+    requestMode: single
+    # _metadata field is always excluded from request body automatically
+    # But can be accessed in templates for headers/URLs
     authentication:
       type: bearer
       credentials:

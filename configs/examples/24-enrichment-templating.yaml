@@ -55,5 +55,4 @@ connector:
     method: POST
     headers:
       Content-Type: "application/json"
-    request:
-      bodyFrom: "record"
+    requestMode: "single"

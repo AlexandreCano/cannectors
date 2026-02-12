@@ -9,30 +9,27 @@ import (
 func TestConvertToPipeline_ValidConfig(t *testing.T) {
 	// Arrange
 	data := map[string]interface{}{
-		"schemaVersion": "1.1.0",
-		"connector": map[string]interface{}{
-			"name":        "test-connector",
-			"version":     "1.0.0",
-			"description": "A test connector",
-			"input": map[string]interface{}{
-				"type":     "httpPolling",
-				"endpoint": "https://api.example.com/data",
-				"schedule": "*/5 * * * *",
-				"method":   "GET",
-			},
-			"filters": []interface{}{
-				map[string]interface{}{
-					"type": "mapping",
-					"mappings": []interface{}{
-						map[string]interface{}{"source": "id", "target": "externalId"},
-					},
+		"name":        "test-connector",
+		"version":     "1.0.0",
+		"description": "A test connector",
+		"input": map[string]interface{}{
+			"type":     "httpPolling",
+			"endpoint": "https://api.example.com/data",
+			"schedule": "*/5 * * * *",
+			"method":   "GET",
+		},
+		"filters": []interface{}{
+			map[string]interface{}{
+				"type": "mapping",
+				"mappings": []interface{}{
+					map[string]interface{}{"source": "id", "target": "externalId"},
 				},
 			},
-			"output": map[string]interface{}{
-				"type":     "httpRequest",
-				"endpoint": "https://api.destination.com/import",
-				"method":   "POST",
-			},
+		},
+		"output": map[string]interface{}{
+			"type":     "httpRequest",
+			"endpoint": "https://api.destination.com/import",
+			"method":   "POST",
 		},
 	}
 
@@ -109,26 +106,24 @@ func TestConvertToPipeline_NilData(t *testing.T) {
 	}
 }
 
-func TestConvertToPipeline_MissingConnectorSection(t *testing.T) {
-	// Arrange
-	data := map[string]interface{}{
-		"schemaVersion": "1.1.0",
-	}
+func TestConvertToPipeline_MissingRequiredFields(t *testing.T) {
+	// Arrange - empty data
+	data := map[string]interface{}{}
 
 	// Act
 	pipeline, err := ConvertToPipeline(data)
 
 	// Assert
 	if err == nil {
-		t.Error("Expected error for missing connector section")
+		t.Error("Expected error for missing required fields")
 	}
 
 	if pipeline != nil {
-		t.Error("Expected nil pipeline for missing connector section")
+		t.Error("Expected nil pipeline for missing required fields")
 	}
 }
 
-func TestConvertToPipeline_MissingRequiredFields(t *testing.T) {
+func TestConvertToPipeline_MissingIndividualFields(t *testing.T) {
 	tests := []struct {
 		name    string
 		data    map[string]interface{}
@@ -137,46 +132,26 @@ func TestConvertToPipeline_MissingRequiredFields(t *testing.T) {
 		{
 			name: "missing name",
 			data: map[string]interface{}{
-				"connector": map[string]interface{}{
-					"version": "1.0.0",
-					"input":   map[string]interface{}{"type": "httpPolling"},
-					"output":  map[string]interface{}{"type": "httpRequest"},
-				},
+				"input":  map[string]interface{}{"type": "httpPolling"},
+				"output": map[string]interface{}{"type": "httpRequest"},
 			},
-			wantErr: "missing required field 'connector.name'",
-		},
-		{
-			name: "missing version",
-			data: map[string]interface{}{
-				"connector": map[string]interface{}{
-					"name":   "test",
-					"input":  map[string]interface{}{"type": "httpPolling"},
-					"output": map[string]interface{}{"type": "httpRequest"},
-				},
-			},
-			wantErr: "missing required field 'connector.version'",
+			wantErr: "missing required field 'name'",
 		},
 		{
 			name: "missing input",
 			data: map[string]interface{}{
-				"connector": map[string]interface{}{
-					"name":    "test",
-					"version": "1.0.0",
-					"output":  map[string]interface{}{"type": "httpRequest"},
-				},
+				"name":   "test",
+				"output": map[string]interface{}{"type": "httpRequest"},
 			},
-			wantErr: "missing or invalid 'connector.input' section",
+			wantErr: "missing or invalid 'input' section",
 		},
 		{
 			name: "missing output",
 			data: map[string]interface{}{
-				"connector": map[string]interface{}{
-					"name":    "test",
-					"version": "1.0.0",
-					"input":   map[string]interface{}{"type": "httpPolling"},
-				},
+				"name":  "test",
+				"input": map[string]interface{}{"type": "httpPolling"},
 			},
-			wantErr: "missing or invalid 'connector.output' section",
+			wantErr: "missing or invalid 'output' section",
 		},
 	}
 
@@ -198,12 +173,10 @@ func TestConvertToPipeline_MissingRequiredFields(t *testing.T) {
 func TestConvertToPipeline_NoFilters(t *testing.T) {
 	// Arrange
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "test-no-filters",
-			"version": "1.0.0",
-			"input":   map[string]interface{}{"type": "httpPolling"},
-			"output":  map[string]interface{}{"type": "httpRequest"},
-		},
+		"name":    "test-no-filters",
+		"version": "1.0.0",
+		"input":   map[string]interface{}{"type": "httpPolling"},
+		"output":  map[string]interface{}{"type": "httpRequest"},
 	}
 
 	// Act
@@ -222,22 +195,20 @@ func TestConvertToPipeline_NoFilters(t *testing.T) {
 func TestConvertToPipeline_WithAuthentication(t *testing.T) {
 	// Arrange
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "test-auth",
-			"version": "1.0.0",
-			"input": map[string]interface{}{
-				"type":     "httpPolling",
-				"endpoint": "https://api.example.com",
-				"authentication": map[string]interface{}{
-					"type": "bearer",
-					"credentials": map[string]interface{}{
-						"token": "secret-token",
-					},
+		"name":    "test-auth",
+		"version": "1.0.0",
+		"input": map[string]interface{}{
+			"type":     "httpPolling",
+			"endpoint": "https://api.example.com",
+			"authentication": map[string]interface{}{
+				"type": "bearer",
+				"credentials": map[string]interface{}{
+					"token": "secret-token",
 				},
 			},
-			"output": map[string]interface{}{
-				"type": "httpRequest",
-			},
+		},
+		"output": map[string]interface{}{
+			"type": "httpRequest",
 		},
 	}
 
@@ -265,16 +236,14 @@ func TestConvertToPipeline_WithAuthentication(t *testing.T) {
 func TestConvertToPipeline_WithErrorHandling(t *testing.T) {
 	// Arrange
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "test-error-handling",
-			"version": "1.0.0",
-			"input":   map[string]interface{}{"type": "httpPolling"},
-			"output":  map[string]interface{}{"type": "httpRequest"},
-			"errorHandling": map[string]interface{}{
-				"retryCount": float64(3),
-				"retryDelay": float64(1000),
-				"onError":    "stop",
-			},
+		"name":    "test-error-handling",
+		"version": "1.0.0",
+		"input":   map[string]interface{}{"type": "httpPolling"},
+		"output":  map[string]interface{}{"type": "httpRequest"},
+		"errorHandling": map[string]interface{}{
+			"retryCount": float64(3),
+			"retryDelay": float64(1000),
+			"onError":    "stop",
 		},
 	}
 
@@ -306,20 +275,18 @@ func TestConvertToPipeline_WithErrorHandling(t *testing.T) {
 func TestConvertToPipeline_ModuleConfigFields(t *testing.T) {
 	// Arrange - test that module config fields are properly extracted
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "test-config-fields",
-			"version": "1.0.0",
-			"input": map[string]interface{}{
-				"type":     "httpPolling",
-				"endpoint": "https://api.example.com",
-				"schedule": "0 * * * *",
-				"method":   "GET",
-				"headers": map[string]interface{}{
-					"Accept": "application/json",
-				},
+		"name":    "test-config-fields",
+		"version": "1.0.0",
+		"input": map[string]interface{}{
+			"type":     "httpPolling",
+			"endpoint": "https://api.example.com",
+			"schedule": "0 * * * *",
+			"method":   "GET",
+			"headers": map[string]interface{}{
+				"Accept": "application/json",
 			},
-			"output": map[string]interface{}{"type": "httpRequest"},
 		},
+		"output": map[string]interface{}{"type": "httpRequest"},
 	}
 
 	// Act
@@ -348,17 +315,15 @@ func TestConvertToPipeline_ModuleConfigFields(t *testing.T) {
 func TestConvertToPipeline_MultipleFilters(t *testing.T) {
 	// Arrange
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "test-multiple-filters",
-			"version": "1.0.0",
-			"input":   map[string]interface{}{"type": "httpPolling"},
-			"filters": []interface{}{
-				map[string]interface{}{"type": "mapping"},
-				map[string]interface{}{"type": "condition"},
-				map[string]interface{}{"type": "transform"},
-			},
-			"output": map[string]interface{}{"type": "httpRequest"},
+		"name":    "test-multiple-filters",
+		"version": "1.0.0",
+		"input":   map[string]interface{}{"type": "httpPolling"},
+		"filters": []interface{}{
+			map[string]interface{}{"type": "mapping"},
+			map[string]interface{}{"type": "condition"},
+			map[string]interface{}{"type": "transform"},
 		},
+		"output": map[string]interface{}{"type": "httpRequest"},
 	}
 
 	// Act
@@ -384,17 +349,15 @@ func TestConvertToPipeline_MultipleFilters(t *testing.T) {
 func TestConvertToPipeline_ScheduleInInputConfig(t *testing.T) {
 	// Test that schedule defined at input level is stored in input config
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "test-schedule-in-input",
-			"version": "1.0.0",
-			"input": map[string]interface{}{
-				"type":     "httpPolling",
-				"endpoint": "https://api.example.com",
-				"schedule": "*/5 * * * *",
-			},
-			"filters": []interface{}{},
-			"output":  map[string]interface{}{"type": "httpRequest"},
+		"name":    "test-schedule-in-input",
+		"version": "1.0.0",
+		"input": map[string]interface{}{
+			"type":     "httpPolling",
+			"endpoint": "https://api.example.com",
+			"schedule": "*/5 * * * *",
 		},
+		"filters": []interface{}{},
+		"output":  map[string]interface{}{"type": "httpRequest"},
 	}
 
 	pipeline, err := ConvertToPipeline(data)
@@ -412,16 +375,14 @@ func TestConvertToPipeline_ScheduleInInputConfig(t *testing.T) {
 func TestConvertToPipeline_WebhookWithoutSchedule(t *testing.T) {
 	// Test that webhook input type works without schedule
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "test-webhook",
-			"version": "1.0.0",
-			"input": map[string]interface{}{
-				"type": "webhook",
-				"path": "/webhook",
-			},
-			"filters": []interface{}{},
-			"output":  map[string]interface{}{"type": "httpRequest"},
+		"name":    "test-webhook",
+		"version": "1.0.0",
+		"input": map[string]interface{}{
+			"type": "webhook",
+			"path": "/webhook",
 		},
+		"filters": []interface{}{},
+		"output":  map[string]interface{}{"type": "httpRequest"},
 	}
 
 	pipeline, err := ConvertToPipeline(data)
@@ -438,12 +399,10 @@ func TestConvertToPipeline_WebhookWithoutSchedule(t *testing.T) {
 func TestConvertToPipeline_UsesNameAsID(t *testing.T) {
 	// When id is not specified, name should be used as ID
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "my-connector",
-			"version": "1.0.0",
-			"input":   map[string]interface{}{"type": "httpPolling"},
-			"output":  map[string]interface{}{"type": "httpRequest"},
-		},
+		"name":    "my-connector",
+		"version": "1.0.0",
+		"input":   map[string]interface{}{"type": "httpPolling"},
+		"output":  map[string]interface{}{"type": "httpRequest"},
 	}
 
 	pipeline, err := ConvertToPipeline(data)
@@ -459,13 +418,11 @@ func TestConvertToPipeline_UsesNameAsID(t *testing.T) {
 func TestConvertToPipeline_ExplicitID(t *testing.T) {
 	// When id is specified, it should override name as ID
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"id":      "explicit-id",
-			"name":    "my-connector",
-			"version": "1.0.0",
-			"input":   map[string]interface{}{"type": "httpPolling"},
-			"output":  map[string]interface{}{"type": "httpRequest"},
-		},
+		"id":      "explicit-id",
+		"name":    "my-connector",
+		"version": "1.0.0",
+		"input":   map[string]interface{}{"type": "httpPolling"},
+		"output":  map[string]interface{}{"type": "httpRequest"},
 	}
 
 	pipeline, err := ConvertToPipeline(data)
@@ -478,36 +435,33 @@ func TestConvertToPipeline_ExplicitID(t *testing.T) {
 	}
 }
 
-func TestConvertToPipeline_WithAndWithoutSchemaVersion(t *testing.T) {
-	// Test that schemaVersion is optional and ignored (backward compatibility)
+func TestConvertToPipeline_WithAndWithoutVersion(t *testing.T) {
+	// Test that version is optional
 	tests := []struct {
-		name string
-		data map[string]interface{}
+		name            string
+		data            map[string]interface{}
+		expectedVersion string
 	}{
 		{
-			name: "without schemaVersion",
+			name: "without version",
 			data: map[string]interface{}{
-				"connector": map[string]interface{}{
-					"name":    "test-no-schema-version",
-					"version": "1.0.0",
-					"input":   map[string]interface{}{"type": "httpPolling"},
-					"filters": []interface{}{},
-					"output":  map[string]interface{}{"type": "httpRequest"},
-				},
+				"name":    "test-no-version",
+				"input":   map[string]interface{}{"type": "httpPolling"},
+				"filters": []interface{}{},
+				"output":  map[string]interface{}{"type": "httpRequest"},
 			},
+			expectedVersion: "",
 		},
 		{
-			name: "with schemaVersion",
+			name: "with version",
 			data: map[string]interface{}{
-				"schemaVersion": "1.1.0",
-				"connector": map[string]interface{}{
-					"name":    "test-with-schema-version",
-					"version": "1.0.0",
-					"input":   map[string]interface{}{"type": "httpPolling"},
-					"filters": []interface{}{},
-					"output":  map[string]interface{}{"type": "httpRequest"},
-				},
+				"name":    "test-with-version",
+				"version": "1.0.0",
+				"input":   map[string]interface{}{"type": "httpPolling"},
+				"filters": []interface{}{},
+				"output":  map[string]interface{}{"type": "httpRequest"},
 			},
+			expectedVersion: "1.0.0",
 		},
 	}
 
@@ -523,7 +477,10 @@ func TestConvertToPipeline_WithAndWithoutSchemaVersion(t *testing.T) {
 				t.Fatal("ConvertToPipeline() returned nil pipeline")
 			}
 
-			// Both cases should produce valid pipelines
+			if pipeline.Version != tt.expectedVersion {
+				t.Errorf("Expected version '%s', got '%s'", tt.expectedVersion, pipeline.Version)
+			}
+
 			if pipeline.Input == nil {
 				t.Error("Expected non-nil input")
 			}

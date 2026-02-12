@@ -40,7 +40,6 @@ connector:
       Content-Type: "application/soap+xml; charset=utf-8"
       SOAPAction: "http://example.com/UserService/CreateUser"
 
-    request:
-      bodyFrom: "record"
-      # SOAP/XML template file
-      bodyTemplateFile: "./templates/create-user.xml"
+    requestMode: "single"
+    # SOAP/XML template file
+    bodyTemplateFile: "./templates/create-user.xml"

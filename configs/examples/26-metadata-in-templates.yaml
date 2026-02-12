@@ -44,18 +44,23 @@ connector:
     endpoint: https://target.example.com/api/{{_metadata.region}}/orders
     method: POST
     
-    request:
-      bodyFrom: record
-      # _metadata field is always excluded from request body automatically
-      # The request body will NOT contain _metadata
-      
-      # Query parameters from metadata
-      queryFromRecord:
-        priority: _metadata.priority
-        
-      # Headers from metadata
-      headersFromRecord:
-        X-Region: _metadata.region
-        X-Priority: _metadata.priority
-        X-Received-At: _metadata.timing.received_at
-        X-TTL: _metadata.timing.ttl_seconds
+    requestMode: single
+    # _metadata field is always excluded from request body automatically
+    # The request body will NOT contain _metadata
+
+    keys:
+      - field: _metadata.priority
+        paramType: query
+        paramName: priority
+      - field: _metadata.region
+        paramType: header
+        paramName: X-Region
+      - field: _metadata.priority
+        paramType: header
+        paramName: X-Priority
+      - field: _metadata.timing.received_at
+        paramType: header
+        paramName: X-Received-At
+      - field: _metadata.timing.ttl_seconds
+        paramType: header
+        paramName: X-TTL

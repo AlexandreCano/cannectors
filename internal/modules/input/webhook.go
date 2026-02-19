@@ -171,10 +171,11 @@ func extractWebhookListenAddress(cfg map[string]interface{}) string {
 }
 
 func extractWebhookTimeout(cfg map[string]interface{}) time.Duration {
-	if timeoutVal, ok := cfg["timeout"].(float64); ok && timeoutVal > 0 {
-		return time.Duration(timeoutVal * float64(time.Second))
+	timeoutMs := 0
+	if ms, ok := cfg["timeoutMs"].(float64); ok && ms > 0 {
+		timeoutMs = int(ms)
 	}
-	return defaultReadTimeout
+	return connector.GetTimeoutDuration(timeoutMs, defaultReadTimeout)
 }
 
 func extractWebhookDataField(cfg map[string]interface{}) string {

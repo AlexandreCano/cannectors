@@ -92,10 +92,10 @@ type ConditionConfig struct {
 	OnFalse string `json:"onFalse,omitempty"`
 	// OnError specifies error handling mode: "fail" (default), "skip", "log"
 	OnError string `json:"onError,omitempty"`
-	// Then contains a nested filter module configuration (optional)
-	Then *NestedModuleConfig `json:"then,omitempty"`
-	// Else contains a nested filter module configuration (optional)
-	Else *NestedModuleConfig `json:"else,omitempty"`
+	// Then contains nested filter module configurations to execute when condition is true (optional)
+	Then []*NestedModuleConfig `json:"then,omitempty"`
+	// Else contains nested filter module configurations to execute when condition is false (optional)
+	Else []*NestedModuleConfig `json:"else,omitempty"`
 }
 
 // NestedModuleConfig represents a nested filter module configuration.
@@ -104,26 +104,26 @@ type NestedModuleConfig struct {
 	Config   map[string]interface{} `json:"config,omitempty"`
 	Mappings []FieldMapping         `json:"mappings,omitempty"`
 	// For nested conditions
-	Expression string              `json:"expression,omitempty"`
-	Lang       string              `json:"lang,omitempty"`
-	OnTrue     string              `json:"onTrue,omitempty"`
-	OnFalse    string              `json:"onFalse,omitempty"`
-	OnError    string              `json:"onError,omitempty"`
-	Then       *NestedModuleConfig `json:"then,omitempty"`
-	Else       *NestedModuleConfig `json:"else,omitempty"`
+	Expression string                `json:"expression,omitempty"`
+	Lang       string                `json:"lang,omitempty"`
+	OnTrue     string                `json:"onTrue,omitempty"`
+	OnFalse    string                `json:"onFalse,omitempty"`
+	OnError    string                `json:"onError,omitempty"`
+	Then       []*NestedModuleConfig `json:"then,omitempty"`
+	Else       []*NestedModuleConfig `json:"else,omitempty"`
 }
 
 // ConditionModule implements conditional filtering and routing.
 // It evaluates expressions against input records and routes/filters accordingly.
 type ConditionModule struct {
-	expression string
-	lang       string
-	onTrue     string
-	onFalse    string
-	onError    string
-	program    *vm.Program
-	thenModule Module
-	elseModule Module
+	expression  string
+	lang        string
+	onTrue      string
+	onFalse     string
+	onError     string
+	program     *vm.Program
+	thenModules []Module
+	elseModules []Module
 }
 
 // ConditionError carries structured context for condition evaluation failures.
@@ -206,22 +206,22 @@ func newConditionFromConfigWithDepth(config ConditionConfig, depth int) (*Condit
 	}
 
 	// Create nested modules
-	thenModule, elseModule, err := createNestedModules(config.Then, config.Else, depth+1)
+	thenModules, elseModules, err := createNestedModules(config.Then, config.Else, depth+1)
 	if err != nil {
 		return nil, fmt.Errorf("creating nested modules: %w", err)
 	}
 
-	logModuleInitialization(config.Expression, lang, onTrue, onFalse, onError, thenModule, elseModule)
+	logModuleInitialization(config.Expression, lang, onTrue, onFalse, onError, thenModules, elseModules)
 
 	return &ConditionModule{
-		expression: expression,
-		lang:       lang,
-		onTrue:     onTrue,
-		onFalse:    onFalse,
-		onError:    onError,
-		program:    program,
-		thenModule: thenModule,
-		elseModule: elseModule,
+		expression:  expression,
+		lang:        lang,
+		onTrue:      onTrue,
+		onFalse:     onFalse,
+		onError:     onError,
+		program:     program,
+		thenModules: thenModules,
+		elseModules: elseModules,
 	}, nil
 }
 
@@ -292,37 +292,44 @@ func compileExpression(expression string) (*vm.Program, error) {
 }
 
 // createNestedModules creates then and else nested modules with depth tracking.
-func createNestedModules(thenConfig, elseConfig *NestedModuleConfig, depth int) (Module, Module, error) {
-	var thenModule, elseModule Module
-	var err error
+func createNestedModules(thenConfigs, elseConfigs []*NestedModuleConfig, depth int) ([]Module, []Module, error) {
+	var thenModules, elseModules []Module
 
-	if thenConfig != nil {
-		thenModule, err = createNestedModuleWithDepth(thenConfig, depth)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create 'then' module: %w", err)
+	for i, cfg := range thenConfigs {
+		if cfg == nil {
+			continue
 		}
+		m, err := createNestedModuleWithDepth(cfg, depth)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create 'then' module at index %d: %w", i, err)
+		}
+		thenModules = append(thenModules, m)
 	}
 
-	if elseConfig != nil {
-		elseModule, err = createNestedModuleWithDepth(elseConfig, depth)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create 'else' module: %w", err)
+	for i, cfg := range elseConfigs {
+		if cfg == nil {
+			continue
 		}
+		m, err := createNestedModuleWithDepth(cfg, depth)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create 'else' module at index %d: %w", i, err)
+		}
+		elseModules = append(elseModules, m)
 	}
 
-	return thenModule, elseModule, nil
+	return thenModules, elseModules, nil
 }
 
 // logModuleInitialization logs the initialization of a condition module.
-func logModuleInitialization(expression, lang, onTrue, onFalse, onError string, thenModule, elseModule Module) {
+func logModuleInitialization(expression, lang, onTrue, onFalse, onError string, thenModules, elseModules []Module) {
 	logger.Debug("condition module initialized",
 		slog.String("expression", expression),
 		slog.String("lang", lang),
 		slog.String("on_true", onTrue),
 		slog.String("on_false", onFalse),
 		slog.String("on_error", onError),
-		slog.Bool("has_then", thenModule != nil),
-		slog.Bool("has_else", elseModule != nil),
+		slog.Int("then_count", len(thenModules)),
+		slog.Int("else_count", len(elseModules)),
 	)
 }
 
@@ -392,8 +399,7 @@ func createNestedModuleWithDepth(config *NestedModuleConfig, depth int) (Module,
 		}
 		return module, nil
 	default:
-		// Unknown type - return stub
-		return NewStub(config.Type, depth), nil
+		return nil, fmt.Errorf("unknown filter module type %q in nested config", config.Type)
 	}
 }
 
@@ -470,8 +476,8 @@ func (c *ConditionModule) Process(ctx context.Context, records []map[string]inte
 		slog.String("expression", c.expression),
 		slog.Int("input_records", inputCount),
 		slog.String("on_error", c.onError),
-		slog.Bool("has_then", c.thenModule != nil),
-		slog.Bool("has_else", c.elseModule != nil),
+		slog.Bool("has_then", len(c.thenModules) > 0),
+		slog.Bool("has_else", len(c.elseModules) > 0),
 	)
 
 	result := make([]map[string]interface{}, 0, len(records))
@@ -562,30 +568,54 @@ func (c *ConditionModule) Process(ctx context.Context, records []map[string]inte
 // processConditionResult handles the result of condition evaluation for a single record.
 func (c *ConditionModule) processConditionResult(ctx context.Context, conditionTrue bool, record map[string]interface{}) ([]map[string]interface{}, error) {
 	if conditionTrue {
-		// Condition is true
-		if c.thenModule != nil {
-			// Execute 'then' module
-			return c.thenModule.Process(ctx, []map[string]interface{}{record})
+		if len(c.thenModules) > 0 {
+			return c.runNestedModules(ctx, c.thenModules, record)
 		}
-		// Apply onTrue behavior
 		if c.onTrue == OnConditionContinue {
 			return []map[string]interface{}{record}, nil
 		}
-		// onTrue == "skip" - filter out the record
 		return []map[string]interface{}{}, nil
 	}
 
-	// Condition is false
-	if c.elseModule != nil {
-		// Execute 'else' module
-		return c.elseModule.Process(ctx, []map[string]interface{}{record})
+	if len(c.elseModules) > 0 {
+		return c.runNestedModules(ctx, c.elseModules, record)
 	}
-	// Apply onFalse behavior
 	if c.onFalse == OnConditionContinue {
 		return []map[string]interface{}{record}, nil
 	}
-	// onFalse == "skip" (default) - filter out the record
 	return []map[string]interface{}{}, nil
+}
+
+// runNestedModules executes a chain of nested filter modules in sequence.
+// When onError is "skip" or "log", a module error does not stop the chain:
+// subsequent modules receive the records from before the failed module.
+func (c *ConditionModule) runNestedModules(ctx context.Context, modules []Module, record map[string]interface{}) ([]map[string]interface{}, error) {
+	records := []map[string]interface{}{record}
+	for _, m := range modules {
+		processed, err := m.Process(ctx, records)
+		if err != nil {
+			switch c.onError {
+			case OnErrorSkip:
+				logger.Warn("skipping nested module error, continuing chain",
+					slog.String("error", err.Error()),
+				)
+				// Keep records from before this module and continue
+			case OnErrorLog:
+				logger.Error("nested module error, continuing chain",
+					slog.String("error", err.Error()),
+				)
+				// Keep records from before this module and continue
+			default:
+				return nil, err
+			}
+		} else {
+			records = processed
+		}
+		if len(records) == 0 {
+			return records, nil
+		}
+	}
+	return records, nil
 }
 
 // toBool converts a value to boolean.

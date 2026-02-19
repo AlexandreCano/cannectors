@@ -134,10 +134,7 @@ func NewDatabaseInputFromConfig(cfg *connector.ModuleConfig) (*DatabaseInput, er
 	}
 
 	// Set timeout
-	timeout := defaultDatabaseTimeout
-	if config.TimeoutMs > 0 {
-		timeout = time.Duration(config.TimeoutMs) * time.Millisecond
-	}
+	timeout := connector.GetTimeoutDuration(config.TimeoutMs, defaultDatabaseTimeout)
 
 	// Create database config
 	dbConfig := database.Config{
@@ -374,7 +371,7 @@ func (d *DatabaseInput) replaceLastRunTimestamp(query string, args []interface{}
 
 	placeholder := database.FormatPlaceholder(d.driver, len(args)+1)
 	query = strings.ReplaceAll(query, LastRunTimestampPlaceholder, placeholder)
-	args = append(args, timestamp)
+	args = append(args, timestamp.Format(time.RFC3339))
 
 	return query, args
 }
@@ -390,7 +387,7 @@ func (d *DatabaseInput) replaceIncrementalParameters(query string, args []interf
 		placeholder := ":" + d.config.Incremental.TimestampParam
 		paramPlaceholder := database.FormatPlaceholder(d.driver, len(args)+1)
 		query = strings.ReplaceAll(query, placeholder, paramPlaceholder)
-		args = append(args, *d.lastState.LastTimestamp)
+		args = append(args, d.lastState.LastTimestamp.Format(time.RFC3339))
 	}
 
 	// Replace ID parameter if configured

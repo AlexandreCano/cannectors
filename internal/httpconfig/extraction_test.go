@@ -79,11 +79,11 @@ func TestExtractBaseConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "legacy timeout in seconds",
+			name: "timeoutMs only",
 			config: &connector.ModuleConfig{
 				Config: map[string]interface{}{
-					"endpoint": "https://api.example.com",
-					"timeout":  float64(10), // 10 seconds
+					"endpoint":  "https://api.example.com",
+					"timeoutMs": float64(10000),
 				},
 			},
 			want: BaseConfig{
@@ -105,44 +105,6 @@ func TestExtractBaseConfig(t *testing.T) {
 			}
 			if got.TimeoutMs != tt.want.TimeoutMs {
 				t.Errorf("TimeoutMs = %v, want %v", got.TimeoutMs, tt.want.TimeoutMs)
-			}
-		})
-	}
-}
-
-func TestExtractDynamicParamsConfig(t *testing.T) {
-	tests := []struct {
-		name   string
-		config map[string]interface{}
-		want   DynamicParamsConfig
-	}{
-		{
-			name:   "nil config",
-			config: nil,
-			want: DynamicParamsConfig{
-				QueryParams: map[string]string{},
-			},
-		},
-		{
-			name: "query params",
-			config: map[string]interface{}{
-				"queryParams": map[string]interface{}{
-					"format": "json",
-				},
-			},
-			want: DynamicParamsConfig{
-				QueryParams: map[string]string{
-					"format": "json",
-				},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := ExtractDynamicParamsConfig(tt.config)
-			if len(got.QueryParams) != len(tt.want.QueryParams) {
-				t.Errorf("QueryParams length = %v, want %v", len(got.QueryParams), len(tt.want.QueryParams))
 			}
 		})
 	}

@@ -220,8 +220,8 @@ func TestHTTPPolling_Fetch_ConfigurableTimeout(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
 		Config: map[string]interface{}{
-			"endpoint": server.URL,
-			"timeout":  float64(0.1), // 100ms timeout
+			"endpoint":  server.URL,
+			"timeoutMs": float64(100), // 100ms timeout
 		},
 	}
 
@@ -866,8 +866,8 @@ func TestHTTPPolling_Fetch_NetworkError(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
 		Config: map[string]interface{}{
-			"endpoint": "http://localhost:99999/nonexistent",
-			"timeout":  float64(1),
+			"endpoint":  "http://localhost:99999/nonexistent",
+			"timeoutMs": float64(1000),
 		},
 	}
 

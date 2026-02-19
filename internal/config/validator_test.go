@@ -200,3 +200,87 @@ func TestValidateConfig_ConnectorLevelSchedule_Rejected(t *testing.T) {
 		t.Error("expected at least one validation error")
 	}
 }
+
+func TestValidateConfig_ActionableMessages(t *testing.T) {
+	tests := []struct {
+		name       string
+		data       map[string]interface{}
+		wantType   string
+		wantSubstr string
+	}{
+		{
+			name: "missing required field shows property name",
+			data: map[string]interface{}{
+				"name":   "test",
+				"input":  map[string]interface{}{"type": "httpPolling", "endpoint": "https://example.com", "schedule": "* * * * *"},
+				"output": map[string]interface{}{"type": "httpRequest", "endpoint": "https://example.com", "method": "POST"},
+				// missing "filters"
+			},
+			wantType:   "required",
+			wantSubstr: "filters",
+		},
+		{
+			name: "wrong type shows expected and actual",
+			data: map[string]interface{}{
+				"name":    123, // should be string
+				"input":   map[string]interface{}{"type": "httpPolling", "endpoint": "https://example.com", "schedule": "* * * * *"},
+				"filters": []interface{}{},
+				"output":  map[string]interface{}{"type": "httpRequest", "endpoint": "https://example.com", "method": "POST"},
+			},
+			wantType:   "type",
+			wantSubstr: "string",
+		},
+		{
+			name: "additional property shows property name",
+			data: map[string]interface{}{
+				"name":     "test",
+				"schedule": "* * * * *", // not allowed at root
+				"input":    map[string]interface{}{"type": "httpPolling", "endpoint": "https://example.com", "schedule": "* * * * *"},
+				"filters":  []interface{}{},
+				"output":   map[string]interface{}{"type": "httpRequest", "endpoint": "https://example.com", "method": "POST"},
+			},
+			wantType:   "additionalProperties",
+			wantSubstr: "schedule",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ValidateConfig(tt.data)
+			if result.Valid {
+				t.Fatal("expected validation to fail")
+			}
+
+			found := false
+			for _, err := range result.Errors {
+				if err.Type == tt.wantType && strings.Contains(err.Message, tt.wantSubstr) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("expected error of type %q containing %q, got: %v", tt.wantType, tt.wantSubstr, result.Errors)
+			}
+		})
+	}
+}
+
+func TestFormatInstanceLocation_ReadablePaths(t *testing.T) {
+	tests := []struct {
+		loc  []string
+		want string
+	}{
+		{nil, "/"},
+		{[]string{"input"}, "input"},
+		{[]string{"filters", "0", "type"}, "filters[0].type"},
+		{[]string{"output", "endpoint"}, "output.endpoint"},
+		{[]string{"filters", "2", "mappings", "0"}, "filters[2].mappings[0]"},
+	}
+
+	for _, tt := range tests {
+		got := formatInstanceLocation(tt.loc)
+		if got != tt.want {
+			t.Errorf("formatInstanceLocation(%v) = %q, want %q", tt.loc, got, tt.want)
+		}
+	}
+}

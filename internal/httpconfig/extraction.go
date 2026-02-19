@@ -45,16 +45,6 @@ func ExtractBodyTemplateConfig(config map[string]interface{}) BodyTemplateConfig
 	return btc
 }
 
-// ExtractDynamicParamsConfig extracts DynamicParamsConfig from a config map.
-func ExtractDynamicParamsConfig(config map[string]interface{}) DynamicParamsConfig {
-	dpc := DynamicParamsConfig{}
-	if config == nil {
-		return dpc
-	}
-	dpc.QueryParams = ExtractStringMap(config, "queryParams")
-	return dpc
-}
-
 // ExtractKeysConfig extracts keys configuration from a config map.
 func ExtractKeysConfig(config map[string]interface{}) []KeyConfig {
 	if config == nil {
@@ -138,9 +128,7 @@ func ExtractStringMap(config map[string]interface{}, key string) map[string]stri
 }
 
 // extractTimeoutMs extracts timeout in milliseconds from config.
-// Supports both "timeoutMs" (preferred) and legacy "timeout" in seconds.
 func extractTimeoutMs(config map[string]interface{}) int {
-	// Try timeoutMs first (preferred)
 	if ms, ok := config["timeoutMs"]; ok {
 		switch v := ms.(type) {
 		case float64:
@@ -154,19 +142,12 @@ func extractTimeoutMs(config map[string]interface{}) int {
 		}
 	}
 
-	// Legacy: timeout in seconds
-	if timeoutVal, ok := config["timeout"].(float64); ok && timeoutVal > 0 {
-		return int(timeoutVal * 1000)
-	}
-
 	return 0 // Use default
 }
 
 // GetTimeoutDuration returns the timeout as a time.Duration.
 // If timeoutMs is 0 or negative, returns the provided default.
+// Delegates to connector.GetTimeoutDuration.
 func GetTimeoutDuration(timeoutMs int, defaultTimeout time.Duration) time.Duration {
-	if timeoutMs > 0 {
-		return time.Duration(timeoutMs) * time.Millisecond
-	}
-	return defaultTimeout
+	return connector.GetTimeoutDuration(timeoutMs, defaultTimeout)
 }

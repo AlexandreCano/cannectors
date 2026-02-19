@@ -577,7 +577,7 @@ func TestResolveErrorHandlingConfig(t *testing.T) {
 				TimeoutMs: 30000,
 				Retry: RetryConfig{
 					MaxAttempts:          5,
-					DelayMs:              0, // DelayMs=0 but MaxAttempts>0, so retry overrides
+					DelayMs:              0, // 0 = not set, inherits from defaults
 					BackoffMultiplier:    2.0,
 					MaxDelayMs:           30000,
 					RetryableStatusCodes: []int{429, 500, 502, 503, 504},
@@ -599,7 +599,7 @@ func TestResolveErrorHandlingConfig(t *testing.T) {
 				TimeoutMs: 30000,
 				Retry: RetryConfig{
 					MaxAttempts:          5,
-					DelayMs:              0,
+					DelayMs:              1000, // inherited from defaults (module=0)
 					BackoffMultiplier:    2.0,
 					MaxDelayMs:           30000,
 					RetryableStatusCodes: []int{429, 500, 502, 503, 504},
@@ -614,9 +614,9 @@ func TestResolveErrorHandlingConfig(t *testing.T) {
 				Retry: RetryConfig{
 					MaxAttempts:          0,
 					DelayMs:              0,
-					BackoffMultiplier:    2.0,
-					MaxDelayMs:           30000,
-					RetryableStatusCodes: []int{429, 500, 502, 503, 504},
+					BackoffMultiplier:    0, // 0 = not set, inherits from defaults
+					MaxDelayMs:           0, // 0 = not set, inherits from defaults
+					RetryableStatusCodes: nil,
 				},
 			},
 			defaultsConfig: &ErrorHandlingConfig{

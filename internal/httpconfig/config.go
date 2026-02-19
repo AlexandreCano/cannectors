@@ -53,13 +53,6 @@ type KeyConfig struct {
 	ParamName string `json:"paramName"`
 }
 
-// DynamicParamsConfig contains configuration for dynamic request parameters.
-// Deprecated: Use KeyConfig/keys instead. Kept for queryParams (static) extraction.
-type DynamicParamsConfig struct {
-	// QueryParams are static query parameters.
-	QueryParams map[string]string `json:"queryParams,omitempty"`
-}
-
 // ErrorHandlingConfig contains error handling configuration.
 type ErrorHandlingConfig struct {
 	// OnError specifies error handling mode: "fail" (default), "skip", "log".

@@ -15,6 +15,7 @@ import (
 	"github.com/cannectors/runtime/internal/database"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/pathutil"
+	"github.com/cannectors/runtime/internal/template"
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
@@ -101,11 +102,13 @@ func NewDatabaseOutputFromConfig(cfg *connector.ModuleConfig) (*DatabaseOutput, 
 		return nil, ErrDatabaseOutputMissingQuery
 	}
 
-	// Set defaults
-	timeout := defaultDatabaseOutputTimeout
-	if config.TimeoutMs > 0 {
-		timeout = time.Duration(config.TimeoutMs) * time.Millisecond
+	// Validate template syntax in query
+	if err := template.ValidateSyntax(config.Query); err != nil {
+		return nil, fmt.Errorf("invalid template syntax in database output query: %w", err)
 	}
+
+	// Set defaults
+	timeout := connector.GetTimeoutDuration(config.TimeoutMs, defaultDatabaseOutputTimeout)
 
 	if config.OnError == "" {
 		config.OnError = "fail"

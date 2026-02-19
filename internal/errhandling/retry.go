@@ -206,15 +206,6 @@ func (c RetryConfig) IsStatusCodeRetryable(statusCode int) bool {
 	return false
 }
 
-// isZeroRetryConfig checks if a RetryConfig should be considered unset.
-// A RetryConfig is considered unset if MaxAttempts=0 AND DelayMs=0,
-// regardless of other fields (BackoffMultiplier, MaxDelayMs, RetryableStatusCodes).
-// This matches the test expectation that partial configs with MaxAttempts=0 and DelayMs=0
-// should fall back to defaults.
-func isZeroRetryConfig(c RetryConfig) bool {
-	return c.MaxAttempts == 0 && c.DelayMs == 0
-}
-
 // ParseRetryConfig parses retry configuration from a map.
 // Missing values are filled with defaults.
 func ParseRetryConfig(m map[string]interface{}) RetryConfig {
@@ -279,21 +270,60 @@ func ParseErrorHandlingConfig(m map[string]interface{}) ErrorHandlingConfig {
 	return config
 }
 
-// ResolveRetryConfig resolves the effective retry configuration.
-// Precedence: module config > defaults config > default values.
+// ResolveRetryConfig resolves the effective retry configuration with granular merge.
+// Precedence: module config fields > defaults config fields > default values.
 func ResolveRetryConfig(moduleRetry, defaultsRetry *RetryConfig) RetryConfig {
-	// Module config takes precedence
-	if moduleRetry != nil {
-		return *moduleRetry
-	}
+	base := DefaultRetryConfig()
 
-	// Defaults config is next
+	// Apply defaults first
 	if defaultsRetry != nil {
-		return *defaultsRetry
+		if defaultsRetry.MaxAttempts != 0 {
+			base.MaxAttempts = defaultsRetry.MaxAttempts
+		}
+		if defaultsRetry.DelayMs != 0 {
+			base.DelayMs = defaultsRetry.DelayMs
+		}
+		if defaultsRetry.BackoffMultiplier != 0 {
+			base.BackoffMultiplier = defaultsRetry.BackoffMultiplier
+		}
+		if defaultsRetry.MaxDelayMs != 0 {
+			base.MaxDelayMs = defaultsRetry.MaxDelayMs
+		}
+		if len(defaultsRetry.RetryableStatusCodes) > 0 {
+			base.RetryableStatusCodes = defaultsRetry.RetryableStatusCodes
+		}
+		base.UseRetryAfterHeader = defaultsRetry.UseRetryAfterHeader
+		if defaultsRetry.RetryHintFromBody != "" {
+			base.RetryHintFromBody = defaultsRetry.RetryHintFromBody
+		}
 	}
 
-	// Return default values
-	return DefaultRetryConfig()
+	// Apply module config (overrides defaults per field)
+	if moduleRetry != nil {
+		if moduleRetry.MaxAttempts != 0 {
+			base.MaxAttempts = moduleRetry.MaxAttempts
+		}
+		if moduleRetry.DelayMs != 0 {
+			base.DelayMs = moduleRetry.DelayMs
+		}
+		if moduleRetry.BackoffMultiplier != 0 {
+			base.BackoffMultiplier = moduleRetry.BackoffMultiplier
+		}
+		if moduleRetry.MaxDelayMs != 0 {
+			base.MaxDelayMs = moduleRetry.MaxDelayMs
+		}
+		if len(moduleRetry.RetryableStatusCodes) > 0 {
+			base.RetryableStatusCodes = moduleRetry.RetryableStatusCodes
+		}
+		if moduleRetry.UseRetryAfterHeader {
+			base.UseRetryAfterHeader = true
+		}
+		if moduleRetry.RetryHintFromBody != "" {
+			base.RetryHintFromBody = moduleRetry.RetryHintFromBody
+		}
+	}
+
+	return base
 }
 
 // ResolveErrorHandlingConfig resolves the effective error handling configuration.
@@ -312,7 +342,7 @@ func ResolveErrorHandlingConfig(moduleConfig, defaultsConfig *ErrorHandlingConfi
 		result.Retry = defaultsConfig.Retry
 	}
 
-	// Apply module config (overrides defaults)
+	// Apply module config (overrides defaults per field)
 	if moduleConfig != nil {
 		if moduleConfig.OnError != "" {
 			result.OnError = moduleConfig.OnError
@@ -320,10 +350,8 @@ func ResolveErrorHandlingConfig(moduleConfig, defaultsConfig *ErrorHandlingConfi
 		if moduleConfig.TimeoutMs > 0 {
 			result.TimeoutMs = moduleConfig.TimeoutMs
 		}
-		// Module retry completely overrides if set (non-zero RetryConfig)
-		if !isZeroRetryConfig(moduleConfig.Retry) {
-			result.Retry = moduleConfig.Retry
-		}
+		// Granular merge for retry
+		result.Retry = ResolveRetryConfig(&moduleConfig.Retry, &result.Retry)
 	}
 
 	return result

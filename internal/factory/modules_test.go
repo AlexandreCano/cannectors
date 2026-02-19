@@ -5,9 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cannectors/runtime/internal/modules/filter"
 	"github.com/cannectors/runtime/internal/modules/input"
-	"github.com/cannectors/runtime/internal/modules/output"
 	"github.com/cannectors/runtime/internal/registry"
 	"github.com/cannectors/runtime/pkg/connector"
 )
@@ -44,19 +42,11 @@ func TestCreateInputModule_Unknown(t *testing.T) {
 	}
 
 	got, err := CreateInputModule(cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("expected error for unknown type")
 	}
-	if got == nil {
-		t.Fatal("expected stub module for unknown type")
-	}
-
-	stub, ok := got.(*input.StubModule)
-	if !ok {
-		t.Fatal("expected StubModule for unknown type")
-	}
-	if stub.ModuleType != "unknownType" {
-		t.Errorf("expected type 'unknownType', got %s", stub.ModuleType)
+	if got != nil {
+		t.Fatal("expected nil module for unknown type")
 	}
 }
 
@@ -97,19 +87,11 @@ func TestCreateFilterModules_Unknown(t *testing.T) {
 	}
 
 	got, err := CreateFilterModules(cfgs)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("expected error for unknown filter type")
 	}
-	if len(got) != 1 {
-		t.Fatalf("expected 1 module, got %d", len(got))
-	}
-
-	stub, ok := got[0].(*filter.StubModule)
-	if !ok {
-		t.Fatal("expected StubModule for unknown type")
-	}
-	if stub.ModuleType != "unknownFilter" {
-		t.Errorf("expected type 'unknownFilter', got %s", stub.ModuleType)
+	if got != nil {
+		t.Fatal("expected nil modules for unknown type")
 	}
 }
 
@@ -151,19 +133,11 @@ func TestCreateOutputModule_Unknown(t *testing.T) {
 	}
 
 	got, err := CreateOutputModule(cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("expected error for unknown output type")
 	}
-	if got == nil {
-		t.Fatal("expected stub module for unknown type")
-	}
-
-	stub, ok := got.(*output.StubModule)
-	if !ok {
-		t.Fatal("expected StubModule for unknown type")
-	}
-	if stub.ModuleType != "unknownOutput" {
-		t.Errorf("expected type 'unknownOutput', got %s", stub.ModuleType)
+	if got != nil {
+		t.Fatal("expected nil module for unknown type")
 	}
 }
 
@@ -330,10 +304,10 @@ func TestParseConditionConfig_NestedThen(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if got.Then == nil {
+	if got.Then == nil || len(got.Then) == 0 {
 		t.Fatal("expected 'then' to be parsed")
 	}
-	if got.Then.Type != "mapping" {
-		t.Errorf("expected then type 'mapping', got %s", got.Then.Type)
+	if got.Then[0].Type != "mapping" {
+		t.Errorf("expected then type 'mapping', got %s", got.Then[0].Type)
 	}
 }

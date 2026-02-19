@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/pathutil"
 	"github.com/cannectors/runtime/internal/template"
+	"github.com/cannectors/runtime/pkg/connector"
 )
 
 // Default configuration values for sql_call module
@@ -109,9 +111,21 @@ func NewSQLCallFromConfig(config SQLCallConfig) (*SQLCallModule, error) {
 		return nil, err
 	}
 
+	// Validate template syntax in query
+	if err := template.ValidateSyntax(config.Query); err != nil {
+		return nil, fmt.Errorf("invalid template syntax in sql_call query: %w", err)
+	}
+
+	// Validate cache key template syntax if configured
+	if config.Cache.Key != "" {
+		if err := template.ValidateSyntax(config.Cache.Key); err != nil {
+			return nil, fmt.Errorf("invalid template syntax in sql_call cache key: %w", err)
+		}
+	}
+
 	mergeStrategy := resolveMergeStrategy(config.MergeStrategy)
 	onError := resolveOnError(config.OnError)
-	timeout := resolveTimeout(config.TimeoutMs)
+	timeout := connector.GetTimeoutDuration(config.TimeoutMs, defaultSQLCallTimeout)
 
 	db, driver, err := createDatabaseConnection(config, timeout)
 	if err != nil {
@@ -184,14 +198,6 @@ func resolveOnError(onError string) string {
 		return defaultSQLCallOnError
 	}
 	return onError
-}
-
-// resolveTimeout returns the timeout duration with default if not specified.
-func resolveTimeout(timeoutMs int) time.Duration {
-	if timeoutMs > 0 {
-		return time.Duration(timeoutMs) * time.Millisecond
-	}
-	return defaultSQLCallTimeout
 }
 
 // createDatabaseConnection creates and opens a database connection.
@@ -612,17 +618,30 @@ func (m *SQLCallModule) buildCacheKey(record map[string]interface{}) string {
 		return m.templateEvaluator.Evaluate(m.cacheKey, record)
 	}
 
-	// Default: use query + JSON-encoded record for deterministic key
-	// JSON marshal ensures deterministic key ordering regardless of map iteration order
-	recordJSON, err := json.Marshal(record)
+	// Default: use query + sorted JSON-encoded record for deterministic key
+	recordJSON, err := marshalDeterministic(record)
 	if err != nil {
-		// Fallback to query only if JSON marshal fails (shouldn't happen with valid maps)
 		logger.Warn("failed to marshal record for cache key, using query only",
 			slog.String("error", err.Error()),
 		)
 		return m.query
 	}
 	return fmt.Sprintf("%s::%s", m.query, string(recordJSON))
+}
+
+// marshalDeterministic produces deterministic JSON by sorting map keys.
+func marshalDeterministic(record map[string]interface{}) ([]byte, error) {
+	keys := make([]string, 0, len(record))
+	for k := range record {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	ordered := make([]interface{}, 0, len(keys)*2)
+	for _, k := range keys {
+		ordered = append(ordered, k, record[k])
+	}
+	return json.Marshal(ordered)
 }
 
 // mergeData merges query result into the record.

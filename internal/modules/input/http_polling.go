@@ -89,6 +89,9 @@ type HTTPPolling struct {
 	retryConfig   errhandling.RetryConfig
 	lastRetryInfo *connector.RetryInfo
 
+	// OAuth2 token invalidation tracking
+	oauth2Invalidated bool
+
 	// State persistence
 	persistenceConfig *persistence.StatePersistenceConfig
 	stateStore        *persistence.StateStore
@@ -104,7 +107,7 @@ type HTTPPolling struct {
 //
 // Optional config fields:
 //   - headers: Custom HTTP headers (map[string]string)
-//   - timeoutMs: Request timeout in milliseconds (default 30000). Also accepts timeout in seconds (float64) for backward compatibility.
+//   - timeoutMs: Request timeout in milliseconds (default 30000)
 //   - dataField: JSON field containing the array of records (for object responses)
 //   - pagination: Pagination configuration (map with type, params, etc.)
 func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, error) {
@@ -174,7 +177,7 @@ func extractEndpoint(config *connector.ModuleConfig) (string, error) {
 	return base.Endpoint, nil
 }
 
-// extractTimeout extracts timeout from config (timeoutMs or legacy timeout in seconds).
+// extractTimeout extracts timeout from config.
 func extractTimeout(config *connector.ModuleConfig) time.Duration {
 	base := httpconfig.ExtractBaseConfig(config)
 	return httpconfig.GetTimeoutDuration(base.TimeoutMs, defaultTimeout)
@@ -292,6 +295,9 @@ func parsePaginationConfig(config map[string]interface{}) *PaginationConfig {
 //   - error: Any error encountered during fetching
 func (h *HTTPPolling) Fetch(ctx context.Context) ([]map[string]interface{}, error) {
 	startTime := time.Now()
+
+	// Reset OAuth2 invalidation tracking for this fetch cycle
+	h.oauth2Invalidated = false
 
 	// Build endpoint with state-based query params if applicable
 	endpoint, err := h.buildEndpointWithState(h.endpoint)
@@ -497,6 +503,8 @@ func truncateBodyForLogging(body []byte) string {
 }
 
 // handleOAuth2Unauthorized handles 401 with OAuth2 by invalidating the token.
+// Only invalidates once per Fetch call to prevent infinite retry loops
+// when credentials are permanently invalid.
 func (h *HTTPPolling) handleOAuth2Unauthorized(resp *http.Response, endpoint string) {
 	if resp.StatusCode != http.StatusUnauthorized || h.authHandler == nil {
 		return
@@ -507,10 +515,18 @@ func (h *HTTPPolling) handleOAuth2Unauthorized(resp *http.Response, endpoint str
 		return
 	}
 
+	if h.oauth2Invalidated {
+		logger.Warn("401 Unauthorized persists after OAuth2 token refresh, likely invalid credentials",
+			"endpoint", endpoint,
+		)
+		return
+	}
+
 	logger.Debug("401 Unauthorized with OAuth2, invalidating cached token",
 		"endpoint", endpoint,
 	)
 	invalidator.InvalidateToken()
+	h.oauth2Invalidated = true
 }
 
 // logRequestStart logs the start of an HTTP request.

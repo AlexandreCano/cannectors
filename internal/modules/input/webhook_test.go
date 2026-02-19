@@ -188,7 +188,7 @@ func TestWebhook_Start_UsesConfiguredTimeout(t *testing.T) {
 		Config: map[string]interface{}{
 			"endpoint":      "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
-			"timeout":       2.0,
+			"timeoutMs":     2000.0,
 		},
 	}
 

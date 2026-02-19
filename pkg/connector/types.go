@@ -79,14 +79,7 @@ type ModuleDefaults struct {
 }
 
 // ErrorHandling defines how errors should be handled during execution.
-// Supports legacy (retryCount, retryDelay) and full retryConfig (maxAttempts, delayMs, etc.).
 type ErrorHandling struct {
-	// RetryCount is the number of retry attempts (legacy; prefer Retry.MaxAttempts)
-	RetryCount int `json:"retryCount"`
-
-	// RetryDelay is the delay between retries in milliseconds (legacy; prefer Retry.DelayMs)
-	RetryDelay int `json:"retryDelay"`
-
 	// OnError specifies the action on error: "fail", "skip", "log"
 	OnError string `json:"onError"`
 

@@ -47,9 +47,8 @@ func CreateInputModule(cfg *connector.ModuleConfig) (input.Module, error) {
 		return constructor(cfg)
 	}
 
-	// Fallback to stub for unknown types
-	endpoint, _ := cfg.Config["endpoint"].(string)
-	return input.NewStub(cfg.Type, endpoint), nil
+	// Error for unregistered types
+	return nil, fmt.Errorf("unknown input module type %q: supported types are %v", cfg.Type, registry.ListInputTypes())
 }
 
 // CreateFilterModules creates filter module instances from configuration.
@@ -84,8 +83,8 @@ func createSingleFilterModule(cfg connector.ModuleConfig, index int) (filter.Mod
 		return constructor(cfg, index)
 	}
 
-	// Fallback to stub for unknown types
-	return filter.NewStub(cfg.Type, index), nil
+	// Error for unregistered types
+	return nil, fmt.Errorf("unknown filter module type %q at index %d: supported types are %v", cfg.Type, index, registry.ListFilterTypes())
 }
 
 // createConditionFilterModule creates a condition filter module from configuration.
@@ -116,10 +115,8 @@ func CreateOutputModule(cfg *connector.ModuleConfig) (output.Module, error) {
 		return constructor(cfg)
 	}
 
-	// Fallback to stub for unknown types
-	endpoint, _ := cfg.Config["endpoint"].(string)
-	method, _ := cfg.Config["method"].(string)
-	return output.NewStub(cfg.Type, endpoint, method), nil
+	// Error for unregistered types
+	return nil, fmt.Errorf("unknown output module type %q: supported types are %v", cfg.Type, registry.ListOutputTypes())
 }
 
 // ParseConditionConfig parses a condition filter configuration from raw config.
@@ -145,23 +142,52 @@ func ParseConditionConfig(cfg map[string]interface{}) (filter.ConditionConfig, e
 		condConfig.OnError = onError
 	}
 
-	if thenCfg, ok := cfg["then"].(map[string]interface{}); ok {
-		nestedModule, err := parseNestedModuleConfig(thenCfg)
+	if thenRaw, ok := cfg["then"]; ok {
+		thenModules, err := parseNestedModuleArray(thenRaw)
 		if err != nil {
 			return condConfig, fmt.Errorf("invalid 'then' config: %w", err)
 		}
-		condConfig.Then = nestedModule
+		condConfig.Then = thenModules
 	}
 
-	if elseCfg, ok := cfg["else"].(map[string]interface{}); ok {
-		nestedModule, err := parseNestedModuleConfig(elseCfg)
+	if elseRaw, ok := cfg["else"]; ok {
+		elseModules, err := parseNestedModuleArray(elseRaw)
 		if err != nil {
 			return condConfig, fmt.Errorf("invalid 'else' config: %w", err)
 		}
-		condConfig.Else = nestedModule
+		condConfig.Else = elseModules
 	}
 
 	return condConfig, nil
+}
+
+// parseNestedModuleArray parses a then/else config value which can be either
+// a single object (backward compat) or an array of objects (schema-conformant).
+func parseNestedModuleArray(raw interface{}) ([]*filter.NestedModuleConfig, error) {
+	switch v := raw.(type) {
+	case []interface{}:
+		var modules []*filter.NestedModuleConfig
+		for i, item := range v {
+			itemMap, ok := item.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("item at index %d is not an object", i)
+			}
+			m, err := parseNestedModuleConfig(itemMap)
+			if err != nil {
+				return nil, fmt.Errorf("item at index %d: %w", i, err)
+			}
+			modules = append(modules, m)
+		}
+		return modules, nil
+	case map[string]interface{}:
+		m, err := parseNestedModuleConfig(v)
+		if err != nil {
+			return nil, err
+		}
+		return []*filter.NestedModuleConfig{m}, nil
+	default:
+		return nil, fmt.Errorf("expected array or object, got %T", raw)
+	}
 }
 
 // parseNestedModuleConfig parses a nested module configuration.
@@ -269,22 +295,67 @@ func parseConditionNestedConfig(cfg map[string]interface{}, nestedConfig *filter
 
 // parseNestedThenElse parses the then and else nested modules recursively.
 func parseNestedThenElse(cfg map[string]interface{}, nestedConfig *filter.NestedModuleConfig, nestedConfigMap map[string]interface{}, depth int) error {
-	if thenCfg, ok := getMapFromMaps(cfg, nestedConfigMap, "then"); ok {
-		then, err := parseNestedConfig(thenCfg, depth+1)
+	// Try primary then fallback for "then"
+	thenRaw := getRawFromMaps(cfg, nestedConfigMap, "then")
+	if thenRaw != nil {
+		thenModules, err := parseNestedArrayRecursive(thenRaw, depth)
 		if err != nil {
 			return err
 		}
-		nestedConfig.Then = then
+		nestedConfig.Then = thenModules
 	}
 
-	if elseCfg, ok := getMapFromMaps(cfg, nestedConfigMap, "else"); ok {
-		elseModule, err := parseNestedConfig(elseCfg, depth+1)
+	// Try primary then fallback for "else"
+	elseRaw := getRawFromMaps(cfg, nestedConfigMap, "else")
+	if elseRaw != nil {
+		elseModules, err := parseNestedArrayRecursive(elseRaw, depth)
 		if err != nil {
 			return err
 		}
-		nestedConfig.Else = elseModule
+		nestedConfig.Else = elseModules
 	}
 
+	return nil
+}
+
+// parseNestedArrayRecursive parses a then/else value (array or single object) with depth tracking.
+func parseNestedArrayRecursive(raw interface{}, depth int) ([]*filter.NestedModuleConfig, error) {
+	switch v := raw.(type) {
+	case []interface{}:
+		var modules []*filter.NestedModuleConfig
+		for i, item := range v {
+			itemMap, ok := item.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("item at index %d is not an object", i)
+			}
+			m, err := parseNestedConfig(itemMap, depth+1)
+			if err != nil {
+				return nil, fmt.Errorf("item at index %d: %w", i, err)
+			}
+			modules = append(modules, m)
+		}
+		return modules, nil
+	case map[string]interface{}:
+		m, err := parseNestedConfig(v, depth+1)
+		if err != nil {
+			return nil, err
+		}
+		return []*filter.NestedModuleConfig{m}, nil
+	default:
+		return nil, fmt.Errorf("expected array or object, got %T", raw)
+	}
+}
+
+// getRawFromMaps retrieves any value from primary or fallback map without type assertion.
+func getRawFromMaps(primary, fallback map[string]interface{}, key string) interface{} {
+	if val, ok := primary[key]; ok {
+		return val
+	}
+	if fallback != nil {
+		if val, ok := fallback[key]; ok {
+			return val
+		}
+	}
 	return nil
 }
 
@@ -384,6 +455,6 @@ func CreateFilterModuleFromNestedConfig(nestedConfig *filter.NestedModuleConfig,
 		return constructor(moduleConfig, index)
 	}
 
-	// Fallback to stub for unknown types
-	return filter.NewStub(moduleConfig.Type, index), nil
+	// Error for unregistered types
+	return nil, fmt.Errorf("unknown filter module type %q in nested config: supported types are %v", moduleConfig.Type, registry.ListFilterTypes())
 }

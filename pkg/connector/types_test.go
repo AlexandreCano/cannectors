@@ -38,9 +38,11 @@ func TestPipelineJSONSerialization(t *testing.T) {
 			},
 		},
 		ErrorHandling: &connector.ErrorHandling{
-			RetryCount: 3,
-			RetryDelay: 5000,
-			OnError:    "notify",
+			OnError: "notify",
+			Retry: map[string]interface{}{
+				"maxAttempts": 3,
+				"delayMs":     5000,
+			},
 		},
 		Enabled:   true,
 		CreatedAt: time.Now(),
@@ -78,8 +80,8 @@ func TestPipelineJSONSerialization(t *testing.T) {
 	if decoded.Output.Type != pipeline.Output.Type {
 		t.Errorf("Expected Output.Type %q, got %q", pipeline.Output.Type, decoded.Output.Type)
 	}
-	if decoded.ErrorHandling.RetryCount != pipeline.ErrorHandling.RetryCount {
-		t.Errorf("Expected RetryCount %d, got %d", pipeline.ErrorHandling.RetryCount, decoded.ErrorHandling.RetryCount)
+	if decoded.ErrorHandling.OnError != pipeline.ErrorHandling.OnError {
+		t.Errorf("Expected OnError %q, got %q", pipeline.ErrorHandling.OnError, decoded.ErrorHandling.OnError)
 	}
 }
 

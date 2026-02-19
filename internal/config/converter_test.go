@@ -241,9 +241,11 @@ func TestConvertToPipeline_WithErrorHandling(t *testing.T) {
 		"input":   map[string]interface{}{"type": "httpPolling"},
 		"output":  map[string]interface{}{"type": "httpRequest"},
 		"errorHandling": map[string]interface{}{
-			"retryCount": float64(3),
-			"retryDelay": float64(1000),
-			"onError":    "stop",
+			"retry": map[string]interface{}{
+				"maxAttempts": float64(3),
+				"delayMs":     float64(1000),
+			},
+			"onError": "stop",
 		},
 	}
 
@@ -259,12 +261,16 @@ func TestConvertToPipeline_WithErrorHandling(t *testing.T) {
 		t.Fatal("Expected non-nil error handling")
 	}
 
-	if pipeline.ErrorHandling.RetryCount != 3 {
-		t.Errorf("Expected retryCount 3, got %d", pipeline.ErrorHandling.RetryCount)
+	if pipeline.ErrorHandling.Retry == nil {
+		t.Fatal("Expected non-nil retry config")
 	}
 
-	if pipeline.ErrorHandling.RetryDelay != 1000 {
-		t.Errorf("Expected retryDelay 1000, got %d", pipeline.ErrorHandling.RetryDelay)
+	if v, ok := pipeline.ErrorHandling.Retry["maxAttempts"].(float64); !ok || int(v) != 3 {
+		t.Errorf("Expected retry maxAttempts 3, got %v", pipeline.ErrorHandling.Retry["maxAttempts"])
+	}
+
+	if v, ok := pipeline.ErrorHandling.Retry["delayMs"].(float64); !ok || int(v) != 1000 {
+		t.Errorf("Expected retry delayMs 1000, got %v", pipeline.ErrorHandling.Retry["delayMs"])
 	}
 
 	if pipeline.ErrorHandling.OnError != "stop" {
@@ -486,6 +492,79 @@ func TestConvertToPipeline_WithAndWithoutVersion(t *testing.T) {
 			}
 			if pipeline.Output == nil {
 				t.Error("Expected non-nil output")
+			}
+		})
+	}
+}
+
+func TestResolveRetry_GranularMerge(t *testing.T) {
+	tests := []struct {
+		name        string
+		moduleRetry map[string]interface{}
+		defaults    map[string]interface{}
+		wantKeys    map[string]interface{}
+	}{
+		{
+			name:        "module overrides single field, inherits rest from defaults",
+			moduleRetry: map[string]interface{}{"maxAttempts": float64(5)},
+			defaults:    map[string]interface{}{"maxAttempts": float64(3), "delayMs": float64(2000), "backoffMultiplier": float64(1.5)},
+			wantKeys:    map[string]interface{}{"maxAttempts": float64(5), "delayMs": float64(2000), "backoffMultiplier": float64(1.5)},
+		},
+		{
+			name:        "no module retry uses defaults",
+			moduleRetry: nil,
+			defaults:    map[string]interface{}{"maxAttempts": float64(3), "delayMs": float64(1000)},
+			wantKeys:    map[string]interface{}{"maxAttempts": float64(3), "delayMs": float64(1000)},
+		},
+		{
+			name:        "module retry without defaults uses module only",
+			moduleRetry: map[string]interface{}{"maxAttempts": float64(5)},
+			defaults:    nil,
+			wantKeys:    map[string]interface{}{"maxAttempts": float64(5)},
+		},
+		{
+			name:        "module overrides multiple fields",
+			moduleRetry: map[string]interface{}{"maxAttempts": float64(7), "delayMs": float64(500)},
+			defaults:    map[string]interface{}{"maxAttempts": float64(3), "delayMs": float64(2000), "backoffMultiplier": float64(2.0)},
+			wantKeys:    map[string]interface{}{"maxAttempts": float64(7), "delayMs": float64(500), "backoffMultiplier": float64(2.0)},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := map[string]interface{}{
+				"name":  "test-retry-merge",
+				"input": map[string]interface{}{"type": "httpPolling"},
+				"output": map[string]interface{}{
+					"type": "httpRequest",
+				},
+			}
+			if tt.moduleRetry != nil {
+				data["input"].(map[string]interface{})["retry"] = tt.moduleRetry
+			}
+			if tt.defaults != nil {
+				data["defaults"] = map[string]interface{}{"retry": tt.defaults}
+			}
+
+			pipeline, err := ConvertToPipeline(data)
+			if err != nil {
+				t.Fatalf("ConvertToPipeline() error = %v", err)
+			}
+
+			retryMap, ok := pipeline.Input.Config["retry"].(map[string]interface{})
+			if !ok && tt.wantKeys != nil {
+				t.Fatal("Expected retry config in input module")
+			}
+
+			for k, want := range tt.wantKeys {
+				got, exists := retryMap[k]
+				if !exists {
+					t.Errorf("Missing key %q in merged retry config", k)
+					continue
+				}
+				if got != want {
+					t.Errorf("retry[%q] = %v, want %v", k, got, want)
+				}
 			}
 		})
 	}

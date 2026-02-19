@@ -215,34 +215,14 @@ func getIntFromMap(m map[string]interface{}, key string) (int, bool) {
 }
 
 // convertErrorHandling converts a raw error handling configuration map to ErrorHandling.
-// Supports legacy (retryCount, retryDelay) and full retryConfig (retry.*, timeoutMs).
 func convertErrorHandling(data map[string]interface{}) *connector.ErrorHandling {
 	eh := &connector.ErrorHandling{}
 
-	parseLegacyRetryFields(eh, data)
 	eh.OnError = extractStringField(data, "onError")
 	eh.TimeoutMs = extractTimeoutMs(data)
 	eh.Retry = extractRetryConfig(data)
 
-	// Build Retry from legacy fields if no retry object
-	if eh.Retry == nil && (eh.RetryCount > 0 || eh.RetryDelay > 0) {
-		eh.Retry = buildRetryFromLegacy(eh, data)
-	}
-
 	return eh
-}
-
-// parseLegacyRetryFields extracts legacy retry fields (retryCount, retryDelay, retryDelayMs).
-func parseLegacyRetryFields(eh *connector.ErrorHandling, data map[string]interface{}) {
-	if v, ok := data["retryCount"].(float64); ok {
-		eh.RetryCount = int(v)
-	}
-	if v, ok := data["retryDelay"].(float64); ok {
-		eh.RetryDelay = int(v)
-	}
-	if v, ok := data["retryDelayMs"].(float64); ok {
-		eh.RetryDelay = int(v)
-	}
 }
 
 // extractStringField extracts a string value from a map.
@@ -267,26 +247,6 @@ func extractRetryConfig(data map[string]interface{}) map[string]interface{} {
 		return r
 	}
 	return nil
-}
-
-// buildRetryFromLegacy builds a retry config map from legacy fields.
-func buildRetryFromLegacy(eh *connector.ErrorHandling, data map[string]interface{}) map[string]interface{} {
-	retry := map[string]interface{}{
-		"maxAttempts": eh.RetryCount,
-		"delayMs":     eh.RetryDelay,
-	}
-
-	if b, ok := data["backoffMultiplier"].(float64); ok {
-		retry["backoffMultiplier"] = b
-	}
-	if v, ok := getIntFromMap(data, "maxRetryDelayMs"); ok {
-		retry["maxDelayMs"] = v
-	}
-	if c, ok := data["retryableStatusCodes"].([]interface{}); ok {
-		retry["retryableStatusCodes"] = c
-	}
-
-	return retry
 }
 
 // applyErrorHandling resolves retry/onError/timeoutMs per module (module > defaults > errorHandling)
@@ -324,15 +284,9 @@ func resolveOnError(m *connector.ModuleConfig, defaults *connector.ModuleDefault
 }
 
 // resolveTimeout resolves timeoutMs with precedence: module > defaults > errorHandling.
-// Also handles legacy "timeout" in seconds (converts to milliseconds).
 func resolveTimeout(m *connector.ModuleConfig, defaults *connector.ModuleDefaults, eh *connector.ErrorHandling) {
-	// Check module config first (timeoutMs or legacy timeout)
 	if v, ok := getIntFromMap(m.Config, "timeoutMs"); ok && v > 0 {
 		m.Config["timeoutMs"] = v
-		return
-	}
-	if v, ok := getIntFromMap(m.Config, "timeout"); ok && v > 0 {
-		m.Config["timeoutMs"] = v * 1000
 		return
 	}
 	// Fall back to defaults
@@ -346,17 +300,38 @@ func resolveTimeout(m *connector.ModuleConfig, defaults *connector.ModuleDefault
 	}
 }
 
-// resolveRetry resolves retry config with precedence: module > defaults > errorHandling.
+// resolveRetry resolves retry config with granular merge.
+// Base config is resolved from defaults > errorHandling, then module fields override individually.
 func resolveRetry(m *connector.ModuleConfig, defaults *connector.ModuleDefaults, eh *connector.ErrorHandling) {
-	if r, ok := m.Config["retry"].(map[string]interface{}); ok && len(r) > 0 {
-		m.Config["retry"] = r
-		return
-	}
+	moduleRetry, hasModule := m.Config["retry"].(map[string]interface{})
+
+	// Determine base retry config (defaults > errorHandling)
+	var base map[string]interface{}
 	if defaults != nil && len(defaults.Retry) > 0 {
-		m.Config["retry"] = defaults.Retry
+		base = defaults.Retry
+	} else if eh != nil && len(eh.Retry) > 0 {
+		base = eh.Retry
+	}
+
+	if !hasModule || len(moduleRetry) == 0 {
+		if base != nil {
+			m.Config["retry"] = base
+		}
 		return
 	}
-	if eh != nil && len(eh.Retry) > 0 {
-		m.Config["retry"] = eh.Retry
+
+	if base == nil {
+		m.Config["retry"] = moduleRetry
+		return
 	}
+
+	// Merge: start with a copy of base, then overlay module fields
+	merged := make(map[string]interface{}, len(base))
+	for k, v := range base {
+		merged[k] = v
+	}
+	for k, v := range moduleRetry {
+		merged[k] = v
+	}
+	m.Config["retry"] = merged
 }

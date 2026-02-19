@@ -833,13 +833,13 @@ func TestConditionTypeMismatchHandling(t *testing.T) {
 func TestConditionNestedThenMapping(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
-		Then: &NestedModuleConfig{
+		Then: []*NestedModuleConfig{{
 			Type: "mapping",
 			Mappings: []FieldMapping{
 				{Source: strPtrCond("name"), Target: "displayName"},
 				{Source: strPtrCond("id"), Target: "userId"},
 			},
-		},
+		}},
 		OnFalse: "skip",
 	})
 	if err != nil {
@@ -881,13 +881,13 @@ func TestConditionNestedElseMapping(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
 		OnTrue:     "skip", // Skip active records
-		Else: &NestedModuleConfig{
+		Else: []*NestedModuleConfig{{
 			Type: "mapping",
 			Mappings: []FieldMapping{
 				{Source: strPtrCond("id"), Target: "inactiveUserId"},
 				{Source: strPtrCond("status"), Target: "currentStatus"},
 			},
-		},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -920,20 +920,20 @@ func TestConditionNestedElseMapping(t *testing.T) {
 func TestConditionNestedBothThenElse(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "tier == 'premium'",
-		Then: &NestedModuleConfig{
+		Then: []*NestedModuleConfig{{
 			Type: "mapping",
 			Mappings: []FieldMapping{
 				{Source: strPtrCond("id"), Target: "premiumId"},
 				{Source: strPtrCond("name"), Target: "premiumName"},
 			},
-		},
-		Else: &NestedModuleConfig{
+		}},
+		Else: []*NestedModuleConfig{{
 			Type: "mapping",
 			Mappings: []FieldMapping{
 				{Source: strPtrCond("id"), Target: "standardId"},
 				{Source: strPtrCond("name"), Target: "standardName"},
 			},
-		},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -974,12 +974,12 @@ func TestConditionNestedBothThenElse(t *testing.T) {
 func TestConditionNestedRecursiveCondition(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "level > 0",
-		Then: &NestedModuleConfig{
+		Then: []*NestedModuleConfig{{
 			Type:       "condition",
 			Expression: "level > 5",
 			OnTrue:     "continue", // High level: keep
 			OnFalse:    "skip",     // Medium level: skip
-		},
+		}},
 		OnFalse: "skip", // Level 0: skip
 	})
 	if err != nil {
@@ -1012,12 +1012,12 @@ func TestConditionNestedPriorityOverOnTrue(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
 		OnTrue:     "skip", // This should be ignored when 'then' is present
-		Then: &NestedModuleConfig{
+		Then: []*NestedModuleConfig{{
 			Type: "mapping",
 			Mappings: []FieldMapping{
 				{Source: strPtrCond("id"), Target: "mappedId"},
 			},
-		},
+		}},
 		OnFalse: "skip",
 	})
 	if err != nil {
@@ -1049,12 +1049,12 @@ func TestConditionNestedPriorityOverOnFalse(t *testing.T) {
 		Expression: "status == 'active'",
 		OnTrue:     "skip",
 		OnFalse:    "skip", // This should be ignored when 'else' is present
-		Else: &NestedModuleConfig{
+		Else: []*NestedModuleConfig{{
 			Type: "mapping",
 			Mappings: []FieldMapping{
 				{Source: strPtrCond("id"), Target: "elseId"},
 			},
-		},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -1084,12 +1084,12 @@ func TestConditionNestedModuleReturnsEmpty(t *testing.T) {
 	// Nested condition that filters out the record
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "level > 0",
-		Then: &NestedModuleConfig{
+		Then: []*NestedModuleConfig{{
 			Type:       "condition",
 			Expression: "level > 100", // This will be false
 			OnTrue:     "continue",
 			OnFalse:    "skip", // Skip the record
-		},
+		}},
 		OnFalse: "skip",
 	})
 	if err != nil {

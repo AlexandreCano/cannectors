@@ -135,9 +135,12 @@
 					"type": "string",
 					"description": "Client secret or env reference (${VAR})."
 				},
-				"scope": {
-					"type": "string",
-					"description": "OAuth2 scope."
+				"scopes": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"description": "OAuth2 scopes."
 				}
 			},
 			"additionalProperties": false

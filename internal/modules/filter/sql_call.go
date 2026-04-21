@@ -10,14 +10,17 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/cannectors/runtime/internal/cache"
 	"github.com/cannectors/runtime/internal/database"
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/pathutil"
 	"github.com/cannectors/runtime/internal/template"
+	"github.com/cannectors/runtime/pkg/connector"
 )
 
 // Default configuration values for sql_call module
@@ -46,43 +49,15 @@ var (
 
 // SQLCallConfig represents the configuration for a sql_call filter module.
 type SQLCallConfig struct {
-	// Connection configuration
-	ConnectionString    string `json:"connectionString"`
-	ConnectionStringRef string `json:"connectionStringRef"`
-	Driver              string `json:"driver"`
-
-	// Query configuration - use query OR queryFile
-	Query     string   `json:"query"`     // SQL query with {{record.field}} templates
-	QueryFile string   `json:"queryFile"` // Path to SQL file with {{record.field}} templates
-	Queries   []string `json:"queries"`   // Multiple queries (executed sequentially)
+	connector.ModuleBase
+	moduleconfig.SQLRequestBase
 
 	// Result handling
 	MergeStrategy string `json:"mergeStrategy"` // "merge", "replace", "append"
-	DataField     string `json:"dataField"`     // Field to extract from result
 	ResultKey     string `json:"resultKey"`     // Key for storing result in "append" mode
 
-	// Error handling
-	OnError string `json:"onError"` // "fail", "skip", "log"
-
 	// Cache configuration
-	Cache SQLCallCacheConfig `json:"cache"`
-
-	// Pool configuration
-	MaxOpenConns    int `json:"maxOpenConns"`
-	MaxIdleConns    int `json:"maxIdleConns"`
-	ConnMaxLifetime int `json:"connMaxLifetimeSeconds"`
-	ConnMaxIdleTime int `json:"connMaxIdleTimeSeconds"`
-
-	// Timeout
-	TimeoutMs int `json:"timeoutMs"`
-}
-
-// SQLCallCacheConfig defines cache configuration for sql_call module.
-type SQLCallCacheConfig struct {
-	Enabled    bool   `json:"enabled"`
-	MaxSize    int    `json:"maxSize"`
-	DefaultTTL int    `json:"defaultTTL"` // in seconds
-	Key        string `json:"key"`        // Cache key template
+	Cache moduleconfig.CacheConfig `json:"cache"`
 }
 
 // SQLCallModule implements a filter that executes SQL queries for enrichment.
@@ -90,9 +65,7 @@ type SQLCallModule struct {
 	db                *sql.DB
 	driver            string
 	query             string
-	queries           []string
 	mergeStrategy     string
-	dataField         string
 	resultKey         string
 	onError           string
 	cache             cache.Cache
@@ -113,9 +86,21 @@ func NewSQLCallFromConfig(config SQLCallConfig) (*SQLCallModule, error) {
 		return nil, err
 	}
 
+	// Validate template syntax in query
+	if err := template.ValidateSyntax(config.Query); err != nil {
+		return nil, fmt.Errorf("invalid template syntax in sql_call query: %w", err)
+	}
+
+	// Validate cache key template syntax if configured
+	if config.Cache.Key != "" {
+		if err := template.ValidateSyntax(config.Cache.Key); err != nil {
+			return nil, fmt.Errorf("invalid template syntax in sql_call cache key: %w", err)
+		}
+	}
+
 	mergeStrategy := resolveMergeStrategy(config.MergeStrategy)
 	onError := resolveOnError(config.OnError)
-	timeout := resolveTimeout(config.TimeoutMs)
+	timeout := connector.GetTimeoutDuration(config.TimeoutMs, defaultSQLCallTimeout)
 
 	db, driver, err := createDatabaseConnection(config, timeout)
 	if err != nil {
@@ -123,15 +108,12 @@ func NewSQLCallFromConfig(config SQLCallConfig) (*SQLCallModule, error) {
 	}
 
 	cache, cacheTTL, cacheEnabled := setupCache(config)
-	queries := buildQueriesList(config)
 
 	module := &SQLCallModule{
 		db:                db,
 		driver:            driver,
 		query:             config.Query,
-		queries:           queries,
 		mergeStrategy:     mergeStrategy,
-		dataField:         config.DataField,
 		resultKey:         config.ResultKey,
 		onError:           onError,
 		cache:             cache,
@@ -142,7 +124,7 @@ func NewSQLCallFromConfig(config SQLCallConfig) (*SQLCallModule, error) {
 		templateEvaluator: template.NewEvaluator(),
 	}
 
-	logSQLCallModuleInitialization(driver, len(queries), mergeStrategy, onError, cacheEnabled, timeout)
+	logSQLCallModuleInitialization(driver, mergeStrategy, onError, cacheEnabled, timeout)
 
 	return module, nil
 }
@@ -152,7 +134,7 @@ func validateSQLCallConfig(config SQLCallConfig) error {
 	if config.ConnectionString == "" && config.ConnectionStringRef == "" {
 		return ErrSQLCallMissingConnection
 	}
-	if config.Query == "" && len(config.Queries) == 0 {
+	if config.Query == "" && config.QueryFile == "" {
 		return ErrSQLCallMissingQuery
 	}
 	return nil
@@ -193,14 +175,6 @@ func resolveOnError(onError string) string {
 	return onError
 }
 
-// resolveTimeout returns the timeout duration with default if not specified.
-func resolveTimeout(timeoutMs int) time.Duration {
-	if timeoutMs > 0 {
-		return time.Duration(timeoutMs) * time.Millisecond
-	}
-	return defaultSQLCallTimeout
-}
-
 // createDatabaseConnection creates and opens a database connection.
 func createDatabaseConnection(config SQLCallConfig, timeout time.Duration) (*sql.DB, string, error) {
 	dbConfig := database.Config{
@@ -209,8 +183,8 @@ func createDatabaseConnection(config SQLCallConfig, timeout time.Duration) (*sql
 		Driver:              config.Driver,
 		MaxOpenConns:        config.MaxOpenConns,
 		MaxIdleConns:        config.MaxIdleConns,
-		ConnMaxLifetime:     time.Duration(config.ConnMaxLifetime) * time.Second,
-		ConnMaxIdleTime:     time.Duration(config.ConnMaxIdleTime) * time.Second,
+		ConnMaxLifetime:     time.Duration(config.ConnMaxLifetimeSeconds) * time.Second,
+		ConnMaxIdleTime:     time.Duration(config.ConnMaxIdleTimeSeconds) * time.Second,
 		ConnectTimeout:      timeout,
 	}
 
@@ -244,135 +218,15 @@ func setupCache(config SQLCallConfig) (cache.Cache, time.Duration, bool) {
 	return lruCache, cacheTTL, true
 }
 
-// buildQueriesList builds the list of queries from config.
-func buildQueriesList(config SQLCallConfig) []string {
-	queries := config.Queries
-	if config.Query != "" {
-		queries = append([]string{config.Query}, queries...)
-	}
-	return queries
-}
-
 // logSQLCallModuleInitialization logs the module initialization details.
-func logSQLCallModuleInitialization(driver string, queryCount int, mergeStrategy, onError string, cacheEnabled bool, timeout time.Duration) {
+func logSQLCallModuleInitialization(driver, mergeStrategy, onError string, cacheEnabled bool, timeout time.Duration) {
 	logger.Debug("sql_call module initialized",
 		slog.String("driver", driver),
-		slog.Int("query_count", queryCount),
 		slog.String("merge_strategy", mergeStrategy),
 		slog.String("on_error", onError),
 		slog.Bool("cache_enabled", cacheEnabled),
 		slog.Duration("timeout", timeout),
 	)
-}
-
-// ParseSQLCallConfig parses sql_call filter configuration from raw config map.
-func ParseSQLCallConfig(cfg map[string]interface{}) (SQLCallConfig, error) {
-	config := SQLCallConfig{}
-
-	parseConnectionSettings(&config, cfg)
-	parseQuerySettings(&config, cfg)
-	parseResultHandlingSettings(&config, cfg)
-	parseErrorHandlingSettings(&config, cfg)
-	parsePoolSettings(&config, cfg)
-	parseCacheSettings(&config, cfg)
-
-	return config, nil
-}
-
-// parseConnectionSettings extracts connection-related settings from config.
-func parseConnectionSettings(config *SQLCallConfig, cfg map[string]interface{}) {
-	if v, ok := cfg["connectionString"].(string); ok {
-		config.ConnectionString = v
-	}
-	if v, ok := cfg["connectionStringRef"].(string); ok {
-		config.ConnectionStringRef = v
-	}
-	if v, ok := cfg["driver"].(string); ok {
-		config.Driver = v
-	}
-}
-
-// parseQuerySettings extracts query-related settings from config.
-func parseQuerySettings(config *SQLCallConfig, cfg map[string]interface{}) {
-	if v, ok := cfg["query"].(string); ok {
-		config.Query = v
-	}
-	if v, ok := cfg["queryFile"].(string); ok {
-		config.QueryFile = v
-	}
-	if v, ok := cfg["queries"].([]interface{}); ok {
-		for _, q := range v {
-			if qs, ok := q.(string); ok {
-				config.Queries = append(config.Queries, qs)
-			}
-		}
-	}
-}
-
-// parseResultHandlingSettings extracts result handling settings from config.
-func parseResultHandlingSettings(config *SQLCallConfig, cfg map[string]interface{}) {
-	if v, ok := cfg["mergeStrategy"].(string); ok {
-		config.MergeStrategy = v
-	}
-	if v, ok := cfg["dataField"].(string); ok {
-		config.DataField = v
-	}
-	if v, ok := cfg["resultKey"].(string); ok {
-		config.ResultKey = v
-	}
-}
-
-// parseErrorHandlingSettings extracts error handling settings from config.
-func parseErrorHandlingSettings(config *SQLCallConfig, cfg map[string]interface{}) {
-	if v, ok := cfg["onError"].(string); ok {
-		config.OnError = v
-	}
-}
-
-// parsePoolSettings extracts connection pool settings from config.
-func parsePoolSettings(config *SQLCallConfig, cfg map[string]interface{}) {
-	if v, ok := cfg["maxOpenConns"].(float64); ok {
-		config.MaxOpenConns = int(v)
-	}
-	if v, ok := cfg["maxIdleConns"].(float64); ok {
-		config.MaxIdleConns = int(v)
-	}
-	if v, ok := cfg["connMaxLifetimeSeconds"].(float64); ok {
-		config.ConnMaxLifetime = int(v)
-	}
-	if v, ok := cfg["connMaxIdleTimeSeconds"].(float64); ok {
-		config.ConnMaxIdleTime = int(v)
-	}
-	if v, ok := cfg["timeoutMs"].(float64); ok {
-		config.TimeoutMs = int(v)
-	}
-}
-
-// parseCacheSettings extracts cache settings from config.
-func parseCacheSettings(config *SQLCallConfig, cfg map[string]interface{}) {
-	if cacheRaw, ok := cfg["cache"].(map[string]interface{}); ok {
-		config.Cache = parseSQLCallCacheConfig(cacheRaw)
-	}
-}
-
-// parseSQLCallCacheConfig parses cache configuration.
-func parseSQLCallCacheConfig(cfg map[string]interface{}) SQLCallCacheConfig {
-	config := SQLCallCacheConfig{}
-
-	if v, ok := cfg["enabled"].(bool); ok {
-		config.Enabled = v
-	}
-	if v, ok := cfg["maxSize"].(float64); ok {
-		config.MaxSize = int(v)
-	}
-	if v, ok := cfg["defaultTTL"].(float64); ok {
-		config.DefaultTTL = int(v)
-	}
-	if v, ok := cfg["key"].(string); ok {
-		config.Key = v
-	}
-
-	return config
 }
 
 // Process executes SQL queries for each input record and enriches them.
@@ -460,7 +314,7 @@ func (m *SQLCallModule) Process(ctx context.Context, records []map[string]interf
 	return result, nil
 }
 
-// processRecord executes SQL queries for a single record.
+// processRecord executes the SQL query for a single record.
 func (m *SQLCallModule) processRecord(ctx context.Context, record map[string]interface{}, recordIdx int) (map[string]interface{}, bool, error) {
 	// Compute cache key once from original record (before any mutations)
 	var cacheKey string
@@ -477,21 +331,10 @@ func (m *SQLCallModule) processRecord(ctx context.Context, record map[string]int
 		}
 	}
 
-	// Execute queries
-	var resultData map[string]interface{}
-	var err error
-	workingRecord := record // Use a copy for intermediate merges
-
-	for i, query := range m.queries {
-		resultData, err = m.executeQuery(ctx, query, workingRecord)
-		if err != nil {
-			return nil, false, fmt.Errorf("query %d failed: %w", i+1, err)
-		}
-
-		// Merge intermediate results for subsequent queries
-		if i < len(m.queries)-1 && resultData != nil {
-			workingRecord = m.mergeData(workingRecord, resultData)
-		}
+	// Execute query
+	resultData, err := m.executeQuery(ctx, m.query, record)
+	if err != nil {
+		return nil, false, err
 	}
 
 	// Cache successful result using original cache key
@@ -537,17 +380,6 @@ func (m *SQLCallModule) executeQuery(ctx context.Context, queryTemplate string, 
 		return make(map[string]interface{}), nil
 	}
 
-	// If dataField is configured, extract from first record
-	if m.dataField != "" && len(records) > 0 {
-		if data, exists := GetNestedValue(records[0], m.dataField); exists {
-			if dataMap, ok := data.(map[string]interface{}); ok {
-				return dataMap, nil
-			}
-		}
-		return records[0], nil
-	}
-
-	// Return first record
 	return records[0], nil
 }
 
@@ -661,17 +493,30 @@ func (m *SQLCallModule) buildCacheKey(record map[string]interface{}) string {
 		return m.templateEvaluator.Evaluate(m.cacheKey, record)
 	}
 
-	// Default: use query + JSON-encoded record for deterministic key
-	// JSON marshal ensures deterministic key ordering regardless of map iteration order
-	recordJSON, err := json.Marshal(record)
+	// Default: use query + sorted JSON-encoded record for deterministic key
+	recordJSON, err := marshalDeterministic(record)
 	if err != nil {
-		// Fallback to query only if JSON marshal fails (shouldn't happen with valid maps)
 		logger.Warn("failed to marshal record for cache key, using query only",
 			slog.String("error", err.Error()),
 		)
 		return m.query
 	}
 	return fmt.Sprintf("%s::%s", m.query, string(recordJSON))
+}
+
+// marshalDeterministic produces deterministic JSON by sorting map keys.
+func marshalDeterministic(record map[string]interface{}) ([]byte, error) {
+	keys := make([]string, 0, len(record))
+	for k := range record {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	ordered := make([]interface{}, 0, len(keys)*2)
+	for _, k := range keys {
+		ordered = append(ordered, k, record[k])
+	}
+	return json.Marshal(ordered)
 }
 
 // mergeData merges query result into the record.

@@ -11,6 +11,7 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -160,13 +161,16 @@ func ValidateCronExpression(expr string) error {
 // GetScheduleFromInput extracts the schedule from the pipeline's input module config.
 // Returns empty string if no schedule is configured or if input/config is nil.
 func GetScheduleFromInput(pipeline *connector.Pipeline) string {
-	if pipeline == nil || pipeline.Input == nil || pipeline.Input.Config == nil {
+	if pipeline == nil || pipeline.Input == nil || pipeline.Input.Raw == nil {
 		return ""
 	}
-	if schedule, ok := pipeline.Input.Config["schedule"].(string); ok {
-		return schedule
+	var cfg struct {
+		Schedule string `json:"schedule"`
 	}
-	return ""
+	if err := json.Unmarshal(pipeline.Input.Raw, &cfg); err != nil {
+		return ""
+	}
+	return cfg.Schedule
 }
 
 // Register adds a pipeline to the scheduler.

@@ -14,7 +14,9 @@ import (
 
 	"github.com/cannectors/runtime/internal/database"
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/pathutil"
+	"github.com/cannectors/runtime/internal/template"
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
@@ -38,29 +40,11 @@ var (
 
 // DatabaseOutputConfig holds configuration for the database output module.
 type DatabaseOutputConfig struct {
-	// Connection configuration
-	ConnectionString    string `json:"connectionString"`
-	ConnectionStringRef string `json:"connectionStringRef"`
-	Driver              string `json:"driver"`
-
-	// SQL Query - use query OR queryFile
-	Query     string `json:"query"`     // Inline SQL query with {{record.field}} templates
-	QueryFile string `json:"queryFile"` // Path to SQL file with {{record.field}} templates
+	connector.ModuleBase
+	moduleconfig.SQLRequestBase
 
 	// Transaction configuration
 	Transaction bool `json:"transaction"` // Wrap operations in transaction
-
-	// Error handling
-	OnError string `json:"onError"` // "fail", "skip", "log"
-
-	// Pool configuration
-	MaxOpenConns    int `json:"maxOpenConns"`
-	MaxIdleConns    int `json:"maxIdleConns"`
-	ConnMaxLifetime int `json:"connMaxLifetimeSeconds"`
-	ConnMaxIdleTime int `json:"connMaxIdleTimeSeconds"`
-
-	// Timeout
-	TimeoutMs int `json:"timeoutMs"`
 }
 
 // DatabaseOutput implements a database output module.
@@ -77,7 +61,10 @@ func NewDatabaseOutputFromConfig(cfg *connector.ModuleConfig) (*DatabaseOutput, 
 		return nil, ErrDatabaseOutputNilConfig
 	}
 
-	config := parseDatabaseOutputConfig(cfg.Config)
+	config, err := moduleconfig.ParseModuleConfig[DatabaseOutputConfig](*cfg)
+	if err != nil {
+		return nil, err
+	}
 
 	// Validate required fields
 	if config.ConnectionString == "" && config.ConnectionStringRef == "" {
@@ -86,8 +73,8 @@ func NewDatabaseOutputFromConfig(cfg *connector.ModuleConfig) (*DatabaseOutput, 
 
 	// Load query from file if queryFile is specified
 	if config.QueryFile != "" && config.Query == "" {
-		if err := pathutil.ValidateFilePath(config.QueryFile); err != nil {
-			return nil, fmt.Errorf("query file path: %w", err)
+		if validateErr := pathutil.ValidateFilePath(config.QueryFile); validateErr != nil {
+			return nil, fmt.Errorf("query file path: %w", validateErr)
 		}
 		queryBytes, readErr := os.ReadFile(config.QueryFile)
 		if readErr != nil {
@@ -101,11 +88,13 @@ func NewDatabaseOutputFromConfig(cfg *connector.ModuleConfig) (*DatabaseOutput, 
 		return nil, ErrDatabaseOutputMissingQuery
 	}
 
-	// Set defaults
-	timeout := defaultDatabaseOutputTimeout
-	if config.TimeoutMs > 0 {
-		timeout = time.Duration(config.TimeoutMs) * time.Millisecond
+	// Validate template syntax in query
+	if syntaxErr := template.ValidateSyntax(config.Query); syntaxErr != nil {
+		return nil, fmt.Errorf("invalid template syntax in database output query: %w", syntaxErr)
 	}
+
+	// Set defaults
+	timeout := connector.GetTimeoutDuration(config.TimeoutMs, defaultDatabaseOutputTimeout)
 
 	if config.OnError == "" {
 		config.OnError = "fail"
@@ -118,8 +107,8 @@ func NewDatabaseOutputFromConfig(cfg *connector.ModuleConfig) (*DatabaseOutput, 
 		Driver:              config.Driver,
 		MaxOpenConns:        config.MaxOpenConns,
 		MaxIdleConns:        config.MaxIdleConns,
-		ConnMaxLifetime:     time.Duration(config.ConnMaxLifetime) * time.Second,
-		ConnMaxIdleTime:     time.Duration(config.ConnMaxIdleTime) * time.Second,
+		ConnMaxLifetime:     time.Duration(config.ConnMaxLifetimeSeconds) * time.Second,
+		ConnMaxIdleTime:     time.Duration(config.ConnMaxIdleTimeSeconds) * time.Second,
 		ConnectTimeout:      timeout,
 	}
 
@@ -143,59 +132,6 @@ func NewDatabaseOutputFromConfig(cfg *connector.ModuleConfig) (*DatabaseOutput, 
 	)
 
 	return module, nil
-}
-
-// parseDatabaseOutputConfig parses the raw configuration map.
-func parseDatabaseOutputConfig(cfg map[string]interface{}) DatabaseOutputConfig {
-	config := DatabaseOutputConfig{}
-
-	// Connection settings
-	if v, ok := cfg["connectionString"].(string); ok {
-		config.ConnectionString = v
-	}
-	if v, ok := cfg["connectionStringRef"].(string); ok {
-		config.ConnectionStringRef = v
-	}
-	if v, ok := cfg["driver"].(string); ok {
-		config.Driver = v
-	}
-
-	// Query settings
-	if v, ok := cfg["query"].(string); ok {
-		config.Query = v
-	}
-	if v, ok := cfg["queryFile"].(string); ok {
-		config.QueryFile = v
-	}
-
-	// Transaction configuration
-	if v, ok := cfg["transaction"].(bool); ok {
-		config.Transaction = v
-	}
-
-	// Error handling
-	if v, ok := cfg["onError"].(string); ok {
-		config.OnError = v
-	}
-
-	// Pool settings
-	if v, ok := cfg["maxOpenConns"].(float64); ok {
-		config.MaxOpenConns = int(v)
-	}
-	if v, ok := cfg["maxIdleConns"].(float64); ok {
-		config.MaxIdleConns = int(v)
-	}
-	if v, ok := cfg["connMaxLifetimeSeconds"].(float64); ok {
-		config.ConnMaxLifetime = int(v)
-	}
-	if v, ok := cfg["connMaxIdleTimeSeconds"].(float64); ok {
-		config.ConnMaxIdleTime = int(v)
-	}
-	if v, ok := cfg["timeoutMs"].(float64); ok {
-		config.TimeoutMs = int(v)
-	}
-
-	return config
 }
 
 // Send writes records to the database.

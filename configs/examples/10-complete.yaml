@@ -73,16 +73,19 @@ connector:
     headers:
       Content-Type: application/json
       X-Source: cannectors
-    request:
-      bodyFrom: record
-      pathParams:
-        orderId: orderId
-      query:
-        sync: "true"
-      queryFromRecord:
-        version: orderId
-      headersFromRecord:
-        X-Customer-ID: customerId
+    requestMode: single
+    keys:
+      - field: orderId
+        paramType: path
+        paramName: orderId
+      - field: orderId
+        paramType: query
+        paramName: version
+      - field: customerId
+        paramType: header
+        paramName: X-Customer-ID
+    queryParams:
+      sync: "true"
     retry:
       maxAttempts: 3
       delayMs: 1000

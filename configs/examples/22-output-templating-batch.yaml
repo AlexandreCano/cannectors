@@ -1,6 +1,6 @@
 # Example: Output Templating in Batch Mode
 #
-# This configuration demonstrates templating in batch mode (bodyFrom: "records").
+# This configuration demonstrates templating in batch mode (requestMode: "batch").
 # In batch mode, template variables in the endpoint, headers, and body template file
 # are evaluated using the FIRST record in the batch.
 #
@@ -43,7 +43,6 @@ connector:
       X-Tenant-ID: "{{record.tenant_id}}"
       X-Batch-ID: "{{record.batch_id}}"
 
-    request:
-      bodyFrom: "records"  # Batch mode - all records in one request
-      # Template file evaluated with first record's data
-      bodyTemplateFile: "./templates/batch-events.json"
+    requestMode: "batch"  # Batch mode - all records in one request
+    # Template file evaluated with first record's data
+    bodyTemplateFile: "./templates/batch-events.json"

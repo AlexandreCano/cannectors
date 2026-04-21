@@ -69,10 +69,10 @@ func (cs *captureServer) getRequests() []capturedRequestData {
 func TestHTTPRequestModule_ImplementsOutputModuleInterface(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": "https://api.example.com/data",
 			"method":   "POST",
-		},
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -92,10 +92,10 @@ func TestHTTPRequestModule_PipelineIntegration_SimpleFlow(t *testing.T) {
 	// Create module (simulating what pipeline executor would do)
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL + "/api/users",
 			"method":   "POST",
-		},
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -144,10 +144,10 @@ func TestHTTPRequestModule_PipelineIntegration_EmptyRecords(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL + "/api/data",
 			"method":   "POST",
-		},
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -182,10 +182,10 @@ func TestHTTPRequestModule_PipelineIntegration_WithFiltering(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL + "/api/filtered",
 			"method":   "PUT",
-		},
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -224,10 +224,10 @@ func TestHTTPRequestModule_PipelineIntegration_MultipleCallsReusesModule(t *test
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL + "/api/data",
 			"method":   "POST",
-		},
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -267,16 +267,16 @@ func TestHTTPRequestModule_PipelineIntegration_WithAuthentication(t *testing.T) 
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL + "/api/secure",
 			"method":   "POST",
-		},
-		Authentication: &connector.AuthConfig{
-			Type: "bearer",
-			Credentials: map[string]string{
-				"token": "pipeline-auth-token",
+			"authentication": map[string]interface{}{
+				"type": "bearer",
+				"credentials": map[string]string{
+					"token": "pipeline-auth-token",
+				},
 			},
-		},
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -313,10 +313,10 @@ func TestHTTPRequestModule_PipelineIntegration_ErrorHandling(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": errorServer.URL + "/api/data",
 			"method":   "POST",
-		},
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -348,10 +348,10 @@ func TestHTTPRequestModule_PipelineIntegration_LargeDataSet(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL + "/api/bulk",
 			"method":   "POST",
-		},
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -399,13 +399,11 @@ func TestHTTPRequestModule_Templating_EndpointWithRecordData(t *testing.T) {
 	// Configure with templated endpoint
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
-			"endpoint": server.URL + "/api/users/{{record.user_id}}/orders",
-			"method":   "POST",
-			"request": map[string]interface{}{
-				"bodyFrom": "record", // Single record mode to evaluate template per record
-			},
-		},
+		Raw: mustJSON(map[string]interface{}{
+			"endpoint":    server.URL + "/api/users/{{record.user_id}}/orders",
+			"method":      "POST",
+			"requestMode": "single", // Single record mode to evaluate template per record
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -452,13 +450,11 @@ func TestHTTPRequestModule_Templating_NestedFieldAccess(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
-			"endpoint": server.URL + "/api/customers/{{record.customer.id}}/profile",
-			"method":   "PUT",
-			"request": map[string]interface{}{
-				"bodyFrom": "record",
-			},
-		},
+		Raw: mustJSON(map[string]interface{}{
+			"endpoint":    server.URL + "/api/customers/{{record.customer.id}}/profile",
+			"method":      "PUT",
+			"requestMode": "single",
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -498,7 +494,7 @@ func TestHTTPRequestModule_Templating_HeadersWithRecordData(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL + "/api/data",
 			"method":   "POST",
 			"headers": map[string]interface{}{
@@ -507,10 +503,8 @@ func TestHTTPRequestModule_Templating_HeadersWithRecordData(t *testing.T) {
 				"X-Static":      "static-value",
 				"X-Correlation": "{{record.correlation_id}}",
 			},
-			"request": map[string]interface{}{
-				"bodyFrom": "record",
-			},
-		},
+			"requestMode": "single",
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -553,13 +547,11 @@ func TestHTTPRequestModule_Templating_MissingFieldWithDefault(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
-			"endpoint": server.URL + `/api/users/{{record.user_id | default: "unknown"}}/data`,
-			"method":   "POST",
-			"request": map[string]interface{}{
-				"bodyFrom": "record",
-			},
-		},
+		Raw: mustJSON(map[string]interface{}{
+			"endpoint":    server.URL + `/api/users/{{record.user_id | default: "unknown"}}/data`,
+			"method":      "POST",
+			"requestMode": "single",
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -594,13 +586,11 @@ func TestHTTPRequestModule_Templating_URLEncoding(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
-			"endpoint": server.URL + "/api/search/{{record.query}}",
-			"method":   "POST",
-			"request": map[string]interface{}{
-				"bodyFrom": "record",
-			},
-		},
+		Raw: mustJSON(map[string]interface{}{
+			"endpoint":    server.URL + "/api/search/{{record.query}}",
+			"method":      "POST",
+			"requestMode": "single",
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -636,13 +626,11 @@ func TestHTTPRequestModule_Templating_BatchModeUsesFirstRecord(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
-			"endpoint": server.URL + "/api/tenants/{{record.tenant_id}}/bulk",
-			"method":   "POST",
-			"request": map[string]interface{}{
-				"bodyFrom": "records", // Batch mode
-			},
-		},
+		Raw: mustJSON(map[string]interface{}{
+			"endpoint":    server.URL + "/api/tenants/{{record.tenant_id}}/bulk",
+			"method":      "POST",
+			"requestMode": "batch", // Batch mode
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -685,13 +673,11 @@ func TestHTTPRequestModule_Templating_ArrayIndex(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
-			"endpoint": server.URL + "/api/items/{{record.items[0].id}}",
-			"method":   "POST",
-			"request": map[string]interface{}{
-				"bodyFrom": "record",
-			},
-		},
+		Raw: mustJSON(map[string]interface{}{
+			"endpoint":    server.URL + "/api/items/{{record.items[0].id}}",
+			"method":      "POST",
+			"requestMode": "single",
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -758,15 +744,16 @@ func TestHTTPRequestModule_Templating_InvalidSyntax(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := &connector.ModuleConfig{
-				Type: "httpRequest",
-				Config: map[string]interface{}{
-					"endpoint": tt.endpoint,
-					"method":   "POST",
-				},
+			rawMap := map[string]interface{}{
+				"endpoint": tt.endpoint,
+				"method":   "POST",
 			}
 			if tt.headers != nil {
-				config.Config["headers"] = tt.headers
+				rawMap["headers"] = tt.headers
+			}
+			config := &connector.ModuleConfig{
+				Type: "httpRequest",
+				Raw:  mustJSON(rawMap),
 			}
 
 			_, err := NewHTTPRequestFromConfig(config)
@@ -804,14 +791,12 @@ func TestHTTPRequestModule_Templating_BodyTemplateFile(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
-			"endpoint": server.URL + "/api/users",
-			"method":   "POST",
-			"request": map[string]interface{}{
-				"bodyFrom":         "record",
-				"bodyTemplateFile": tmpFile.Name(),
-			},
-		},
+		Raw: mustJSON(map[string]interface{}{
+			"endpoint":         server.URL + "/api/users",
+			"method":           "POST",
+			"requestMode":      "single",
+			"bodyTemplateFile": tmpFile.Name(),
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -881,14 +866,12 @@ func TestHTTPRequestModule_Templating_BodyTemplateFileNested(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
-			"endpoint": server.URL + "/api/data",
-			"method":   "POST",
-			"request": map[string]interface{}{
-				"bodyFrom":         "record",
-				"bodyTemplateFile": tmpFile.Name(),
-			},
-		},
+		Raw: mustJSON(map[string]interface{}{
+			"endpoint":         server.URL + "/api/data",
+			"method":           "POST",
+			"requestMode":      "single",
+			"bodyTemplateFile": tmpFile.Name(),
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -958,14 +941,12 @@ func TestHTTPRequestModule_Templating_BodyTemplateFileBatch(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
-			"endpoint": server.URL + "/api/bulk",
-			"method":   "POST",
-			"request": map[string]interface{}{
-				"bodyFrom":         "records", // Batch mode
-				"bodyTemplateFile": tmpFile.Name(),
-			},
-		},
+		Raw: mustJSON(map[string]interface{}{
+			"endpoint":         server.URL + "/api/bulk",
+			"method":           "POST",
+			"requestMode":      "batch", // Batch mode
+			"bodyTemplateFile": tmpFile.Name(),
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -1038,17 +1019,15 @@ func TestHTTPRequestModule_Templating_XMLTemplate(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL + "/soap/api",
 			"method":   "POST",
 			"headers": map[string]interface{}{
 				"Content-Type": "application/soap+xml",
 			},
-			"request": map[string]interface{}{
-				"bodyFrom":         "record",
-				"bodyTemplateFile": tmpFile.Name(),
-			},
-		},
+			"requestMode":      "single",
+			"bodyTemplateFile": tmpFile.Name(),
+		}),
 	}
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -1136,11 +1115,9 @@ func TestNewHTTPRequestFromConfig_InvalidTemplateSyntax(t *testing.T) {
 		{
 			name: "invalid body template file - unmatched brace",
 			config: map[string]interface{}{
-				"endpoint": "https://api.example.com/data",
-				"method":   "POST",
-				"request": map[string]interface{}{
-					"bodyTemplateFile": createInvalidTemplateFile(t, "{{record.id"),
-				},
+				"endpoint":         "https://api.example.com/data",
+				"method":           "POST",
+				"bodyTemplateFile": createInvalidTemplateFile(t, "{{record.id"),
 			},
 			expectError: "invalid template syntax",
 		},
@@ -1149,8 +1126,8 @@ func TestNewHTTPRequestFromConfig_InvalidTemplateSyntax(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := &connector.ModuleConfig{
-				Type:   "httpRequest",
-				Config: tt.config,
+				Type: "httpRequest",
+				Raw:  mustJSON(tt.config),
 			}
 
 			module, err := NewHTTPRequestFromConfig(config)

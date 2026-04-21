@@ -36,14 +36,11 @@ connector:
       # {id} is a placeholder that will be replaced with the key value
       endpoint: https://api.crm.example.com/customers/{id}
 
-      # Key configuration: how to extract the key and use it in the request
-      key:
-        # Extract the key from this field in the record (supports dot notation)
-        field: customerId
-        # How to include the key in the request: query, path, or header
-        paramType: path
-        # The parameter name to use (matches {id} placeholder in endpoint)
-        paramName: id
+      # Keys configuration: how to extract values from records and use them in the request
+      keys:
+        - field: customerId
+          paramType: path
+          paramName: id
 
       # Authentication for the enrichment API
       authentication:
@@ -88,10 +85,10 @@ connector:
     # - type: http_call
     #   name: product-enrichment
     #   endpoint: https://api.products.example.com/search
-    #   key:
-    #     field: productSku
-    #     paramType: query    # Adds ?sku=VALUE to the URL
-    #     paramName: sku
+    #   keys:
+    #     - field: productSku
+    #       paramType: query    # Adds ?sku=VALUE to the URL
+    #       paramName: sku
     #   cache:
     #     maxSize: 500
     #     defaultTTL: 600    # 10 minutes
@@ -100,10 +97,10 @@ connector:
     # - type: http_call
     #   name: tenant-context
     #   endpoint: https://api.tenant.example.com/context
-    #   key:
-    #     field: tenantId
-    #     paramType: header   # Adds X-Tenant-ID: VALUE header
-    #     paramName: X-Tenant-ID
+    #   keys:
+    #     - field: tenantId
+    #       paramType: header   # Adds X-Tenant-ID: VALUE header
+    #       paramName: X-Tenant-ID
     #   onError: skip
 
     # Mapping filter to structure the final output

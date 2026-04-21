@@ -5,7 +5,14 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/cannectors/runtime/pkg/connector"
 )
+
+// strPtr is a helper to create string pointers for test cases.
+func strPtrCond(s string) *string {
+	return &s
+}
 
 // TestConditionBasicEquality tests basic equality comparisons (==, !=)
 func TestConditionBasicEquality(t *testing.T) {
@@ -828,13 +835,13 @@ func TestConditionTypeMismatchHandling(t *testing.T) {
 func TestConditionNestedThenMapping(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
-		Then: &NestedModuleConfig{
+		Then: []*NestedModuleConfig{{
 			Type: "mapping",
 			Mappings: []FieldMapping{
-				{Source: "name", Target: "displayName"},
-				{Source: "id", Target: "userId"},
+				{Source: strPtrCond("name"), Target: "displayName"},
+				{Source: strPtrCond("id"), Target: "userId"},
 			},
-		},
+		}},
 		OnFalse: "skip",
 	})
 	if err != nil {
@@ -862,9 +869,12 @@ func TestConditionNestedThenMapping(t *testing.T) {
 		t.Errorf("expected userId=1, got %v", result[0]["userId"])
 	}
 
-	// Original fields should not be present (mapping only produces target fields)
-	if _, exists := result[0]["name"]; exists {
-		t.Errorf("expected 'name' field to not exist in output")
+	// Original fields should be preserved (in-place mapping)
+	if result[0]["name"] != "Alice" {
+		t.Errorf("expected 'name' field to be preserved, got %v", result[0]["name"])
+	}
+	if result[0]["status"] != "active" {
+		t.Errorf("expected 'status' field to be preserved, got %v", result[0]["status"])
 	}
 }
 
@@ -873,13 +883,13 @@ func TestConditionNestedElseMapping(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
 		OnTrue:     "skip", // Skip active records
-		Else: &NestedModuleConfig{
+		Else: []*NestedModuleConfig{{
 			Type: "mapping",
 			Mappings: []FieldMapping{
-				{Source: "id", Target: "inactiveUserId"},
-				{Source: "status", Target: "currentStatus"},
+				{Source: strPtrCond("id"), Target: "inactiveUserId"},
+				{Source: strPtrCond("status"), Target: "currentStatus"},
 			},
-		},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -912,20 +922,20 @@ func TestConditionNestedElseMapping(t *testing.T) {
 func TestConditionNestedBothThenElse(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "tier == 'premium'",
-		Then: &NestedModuleConfig{
+		Then: []*NestedModuleConfig{{
 			Type: "mapping",
 			Mappings: []FieldMapping{
-				{Source: "id", Target: "premiumId"},
-				{Source: "name", Target: "premiumName"},
+				{Source: strPtrCond("id"), Target: "premiumId"},
+				{Source: strPtrCond("name"), Target: "premiumName"},
 			},
-		},
-		Else: &NestedModuleConfig{
+		}},
+		Else: []*NestedModuleConfig{{
 			Type: "mapping",
 			Mappings: []FieldMapping{
-				{Source: "id", Target: "standardId"},
-				{Source: "name", Target: "standardName"},
+				{Source: strPtrCond("id"), Target: "standardId"},
+				{Source: strPtrCond("name"), Target: "standardName"},
 			},
-		},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -966,12 +976,12 @@ func TestConditionNestedBothThenElse(t *testing.T) {
 func TestConditionNestedRecursiveCondition(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "level > 0",
-		Then: &NestedModuleConfig{
+		Then: []*NestedModuleConfig{{
 			Type:       "condition",
 			Expression: "level > 5",
 			OnTrue:     "continue", // High level: keep
 			OnFalse:    "skip",     // Medium level: skip
-		},
+		}},
 		OnFalse: "skip", // Level 0: skip
 	})
 	if err != nil {
@@ -1004,12 +1014,12 @@ func TestConditionNestedPriorityOverOnTrue(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
 		OnTrue:     "skip", // This should be ignored when 'then' is present
-		Then: &NestedModuleConfig{
+		Then: []*NestedModuleConfig{{
 			Type: "mapping",
 			Mappings: []FieldMapping{
-				{Source: "id", Target: "mappedId"},
+				{Source: strPtrCond("id"), Target: "mappedId"},
 			},
-		},
+		}},
 		OnFalse: "skip",
 	})
 	if err != nil {
@@ -1041,12 +1051,12 @@ func TestConditionNestedPriorityOverOnFalse(t *testing.T) {
 		Expression: "status == 'active'",
 		OnTrue:     "skip",
 		OnFalse:    "skip", // This should be ignored when 'else' is present
-		Else: &NestedModuleConfig{
+		Else: []*NestedModuleConfig{{
 			Type: "mapping",
 			Mappings: []FieldMapping{
-				{Source: "id", Target: "elseId"},
+				{Source: strPtrCond("id"), Target: "elseId"},
 			},
-		},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -1076,12 +1086,12 @@ func TestConditionNestedModuleReturnsEmpty(t *testing.T) {
 	// Nested condition that filters out the record
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "level > 0",
-		Then: &NestedModuleConfig{
+		Then: []*NestedModuleConfig{{
 			Type:       "condition",
 			Expression: "level > 100", // This will be false
 			OnTrue:     "continue",
 			OnFalse:    "skip", // Skip the record
-		},
+		}},
 		OnFalse: "skip",
 	})
 	if err != nil {
@@ -1520,7 +1530,7 @@ func TestConditionOnErrorFail(t *testing.T) {
 	// by using a method on a nil value
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "data.unknownMethod()",
-		OnError:    "fail",
+		ModuleBase: connector.ModuleBase{OnError: "fail"},
 	})
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -1542,7 +1552,7 @@ func TestConditionOnErrorSkip(t *testing.T) {
 	// Using a method call that doesn't exist will cause an evaluation error
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "value.invalidMethod() > 0",
-		OnError:    "skip",
+		ModuleBase: connector.ModuleBase{OnError: "skip"},
 	})
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -1570,7 +1580,7 @@ func TestConditionOnErrorLog(t *testing.T) {
 	// Create a condition that will cause an error when evaluating invalid operations
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "value.invalidMethod() > 0",
-		OnError:    "log",
+		ModuleBase: connector.ModuleBase{OnError: "log"},
 	})
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -1597,7 +1607,7 @@ func TestConditionOnErrorLog(t *testing.T) {
 func TestConditionInvalidOnErrorDefaultsToFail(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "data.unknownMethod()",
-		OnError:    "invalid",
+		ModuleBase: connector.ModuleBase{OnError: "invalid"},
 	})
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -1646,7 +1656,7 @@ func TestConditionErrorDetails(t *testing.T) {
 	// Calling a method on a non-object type will cause an error
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "value.invalidMethod() > 100",
-		OnError:    "fail",
+		ModuleBase: connector.ModuleBase{OnError: "fail"},
 	})
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -1891,8 +1901,8 @@ func TestConditionOutputFormat(t *testing.T) {
 func TestConditionChainWithMapping(t *testing.T) {
 	// First apply mapping
 	mapper, err := NewMappingFromConfig([]FieldMapping{
-		{Source: "status", Target: "currentStatus"},
-		{Source: "amount", Target: "value"},
+		{Source: strPtrCond("status"), Target: "currentStatus"},
+		{Source: strPtrCond("amount"), Target: "value"},
 	}, "fail")
 	if err != nil {
 		t.Fatalf("NewMappingFromConfig() error = %v", err)

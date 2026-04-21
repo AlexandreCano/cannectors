@@ -53,21 +53,13 @@ type oauth2Handler struct {
 
 // newOAuth2Handler creates a new OAuth2 client credentials authentication handler.
 func newOAuth2Handler(config *connector.AuthConfig, httpClient *http.Client) (*oauth2Handler, error) {
-	tokenURL := config.Credentials["tokenUrl"]
-	clientID := config.Credentials["clientId"]
-	clientSecret := config.Credentials["clientSecret"]
-
-	if tokenURL == "" || clientID == "" || clientSecret == "" {
-		return nil, ErrMissingOAuth2Creds
+	var creds connector.CredentialsOAuth2
+	if err := json.Unmarshal(config.Credentials, &creds); err != nil {
+		return nil, fmt.Errorf("invalid oauth2 credentials: %w", err)
 	}
 
-	// Parse optional scopes (comma-separated)
-	var scopes []string
-	if scopeStr := config.Credentials["scopes"]; scopeStr != "" {
-		scopes = strings.Split(scopeStr, ",")
-		for i := range scopes {
-			scopes[i] = strings.TrimSpace(scopes[i])
-		}
+	if creds.TokenURL == "" || creds.ClientID == "" || creds.ClientSecret == "" {
+		return nil, ErrMissingOAuth2Creds
 	}
 
 	// Use provided client or create default
@@ -79,10 +71,10 @@ func newOAuth2Handler(config *connector.AuthConfig, httpClient *http.Client) (*o
 	}
 
 	return &oauth2Handler{
-		tokenURL:     tokenURL,
-		clientID:     clientID,
-		clientSecret: clientSecret,
-		scopes:       scopes,
+		tokenURL:     creds.TokenURL,
+		clientID:     creds.ClientID,
+		clientSecret: creds.ClientSecret,
+		scopes:       creds.Scopes,
 		httpClient:   client,
 	}, nil
 }

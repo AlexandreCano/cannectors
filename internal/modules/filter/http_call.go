@@ -18,8 +18,8 @@ import (
 	"github.com/cannectors/runtime/internal/auth"
 	"github.com/cannectors/runtime/internal/cache"
 	"github.com/cannectors/runtime/internal/errhandling"
-	"github.com/cannectors/runtime/internal/httpconfig"
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/template"
 	"github.com/cannectors/runtime/pkg/connector"
 )
@@ -55,54 +55,21 @@ var (
 	ErrHTTPCallKeyInvalid      = fmt.Errorf("http_call key paramType must be 'query', 'path', or 'header'")
 )
 
-// KeyConfig defines how to extract a key from a record and use it in HTTP requests.
-type KeyConfig struct {
-	// Field is the dot-notation path to extract the key value from the record (e.g., "customer.id")
-	Field string `json:"field"`
-	// ParamType specifies how to include the key in the request: "query", "path", or "header"
-	ParamType string `json:"paramType"`
-	// ParamName is the parameter name to use in the request
-	ParamName string `json:"paramName"`
-}
-
-// CacheConfig defines cache behavior for the http_call module.
-type CacheConfig struct {
-	// MaxSize is the maximum number of entries in the cache (default 1000)
-	MaxSize int `json:"maxSize"`
-	// DefaultTTL is the TTL for cache entries in seconds (default 300)
-	DefaultTTL int `json:"defaultTTL"`
-	// Key is the cache key configuration (optional).
-	// If not specified, uses default: endpoint + "::" + keyValue.
-	// Can be:
-	//   - A static string: "my-cache-key"
-	//   - A dot notation path: "customerId" or "user.profile.id" (extracts value from record)
-	Key string `json:"key"`
-}
-
 // HTTPCallConfig represents the configuration for an http_call filter module.
-// Fields are organized in logical groups matching httpconfig types for consistency,
-// but kept as direct fields for simpler struct literal syntax in tests and usage.
 type HTTPCallConfig struct {
-	// Base HTTP configuration (from httpconfig.BaseConfig)
-	Endpoint  string                `json:"endpoint"`
-	Method    string                `json:"method,omitempty"`
-	Headers   map[string]string     `json:"headers,omitempty"`
-	TimeoutMs int                   `json:"timeoutMs,omitempty"`
-	Auth      *connector.AuthConfig `json:"auth,omitempty"`
+	connector.ModuleBase
+	moduleconfig.HTTPRequestBase
 
-	// Body template configuration (from httpconfig.BodyTemplateConfig)
+	// Body template configuration
 	BodyTemplateFile string `json:"bodyTemplateFile,omitempty"`
 
-	// Error handling configuration (from httpconfig.ErrorHandlingConfig)
-	OnError string `json:"onError,omitempty"`
-
-	// Data extraction configuration (from httpconfig.DataExtractionConfig)
+	// Data extraction configuration
 	DataField string `json:"dataField,omitempty"`
 
-	// Key defines how to extract and use the key value (required for GET, optional for POST/PUT with template)
-	Key KeyConfig `json:"key"`
+	// Keys defines how to extract values from records and use them in requests (required for GET, optional for POST/PUT with template)
+	Keys []moduleconfig.KeyConfig `json:"keys"`
 	// Cache defines cache behavior (optional, uses defaults if not specified)
-	Cache CacheConfig `json:"cache"`
+	Cache moduleconfig.CacheConfig `json:"cache"`
 	// MergeStrategy defines how to merge response data: "merge" (default), "replace", "append"
 	MergeStrategy string `json:"mergeStrategy"`
 }
@@ -117,12 +84,18 @@ type HTTPCallConfig struct {
 // Error Handling:
 //   - HTTP errors are not cached (only successful responses are cached)
 //   - onError mode controls behavior: fail (stop pipeline), skip (drop record), log (continue)
+type keyEntry struct {
+	field     string
+	paramType string
+	paramName string
+}
+
+// HTTPCallModule is a filter module that enriches records with data fetched from HTTP endpoints.
+// It supports configurable authentication, caching, and field merging strategies.
 type HTTPCallModule struct {
 	endpoint          string
-	method            string // HTTP method (GET, POST, PUT)
-	keyField          string
-	keyParamType      string
-	keyParamName      string
+	method            string     // HTTP method (GET, POST, PUT)
+	keys              []keyEntry // key configurations for request building
 	authHandler       auth.Handler
 	httpClient        *http.Client
 	cache             cache.Cache
@@ -209,17 +182,17 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 
 	keyRequired := method == http.MethodGet || config.BodyTemplateFile == ""
 	if keyRequired {
-		if keyErr := validateKeyConfig(config.Key); keyErr != nil {
+		if keyErr := validateKeysConfig(config.Keys); keyErr != nil {
 			return nil, keyErr
 		}
 	}
 
 	mergeStrategy := normalizeHTTPCallMergeStrategy(config.MergeStrategy)
 	onError := normalizeHTTPCallOnError(config.OnError)
-	timeout := httpconfig.GetTimeoutDuration(config.TimeoutMs, defaultHTTPCallTimeout)
+	timeout := connector.GetTimeoutDuration(config.TimeoutMs, defaultHTTPCallTimeout)
 
 	httpClient := &http.Client{Timeout: timeout}
-	authHandler, err := buildHTTPCallAuth(config.Auth, httpClient)
+	authHandler, err := buildHTTPCallAuth(config.Authentication, httpClient)
 	if err != nil {
 		return nil, err
 	}
@@ -248,8 +221,7 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 	logger.Debug("http_call module initialized",
 		slog.String("endpoint", config.Endpoint),
 		slog.String("method", method),
-		slog.String("key_field", config.Key.Field),
-		slog.String("key_param_type", config.Key.ParamType),
+		slog.Int("keys_count", len(config.Keys)),
 		slog.String("merge_strategy", mergeStrategy),
 		slog.String("on_error", onError),
 		slog.Int("cache_max_size", cacheMaxSize),
@@ -260,12 +232,15 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 		slog.String("body_template_file", config.BodyTemplateFile),
 	)
 
+	keyEntries := make([]keyEntry, len(config.Keys))
+	for i, k := range config.Keys {
+		keyEntries[i] = keyEntry{field: k.Field, paramType: k.ParamType, paramName: k.ParamName}
+	}
+
 	return &HTTPCallModule{
 		endpoint:          config.Endpoint,
 		method:            method,
-		keyField:          config.Key.Field,
-		keyParamType:      config.Key.ParamType,
-		keyParamName:      config.Key.ParamName,
+		keys:              keyEntries,
 		authHandler:       authHandler,
 		httpClient:        httpClient,
 		cache:             lruCache,
@@ -381,123 +356,30 @@ func httpCallHasTemplating(endpoint string, headers map[string]string, hasBodyTe
 	return false
 }
 
-// validateKeyConfig validates the key extraction configuration.
-func validateKeyConfig(key KeyConfig) error {
-	if key.Field == "" {
-		return newHTTPCallError(ErrCodeHTTPCallKeyMissing, "http_call key field is required", -1, "", 0, "")
+// validateKeysConfig validates the keys extraction configuration.
+func validateKeysConfig(keys []moduleconfig.KeyConfig) error {
+	if len(keys) == 0 {
+		return newHTTPCallError(ErrCodeHTTPCallKeyMissing, "http_call keys is required (at least one key config)", -1, "", 0, "")
 	}
-	if key.ParamType == "" {
-		return newHTTPCallError(ErrCodeHTTPCallKeyMissing, "http_call key paramType is required", -1, "", 0, "")
-	}
-	if key.ParamType != "query" && key.ParamType != "path" && key.ParamType != "header" {
-		return newHTTPCallError(ErrCodeHTTPCallKeyInvalid, "http_call key paramType must be 'query', 'path', or 'header'", -1, "", 0, "")
-	}
-	if key.ParamName == "" {
-		return newHTTPCallError(ErrCodeHTTPCallKeyMissing, "http_call key paramName is required", -1, "", 0, "")
+	for i, key := range keys {
+		if key.Field == "" {
+			return newHTTPCallError(ErrCodeHTTPCallKeyMissing, fmt.Sprintf("http_call keys[%d] field is required", i), -1, "", 0, "")
+		}
+		if key.ParamType == "" {
+			return newHTTPCallError(ErrCodeHTTPCallKeyMissing, fmt.Sprintf("http_call keys[%d] paramType is required", i), -1, "", 0, "")
+		}
+		if key.ParamType != "query" && key.ParamType != "path" && key.ParamType != "header" {
+			return newHTTPCallError(ErrCodeHTTPCallKeyInvalid, "http_call key paramType must be 'query', 'path', or 'header'", -1, "", 0, "")
+		}
+		if key.ParamName == "" {
+			return newHTTPCallError(ErrCodeHTTPCallKeyMissing, fmt.Sprintf("http_call keys[%d] paramName is required", i), -1, "", 0, "")
+		}
 	}
 	return nil
 }
 
-// ParseHTTPCallConfig parses an http_call filter configuration from raw config map.
-// The authentication parameter is passed separately (from cfg.Authentication) to match
-// the ModuleConfig structure used by input and output modules.
-func ParseHTTPCallConfig(cfg map[string]interface{}, auth *connector.AuthConfig) (HTTPCallConfig, error) {
-	config := HTTPCallConfig{}
-
-	// Use httpconfig extraction for base config
-	config.Endpoint = parseStringField(cfg, "endpoint")
-	config.Method = parseStringField(cfg, "method")
-	config.Headers = parseHeaders(cfg)
-	config.TimeoutMs = parseIntField(cfg, "timeoutMs")
-	config.Auth = auth
-
-	// Parse key configuration (required for GET, optional for POST/PUT with template)
-	config.Key = parseKeyConfig(cfg)
-
-	// Parse cache configuration (optional)
-	config.Cache = parseCacheConfig(cfg)
-
-	// Parse optional fields
-	config.MergeStrategy = parseStringField(cfg, "mergeStrategy")
-	config.DataField = parseStringField(cfg, "dataField")
-	config.OnError = parseStringField(cfg, "onError")
-
-	// Parse body template file (optional, for POST/PUT)
-	config.BodyTemplateFile = parseStringField(cfg, "bodyTemplateFile")
-
-	return config, nil
-}
-
-// parseStringField extracts a string field from the config map.
-func parseStringField(cfg map[string]interface{}, fieldName string) string {
-	if value, ok := cfg[fieldName].(string); ok {
-		return value
-	}
-	return ""
-}
-
-// parseIntField extracts an integer field from the config map.
-func parseIntField(cfg map[string]interface{}, fieldName string) int {
-	if value, ok := cfg[fieldName].(float64); ok {
-		return int(value)
-	}
-	return 0
-}
-
-// parseKeyConfig extracts the key configuration from the config map.
-func parseKeyConfig(cfg map[string]interface{}) KeyConfig {
-	keyConfig := KeyConfig{}
-	if keyRaw, ok := cfg["key"].(map[string]interface{}); ok {
-		keyConfig.Field = parseStringField(keyRaw, "field")
-		keyConfig.ParamType = parseStringField(keyRaw, "paramType")
-		keyConfig.ParamName = parseStringField(keyRaw, "paramName")
-	}
-	return keyConfig
-}
-
-// parseCacheConfig extracts the cache configuration from the config map.
-func parseCacheConfig(cfg map[string]interface{}) CacheConfig {
-	cacheConfig := CacheConfig{}
-	if cacheRaw, ok := cfg["cache"].(map[string]interface{}); ok {
-		if maxSize, ok := cacheRaw["maxSize"].(float64); ok {
-			maxSizeInt := int(maxSize)
-			if maxSizeInt > 0 {
-				cacheConfig.MaxSize = maxSizeInt
-			}
-		}
-		if ttl, ok := cacheRaw["defaultTTL"].(float64); ok {
-			ttlInt := int(ttl)
-			if ttlInt > 0 {
-				cacheConfig.DefaultTTL = ttlInt
-			}
-		}
-		cacheConfig.Key = parseStringField(cacheRaw, "key")
-	}
-	return cacheConfig
-}
-
-// parseHeaders extracts headers from the config map.
-func parseHeaders(cfg map[string]interface{}) map[string]string {
-	headers := make(map[string]string)
-	if headersRaw, ok := cfg["headers"].(map[string]interface{}); ok {
-		for k, v := range headersRaw {
-			if strVal, ok := v.(string); ok {
-				headers[k] = strVal
-			}
-		}
-	}
-	return headers
-}
-
-// Process makes HTTP requests for each input record and can enrich them with response data.
-// For each record:
-//  1. Extracts the key value from the record
-//  2. Checks the cache for existing data
-//  3. If cache miss, makes an HTTP request to fetch the data
-//  4. Merges the fetched data into the record
-//  5. Caches successful responses
-//
-// The context can be used to cancel long-running operations.
+// Process enriches each input record by performing an HTTP call and merging the response data.
+// Returns the records with merged enrichment data according to the configured merge strategy.
 func (m *HTTPCallModule) Process(ctx context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
 	if records == nil {
 		return []map[string]interface{}{}, nil
@@ -587,25 +469,25 @@ func (m *HTTPCallModule) Process(ctx context.Context, records []map[string]inter
 // processRecord makes an HTTP call for a single record and enriches it with the response data.
 // Returns the enriched record, whether it was a cache hit, and any error.
 func (m *HTTPCallModule) processRecord(ctx context.Context, record map[string]interface{}, recordIdx int) (map[string]interface{}, bool, error) {
-	// Extract key value from record (may be empty for POST/PUT with template-only mode)
-	var keyValue string
+	// Extract key values from record (may be empty for POST/PUT with template-only mode)
+	var keyValues map[string]string
 	var err error
-	if m.keyField != "" {
-		keyValue, err = m.extractKeyValue(record, recordIdx)
+	if len(m.keys) > 0 {
+		keyValues, err = m.extractKeyValues(record, recordIdx)
 		if err != nil {
 			return nil, false, err
 		}
 	}
 
 	// Check cache first
-	cacheKey := m.buildCacheKey(keyValue, record)
+	cacheKey := m.buildCacheKey(keyValues, record)
 	if cachedData, found := m.cache.Get(cacheKey); found {
 		responseData, ok := cachedData.(map[string]interface{})
 		if ok {
 			logger.Debug("http_call cache hit",
 				slog.String("module_type", "http_call"),
 				slog.Int("record_index", recordIdx),
-				slog.String("key_value", keyValue),
+				slog.Any("key_values", keyValues),
 			)
 			enrichedRecord := m.mergeData(record, responseData)
 			return enrichedRecord, true, nil
@@ -613,20 +495,20 @@ func (m *HTTPCallModule) processRecord(ctx context.Context, record map[string]in
 	}
 
 	// Cache miss - make HTTP request
-	responseData, err := m.fetchResponseData(ctx, keyValue, recordIdx, record)
+	responseData, err := m.fetchResponseData(ctx, keyValues, recordIdx, record)
 	if err != nil {
 		return nil, false, err
 	}
 
 	// Cache successful response (don't cache errors)
 	// Rebuild cache key in case it depends on record values
-	cacheKey = m.buildCacheKey(keyValue, record)
+	cacheKey = m.buildCacheKey(keyValues, record)
 	m.cache.Set(cacheKey, responseData, m.cacheTTL)
 
 	logger.Debug("http_call cache miss (fetched and cached)",
 		slog.String("module_type", "http_call"),
 		slog.Int("record_index", recordIdx),
-		slog.String("key_value", keyValue),
+		slog.Any("key_values", keyValues),
 	)
 
 	// Merge data into record
@@ -635,90 +517,78 @@ func (m *HTTPCallModule) processRecord(ctx context.Context, record map[string]in
 	return enrichedRecord, false, nil
 }
 
-// extractKeyValue extracts the key value from a record using the configured field path.
-func (m *HTTPCallModule) extractKeyValue(record map[string]interface{}, recordIdx int) (string, error) {
-	value, found := GetNestedValue(record, m.keyField)
-	if !found {
-		return "", newHTTPCallError(
-			ErrCodeHTTPCallKeyExtract,
-			fmt.Sprintf("http_call failed to extract key from record %d: field '%s' not found", recordIdx, m.keyField),
-			recordIdx, m.endpoint, 0, "",
-		)
-	}
+// extractKeyValues extracts key values from a record using all configured key definitions.
+func (m *HTTPCallModule) extractKeyValues(record map[string]interface{}, recordIdx int) (map[string]string, error) {
+	result := make(map[string]string, len(m.keys))
+	for _, k := range m.keys {
+		value, found := moduleconfig.GetNestedValue(record, k.field)
+		if !found {
+			return nil, newHTTPCallError(
+				ErrCodeHTTPCallKeyExtract,
+				fmt.Sprintf("http_call failed to extract key from record %d: field '%s' not found", recordIdx, k.field),
+				recordIdx, m.endpoint, 0, "",
+			)
+		}
 
-	// Convert value to string
-	var keyValue string
-	switch v := value.(type) {
-	case string:
-		keyValue = v
-	case float64:
-		// Handle JSON numbers
-		if v == float64(int64(v)) {
-			keyValue = fmt.Sprintf("%d", int64(v))
-		} else {
+		var keyValue string
+		switch v := value.(type) {
+		case string:
+			keyValue = v
+		case nil:
+			return nil, newHTTPCallError(
+				ErrCodeHTTPCallKeyExtract,
+				fmt.Sprintf("http_call failed to extract key from record %d: field '%s' is null", recordIdx, k.field),
+				recordIdx, m.endpoint, 0, "",
+			)
+		default:
 			keyValue = fmt.Sprintf("%v", v)
 		}
-	case int, int64, int32:
-		keyValue = fmt.Sprintf("%v", v)
-	case nil:
-		return "", newHTTPCallError(
-			ErrCodeHTTPCallKeyExtract,
-			fmt.Sprintf("http_call failed to extract key from record %d: field '%s' is null", recordIdx, m.keyField),
-			recordIdx, m.endpoint, 0, "",
-		)
-	default:
-		keyValue = fmt.Sprintf("%v", v)
-	}
 
-	if keyValue == "" {
-		return "", newHTTPCallError(
-			ErrCodeHTTPCallKeyExtract,
-			fmt.Sprintf("http_call failed to extract key from record %d: field '%s' is empty", recordIdx, m.keyField),
-			recordIdx, m.endpoint, 0, "",
-		)
+		if keyValue == "" {
+			return nil, newHTTPCallError(
+				ErrCodeHTTPCallKeyExtract,
+				fmt.Sprintf("http_call failed to extract key from record %d: field '%s' is empty", recordIdx, k.field),
+				recordIdx, m.endpoint, 0, "",
+			)
+		}
+		result[k.paramName] = keyValue
 	}
-
-	return keyValue, nil
+	return result, nil
 }
 
-// buildCacheKey creates a unique cache key from the key value and record.
+// buildCacheKey creates a unique cache key from the key values and record.
 // If cacheKey is configured, it can be:
 //   - A static string: used as-is
 //   - A dot notation path: "customerId" or "user.profile.id" (extracts value from record)
 //
-// If cacheKey is not configured, uses default: endpoint + "::" + keyValue
-func (m *HTTPCallModule) buildCacheKey(keyValue string, record map[string]interface{}) string {
-	// If cacheKey is configured, use it
+// If cacheKey is not configured, uses default: endpoint + "::" + joined key values (in config order)
+func (m *HTTPCallModule) buildCacheKey(keyValues map[string]string, record map[string]interface{}) string {
 	if m.cacheKey != "" {
-		// Check if it's a dot notation path (contains "." for nested fields)
-		if IsNestedPath(m.cacheKey) {
-			// Dot notation path (e.g., "user.profile.id")
-			if value, found := GetNestedValue(record, m.cacheKey); found {
-				return fmt.Sprintf("%v", value)
-			}
-			// If path not found, log warning and fall back to default behavior
-			logger.Warn("http_call cache key path not found, using default key",
-				slog.String("module_type", "http_call"),
-				slog.String("configured_path", m.cacheKey),
-				slog.String("fallback_key", m.endpoint+"::"+keyValue),
-			)
-			return m.endpoint + "::" + keyValue
+		if value, found := moduleconfig.GetNestedValue(record, m.cacheKey); found {
+			return fmt.Sprintf("%v", value)
 		}
-		// Static string - use as-is
 		return m.cacheKey
 	}
 
-	// Default behavior: endpoint + "::" + keyValue
-	// Use "::" as delimiter to avoid collisions with ":" in URLs or key values
-	// This ensures endpoint="http://api.com" with keyValue="foo:bar" produces
-	// a different key than endpoint="http://api.com:foo" with keyValue="bar"
-	return m.endpoint + "::" + keyValue
+	return m.endpoint + "::" + m.compositeKeyString(keyValues)
 }
 
-// fetchResponseData fetches data from the external API for the given key value and record.
-func (m *HTTPCallModule) fetchResponseData(ctx context.Context, keyValue string, recordIdx int, record map[string]interface{}) (map[string]interface{}, error) {
+// compositeKeyString joins key values in config order for cache key.
+func (m *HTTPCallModule) compositeKeyString(keyValues map[string]string) string {
+	if keyValues == nil || len(m.keys) == 0 {
+		return ""
+	}
+	parts := make([]string, len(m.keys))
+	for i, k := range m.keys {
+		parts[i] = keyValues[k.paramName]
+	}
+	return strings.Join(parts, "::")
+}
+
+// fetchResponseData fetches data from the external API for the given key values and record.
+func (m *HTTPCallModule) fetchResponseData(ctx context.Context, keyValues map[string]string, recordIdx int, record map[string]interface{}) (map[string]interface{}, error) {
 	// Build and execute HTTP request
-	body, statusCode, err := m.executeHTTPRequest(ctx, keyValue, recordIdx, record)
+	body, statusCode, err := m.executeHTTPRequest(ctx, keyValues, recordIdx, record)
 	if err != nil {
 		return nil, err
 	}
@@ -728,19 +598,19 @@ func (m *HTTPCallModule) fetchResponseData(ctx context.Context, keyValue string,
 }
 
 // executeHTTPRequest builds the HTTP request, executes it, and returns the response body and status code.
-func (m *HTTPCallModule) executeHTTPRequest(ctx context.Context, keyValue string, recordIdx int, record map[string]interface{}) ([]byte, int, error) {
+func (m *HTTPCallModule) executeHTTPRequest(ctx context.Context, keyValues map[string]string, recordIdx int, record map[string]interface{}) ([]byte, int, error) {
 	// Build request URL with template evaluation
-	requestURL, err := m.buildRequestURL(keyValue, record)
+	requestURL, err := m.buildRequestURL(keyValues, record)
 	if err != nil {
 		return nil, 0, newHTTPCallError(
 			ErrCodeHTTPCallHTTPError,
 			fmt.Sprintf("http_call failed to build request URL: %v", err),
-			recordIdx, m.endpoint, 0, keyValue,
+			recordIdx, m.endpoint, 0, m.compositeKeyString(keyValues),
 		)
 	}
 
 	// Create and configure HTTP request
-	req, err := m.buildHTTPRequest(ctx, requestURL, keyValue, recordIdx, record)
+	req, err := m.buildHTTPRequest(ctx, requestURL, keyValues, recordIdx, record)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -752,7 +622,7 @@ func (m *HTTPCallModule) executeHTTPRequest(ctx context.Context, keyValue string
 		return nil, 0, newHTTPCallError(
 			ErrCodeHTTPCallHTTPError,
 			fmt.Sprintf("http_call HTTP request failed: %v", classifiedErr),
-			recordIdx, m.endpoint, 0, keyValue,
+			recordIdx, m.endpoint, 0, m.compositeKeyString(keyValues),
 		)
 	}
 	defer func() {
@@ -769,7 +639,7 @@ func (m *HTTPCallModule) executeHTTPRequest(ctx context.Context, keyValue string
 		return nil, resp.StatusCode, newHTTPCallError(
 			ErrCodeHTTPCallHTTPError,
 			fmt.Sprintf("http_call failed to read response: %v", err),
-			recordIdx, m.endpoint, resp.StatusCode, keyValue,
+			recordIdx, m.endpoint, resp.StatusCode, m.compositeKeyString(keyValues),
 		)
 	}
 
@@ -782,7 +652,7 @@ func (m *HTTPCallModule) executeHTTPRequest(ctx context.Context, keyValue string
 		return nil, resp.StatusCode, newHTTPCallError(
 			ErrCodeHTTPCallHTTPError,
 			fmt.Sprintf("http_call HTTP error %d: %s", resp.StatusCode, bodySnippet),
-			recordIdx, m.endpoint, resp.StatusCode, keyValue,
+			recordIdx, m.endpoint, resp.StatusCode, m.compositeKeyString(keyValues),
 		)
 	}
 
@@ -790,7 +660,7 @@ func (m *HTTPCallModule) executeHTTPRequest(ctx context.Context, keyValue string
 }
 
 // buildHTTPRequest creates and configures an HTTP request with headers and authentication.
-func (m *HTTPCallModule) buildHTTPRequest(ctx context.Context, requestURL, keyValue string, recordIdx int, record map[string]interface{}) (*http.Request, error) {
+func (m *HTTPCallModule) buildHTTPRequest(ctx context.Context, requestURL string, keyValues map[string]string, recordIdx int, record map[string]interface{}) (*http.Request, error) {
 	// Build request body for POST/PUT
 	var bodyReader io.Reader
 	if m.method == http.MethodPost || m.method == http.MethodPut {
@@ -807,7 +677,7 @@ func (m *HTTPCallModule) buildHTTPRequest(ctx context.Context, requestURL, keyVa
 		return nil, newHTTPCallError(
 			ErrCodeHTTPCallHTTPError,
 			fmt.Sprintf("http_call failed to create request: %v", err),
-			recordIdx, m.endpoint, 0, keyValue,
+			recordIdx, m.endpoint, 0, m.compositeKeyString(keyValues),
 		)
 	}
 
@@ -829,9 +699,13 @@ func (m *HTTPCallModule) buildHTTPRequest(ctx context.Context, requestURL, keyVa
 		req.Header.Set(key, evaluatedValue)
 	}
 
-	// Apply key as header if configured
-	if m.keyParamType == "header" && keyValue != "" {
-		req.Header.Set(m.keyParamName, keyValue)
+	// Apply keys as headers if configured
+	for _, k := range m.keys {
+		if k.paramType == "header" {
+			if v := keyValues[k.paramName]; v != "" {
+				req.Header.Set(k.paramName, v)
+			}
+		}
 	}
 
 	// Apply authentication
@@ -840,7 +714,7 @@ func (m *HTTPCallModule) buildHTTPRequest(ctx context.Context, requestURL, keyVa
 			return nil, newHTTPCallError(
 				ErrCodeHTTPCallHTTPError,
 				fmt.Sprintf("http_call failed to apply auth: %v", authErr),
-				recordIdx, m.endpoint, 0, keyValue,
+				recordIdx, m.endpoint, 0, m.compositeKeyString(keyValues),
 			)
 		}
 	}
@@ -900,8 +774,8 @@ func (m *HTTPCallModule) extractDataField(responseData map[string]interface{}, r
 	return make(map[string]interface{})
 }
 
-// buildRequestURL constructs the HTTP request URL based on the key configuration and template evaluation.
-func (m *HTTPCallModule) buildRequestURL(keyValue string, record map[string]interface{}) (string, error) {
+// buildRequestURL constructs the HTTP request URL based on the key configurations and template evaluation.
+func (m *HTTPCallModule) buildRequestURL(keyValues map[string]string, record map[string]interface{}) (string, error) {
 	endpoint := m.endpoint
 
 	// Evaluate template variables in endpoint ({{record.field}} syntax)
@@ -910,35 +784,43 @@ func (m *HTTPCallModule) buildRequestURL(keyValue string, record map[string]inte
 	}
 
 	// If no key configuration, return the templated endpoint as-is
-	if m.keyParamType == "" {
+	if len(m.keys) == 0 {
 		return endpoint, nil
 	}
 
-	switch m.keyParamType {
-	case "path":
-		// Replace {paramName} in endpoint with key value
-		placeholder := "{" + m.keyParamName + "}"
-		requestURL := strings.Replace(endpoint, placeholder, url.PathEscape(keyValue), 1)
-		return requestURL, nil
+	// Apply path replacements first
+	for _, k := range m.keys {
+		if k.paramType == "path" {
+			placeholder := "{" + k.paramName + "}"
+			endpoint = strings.Replace(endpoint, placeholder, url.PathEscape(keyValues[k.paramName]), 1)
+		}
+	}
 
-	case "query":
-		// Add key as query parameter
+	// Apply query parameters
+	hasQuery := false
+	for _, k := range m.keys {
+		if k.paramType == "query" {
+			hasQuery = true
+			break
+		}
+	}
+	if hasQuery {
 		parsedURL, err := url.Parse(endpoint)
 		if err != nil {
 			return "", fmt.Errorf(errMsgParsingEndpointURL, err)
 		}
 		q := parsedURL.Query()
-		q.Set(m.keyParamName, keyValue)
+		for _, k := range m.keys {
+			if k.paramType == "query" {
+				q.Set(k.paramName, keyValues[k.paramName])
+			}
+		}
 		parsedURL.RawQuery = q.Encode()
 		return parsedURL.String(), nil
-
-	case "header":
-		// Header is added in buildHTTPRequest, return endpoint as-is
-		return endpoint, nil
-
-	default:
-		return "", fmt.Errorf("unknown key paramType: %s", m.keyParamType)
 	}
+
+	// Path-only or header-only: return endpoint after path replacements
+	return endpoint, nil
 }
 
 // mergeData merges response data into the record based on the merge strategy.

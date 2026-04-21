@@ -20,18 +20,19 @@ func TestValidateConfig_ValidConfig(t *testing.T) {
 	}
 }
 
-func TestValidateConfig_ValidConfigWithoutSchemaVersion(t *testing.T) {
-	// Parse valid config without schemaVersion field
-	parseResult := ParseJSONFile("testdata/valid-config-no-schemaversion.json")
-	if !parseResult.IsValid() {
-		t.Fatalf("failed to parse valid config: %v", parseResult.Errors)
+func TestValidateConfig_ValidConfigWithoutVersion(t *testing.T) {
+	// Config without version field should be valid
+	data := map[string]interface{}{
+		"name":    "test-no-version",
+		"input":   map[string]interface{}{"type": "httpPolling", "endpoint": "https://example.com", "schedule": "* * * * *"},
+		"filters": []interface{}{},
+		"output":  map[string]interface{}{"type": "httpRequest", "endpoint": "https://example.com", "method": "POST"},
 	}
 
-	// Validate against schema - should pass (schemaVersion is now optional)
-	result := ValidateConfig(parseResult.Data)
+	result := ValidateConfig(data)
 
 	if !result.Valid {
-		t.Errorf("expected valid config without schemaVersion, got errors: %v", result.Errors)
+		t.Errorf("expected valid config without version, got errors: %v", result.Errors)
 	}
 }
 
@@ -150,20 +151,18 @@ func TestGetSchema_ReturnsSchema(t *testing.T) {
 func TestValidateConfig_WebhookWithSchedule_Rejected(t *testing.T) {
 	// Webhook input must not have schedule (AC#2, #4). Schema rejects it.
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "webhook-schedule-test",
-			"version": "1.0.0",
-			"input": map[string]interface{}{
-				"type":     "webhook",
-				"path":     "/webhook",
-				"schedule": "0 * * * *",
-			},
-			"filters": []interface{}{},
-			"output": map[string]interface{}{
-				"type":     "httpRequest",
-				"endpoint": "https://example.com",
-				"method":   "POST",
-			},
+		"name":    "webhook-schedule-test",
+		"version": "1.0.0",
+		"input": map[string]interface{}{
+			"type":     "webhook",
+			"path":     "/webhook",
+			"schedule": "0 * * * *",
+		},
+		"filters": []interface{}{},
+		"output": map[string]interface{}{
+			"type":     "httpRequest",
+			"endpoint": "https://example.com",
+			"method":   "POST",
 		},
 	}
 	result := ValidateConfig(data)
@@ -176,23 +175,21 @@ func TestValidateConfig_WebhookWithSchedule_Rejected(t *testing.T) {
 }
 
 func TestValidateConfig_ConnectorLevelSchedule_Rejected(t *testing.T) {
-	// Schedule must not be at connector root; only in input module (polling types).
+	// Schedule must not be at root; only in input module (polling types).
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":     "connector-schedule-test",
-			"version":  "1.0.0",
-			"schedule": "0 * * * *",
-			"input": map[string]interface{}{
-				"type":     "httpPolling",
-				"endpoint": "https://example.com",
-				"schedule": "*/5 * * * *",
-			},
-			"filters": []interface{}{},
-			"output": map[string]interface{}{
-				"type":     "httpRequest",
-				"endpoint": "https://example.com",
-				"method":   "POST",
-			},
+		"name":     "connector-schedule-test",
+		"version":  "1.0.0",
+		"schedule": "0 * * * *",
+		"input": map[string]interface{}{
+			"type":     "httpPolling",
+			"endpoint": "https://example.com",
+			"schedule": "*/5 * * * *",
+		},
+		"filters": []interface{}{},
+		"output": map[string]interface{}{
+			"type":     "httpRequest",
+			"endpoint": "https://example.com",
+			"method":   "POST",
 		},
 	}
 	result := ValidateConfig(data)
@@ -201,5 +198,89 @@ func TestValidateConfig_ConnectorLevelSchedule_Rejected(t *testing.T) {
 	}
 	if len(result.Errors) == 0 {
 		t.Error("expected at least one validation error")
+	}
+}
+
+func TestValidateConfig_ActionableMessages(t *testing.T) {
+	tests := []struct {
+		name       string
+		data       map[string]interface{}
+		wantType   string
+		wantSubstr string
+	}{
+		{
+			name: "missing required field shows property name",
+			data: map[string]interface{}{
+				"name":   "test",
+				"input":  map[string]interface{}{"type": "httpPolling", "endpoint": "https://example.com", "schedule": "* * * * *"},
+				"output": map[string]interface{}{"type": "httpRequest", "endpoint": "https://example.com", "method": "POST"},
+				// missing "filters"
+			},
+			wantType:   "required",
+			wantSubstr: "filters",
+		},
+		{
+			name: "wrong type shows expected and actual",
+			data: map[string]interface{}{
+				"name":    123, // should be string
+				"input":   map[string]interface{}{"type": "httpPolling", "endpoint": "https://example.com", "schedule": "* * * * *"},
+				"filters": []interface{}{},
+				"output":  map[string]interface{}{"type": "httpRequest", "endpoint": "https://example.com", "method": "POST"},
+			},
+			wantType:   "type",
+			wantSubstr: "string",
+		},
+		{
+			name: "additional property shows property name",
+			data: map[string]interface{}{
+				"name":     "test",
+				"schedule": "* * * * *", // not allowed at root
+				"input":    map[string]interface{}{"type": "httpPolling", "endpoint": "https://example.com", "schedule": "* * * * *"},
+				"filters":  []interface{}{},
+				"output":   map[string]interface{}{"type": "httpRequest", "endpoint": "https://example.com", "method": "POST"},
+			},
+			wantType:   "additionalProperties",
+			wantSubstr: "schedule",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ValidateConfig(tt.data)
+			if result.Valid {
+				t.Fatal("expected validation to fail")
+			}
+
+			found := false
+			for _, err := range result.Errors {
+				if err.Type == tt.wantType && strings.Contains(err.Message, tt.wantSubstr) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("expected error of type %q containing %q, got: %v", tt.wantType, tt.wantSubstr, result.Errors)
+			}
+		})
+	}
+}
+
+func TestFormatInstanceLocation_ReadablePaths(t *testing.T) {
+	tests := []struct {
+		loc  []string
+		want string
+	}{
+		{nil, "/"},
+		{[]string{"input"}, "input"},
+		{[]string{"filters", "0", "type"}, "filters[0].type"},
+		{[]string{"output", "endpoint"}, "output.endpoint"},
+		{[]string{"filters", "2", "mappings", "0"}, "filters[2].mappings[0]"},
+	}
+
+	for _, tt := range tests {
+		got := formatInstanceLocation(tt.loc)
+		if got != tt.want {
+			t.Errorf("formatInstanceLocation(%v) = %q, want %q", tt.loc, got, tt.want)
+		}
 	}
 }

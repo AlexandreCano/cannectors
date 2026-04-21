@@ -248,7 +248,7 @@ output:
   headers:
     Content-Type: application/json
   request:
-    bodyFrom: records  # records (batch) or record (single)
+    requestMode: batch  # batch or single
     pathParams:
       orderId: id
   authentication:

@@ -1,10 +1,28 @@
 package output
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/cannectors/runtime/pkg/connector"
 )
+
+// parseDatabaseOutputConfigFromMap is a test helper that converts a map to DatabaseOutputConfig via JSON.
+
+func mustJSON(v interface{}) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+func parseDatabaseOutputConfigFromMap(cfg map[string]interface{}) DatabaseOutputConfig {
+	data, _ := json.Marshal(cfg)
+	var config DatabaseOutputConfig
+	_ = json.Unmarshal(data, &config)
+	return config
+}
 
 func TestParseDatabaseOutputConfig(t *testing.T) {
 	t.Parallel()
@@ -89,11 +107,11 @@ func TestParseDatabaseOutputConfig(t *testing.T) {
 				if config.MaxIdleConns != 15 {
 					t.Errorf("MaxIdleConns = %d, want 15", config.MaxIdleConns)
 				}
-				if config.ConnMaxLifetime != 1800 {
-					t.Errorf("ConnMaxLifetime = %d, want 1800", config.ConnMaxLifetime)
+				if config.ConnMaxLifetimeSeconds != 1800 {
+					t.Errorf("ConnMaxLifetime = %d, want 1800", config.ConnMaxLifetimeSeconds)
 				}
-				if config.ConnMaxIdleTime != 300 {
-					t.Errorf("ConnMaxIdleTime = %d, want 300", config.ConnMaxIdleTime)
+				if config.ConnMaxIdleTimeSeconds != 300 {
+					t.Errorf("ConnMaxIdleTime = %d, want 300", config.ConnMaxIdleTimeSeconds)
 				}
 				if config.TimeoutMs != 60000 {
 					t.Errorf("TimeoutMs = %d, want 60000", config.TimeoutMs)
@@ -117,7 +135,7 @@ func TestParseDatabaseOutputConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := parseDatabaseOutputConfig(tt.cfg)
+			config := parseDatabaseOutputConfigFromMap(tt.cfg)
 			if tt.wantErr {
 				t.Error("parseDatabaseOutputConfig() should not return error, but test expects error")
 				return
@@ -146,9 +164,9 @@ func TestNewDatabaseOutputFromConfig_Validation(t *testing.T) {
 			name: "missing connection string",
 			cfg: &connector.ModuleConfig{
 				Type: "database",
-				Config: map[string]interface{}{
+				Raw: mustJSON(map[string]interface{}{
 					"query": "INSERT INTO users (name) VALUES ({{record.name}})",
-				},
+				}),
 			},
 			wantErr: ErrDatabaseOutputMissingConnStr,
 		},
@@ -156,9 +174,9 @@ func TestNewDatabaseOutputFromConfig_Validation(t *testing.T) {
 			name: "missing query",
 			cfg: &connector.ModuleConfig{
 				Type: "database",
-				Config: map[string]interface{}{
+				Raw: mustJSON(map[string]interface{}{
 					"connectionString": "postgres://localhost/db",
-				},
+				}),
 			},
 			wantErr: ErrDatabaseOutputMissingQuery,
 		},

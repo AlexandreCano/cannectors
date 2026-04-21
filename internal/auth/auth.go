@@ -4,6 +4,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -77,31 +78,29 @@ type apiKeyHandler struct {
 
 // newAPIKeyHandler creates a new API key authentication handler.
 func newAPIKeyHandler(config *connector.AuthConfig) (*apiKeyHandler, error) {
-	key := config.Credentials["key"]
-	if key == "" {
+	var creds connector.CredentialsAPIKey
+	if err := json.Unmarshal(config.Credentials, &creds); err != nil {
+		return nil, fmt.Errorf("invalid api-key credentials: %w", err)
+	}
+
+	if creds.Key == "" {
 		return nil, ErrMissingAPIKey
 	}
-
-	location := config.Credentials["location"]
-	if location == "" {
-		location = "header" // Default to header
+	if creds.Location == "" {
+		creds.Location = "header"
 	}
-
-	paramName := config.Credentials["paramName"]
-	if paramName == "" {
-		paramName = "api_key" // Default query param name
+	if creds.ParamName == "" {
+		creds.ParamName = "api_key"
 	}
-
-	headerName := config.Credentials["headerName"]
-	if headerName == "" {
-		headerName = "X-API-Key" // Default header name
+	if creds.HeaderName == "" {
+		creds.HeaderName = "X-API-Key"
 	}
 
 	return &apiKeyHandler{
-		key:        key,
-		location:   location,
-		paramName:  paramName,
-		headerName: headerName,
+		key:        creds.Key,
+		location:   creds.Location,
+		paramName:  creds.ParamName,
+		headerName: creds.HeaderName,
 	}, nil
 }
 
@@ -130,13 +129,17 @@ type bearerHandler struct {
 
 // newBearerHandler creates a new Bearer token authentication handler.
 func newBearerHandler(config *connector.AuthConfig) (*bearerHandler, error) {
-	token := config.Credentials["token"]
-	if token == "" {
+	var creds connector.CredentialsBearer
+	if err := json.Unmarshal(config.Credentials, &creds); err != nil {
+		return nil, fmt.Errorf("invalid bearer credentials: %w", err)
+	}
+
+	if creds.Token == "" {
 		return nil, ErrMissingBearerToken
 	}
 
 	return &bearerHandler{
-		token: token,
+		token: creds.Token,
 	}, nil
 }
 
@@ -159,15 +162,18 @@ type basicHandler struct {
 
 // newBasicHandler creates a new Basic authentication handler.
 func newBasicHandler(config *connector.AuthConfig) (*basicHandler, error) {
-	username := config.Credentials["username"]
-	password := config.Credentials["password"]
-	if username == "" || password == "" {
+	var creds connector.CredentialsBasic
+	if err := json.Unmarshal(config.Credentials, &creds); err != nil {
+		return nil, fmt.Errorf("invalid basic credentials: %w", err)
+	}
+
+	if creds.Username == "" || creds.Password == "" {
 		return nil, ErrMissingBasicAuth
 	}
 
 	return &basicHandler{
-		username: username,
-		password: password,
+		username: creds.Username,
+		password: creds.Password,
 	}, nil
 }
 

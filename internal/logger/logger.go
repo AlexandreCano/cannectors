@@ -484,7 +484,7 @@ func (h *HumanHandler) Handle(_ context.Context, r slog.Record) error {
 		}
 		sb.WriteString(strings.Join(keyAttrs[:maxInline], " "))
 		if len(keyAttrs) > 5 {
-			sb.WriteString(fmt.Sprintf(" (+%d more)", len(keyAttrs)-5))
+			fmt.Fprintf(&sb, " (+%d more)", len(keyAttrs)-5)
 		}
 	}
 
@@ -598,16 +598,16 @@ func formatDuration(d time.Duration) string {
 func FormatMetricsHuman(metrics ExecutionMetrics) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("Processed %d records in %s",
+	fmt.Fprintf(&sb, "Processed %d records in %s",
 		metrics.RecordsProcessed,
-		formatDuration(metrics.TotalDuration)))
+		formatDuration(metrics.TotalDuration))
 
 	if metrics.RecordsPerSecond > 0 {
-		sb.WriteString(fmt.Sprintf(" (%.1f records/sec)", metrics.RecordsPerSecond))
+		fmt.Fprintf(&sb, " (%.1f records/sec)", metrics.RecordsPerSecond)
 	}
 
 	if metrics.RecordsFailed > 0 {
-		sb.WriteString(fmt.Sprintf(", %d failed", metrics.RecordsFailed))
+		fmt.Fprintf(&sb, ", %d failed", metrics.RecordsFailed)
 	}
 
 	return sb.String()

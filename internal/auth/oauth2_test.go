@@ -51,11 +51,11 @@ func TestOAuth2Handler_ApplyAuth_Success(t *testing.T) {
 
 	config := &connector.AuthConfig{
 		Type: "oauth2",
-		Credentials: map[string]string{
+		Credentials: toJSON(t, map[string]string{
 			"tokenUrl":     tokenServer.URL,
 			"clientId":     "test-client-id",
 			"clientSecret": "test-client-secret",
-		},
+		}),
 	}
 
 	handler, err := NewHandler(config, nil)
@@ -92,11 +92,11 @@ func TestOAuth2Handler_TokenCaching(t *testing.T) {
 
 	config := &connector.AuthConfig{
 		Type: "oauth2",
-		Credentials: map[string]string{
+		Credentials: toJSON(t, map[string]string{
 			"tokenUrl":     tokenServer.URL,
 			"clientId":     "client",
 			"clientSecret": "secret",
-		},
+		}),
 	}
 
 	handler, err := NewHandler(config, nil)
@@ -135,11 +135,11 @@ func TestOAuth2Handler_TokenExpiry(t *testing.T) {
 
 	config := &connector.AuthConfig{
 		Type: "oauth2",
-		Credentials: map[string]string{
+		Credentials: toJSON(t, map[string]string{
 			"tokenUrl":     tokenServer.URL,
 			"clientId":     "client",
 			"clientSecret": "secret",
-		},
+		}),
 	}
 
 	handler, err := NewHandler(config, nil)
@@ -186,11 +186,11 @@ func TestOAuth2Handler_Concurrent(t *testing.T) {
 
 	config := &connector.AuthConfig{
 		Type: "oauth2",
-		Credentials: map[string]string{
+		Credentials: toJSON(t, map[string]string{
 			"tokenUrl":     tokenServer.URL,
 			"clientId":     "client",
 			"clientSecret": "secret",
-		},
+		}),
 	}
 
 	handler, err := NewHandler(config, nil)
@@ -228,11 +228,11 @@ func TestOAuth2Handler_TokenRequestFailure(t *testing.T) {
 
 	config := &connector.AuthConfig{
 		Type: "oauth2",
-		Credentials: map[string]string{
+		Credentials: toJSON(t, map[string]string{
 			"tokenUrl":     tokenServer.URL,
 			"clientId":     "bad-client",
 			"clientSecret": "bad-secret",
-		},
+		}),
 	}
 
 	handler, err := NewHandler(config, nil)
@@ -265,11 +265,11 @@ func TestOAuth2Handler_EmptyToken(t *testing.T) {
 
 	config := &connector.AuthConfig{
 		Type: "oauth2",
-		Credentials: map[string]string{
+		Credentials: toJSON(t, map[string]string{
 			"tokenUrl":     tokenServer.URL,
 			"clientId":     "client",
 			"clientSecret": "secret",
-		},
+		}),
 	}
 
 	handler, err := NewHandler(config, nil)
@@ -297,11 +297,11 @@ func TestOAuth2Handler_InvalidJSON(t *testing.T) {
 
 	config := &connector.AuthConfig{
 		Type: "oauth2",
-		Credentials: map[string]string{
+		Credentials: toJSON(t, map[string]string{
 			"tokenUrl":     tokenServer.URL,
 			"clientId":     "client",
 			"clientSecret": "secret",
-		},
+		}),
 	}
 
 	handler, err := NewHandler(config, nil)
@@ -340,12 +340,12 @@ func TestOAuth2Handler_WithScopes(t *testing.T) {
 
 	config := &connector.AuthConfig{
 		Type: "oauth2",
-		Credentials: map[string]string{
+		Credentials: toJSON(t, map[string]interface{}{
 			"tokenUrl":     tokenServer.URL,
 			"clientId":     "client",
 			"clientSecret": "secret",
-			"scopes":       "read, write, admin",
-		},
+			"scopes":       []string{"read", "write", "admin"},
+		}),
 	}
 
 	handler, err := NewHandler(config, nil)
@@ -380,11 +380,11 @@ func TestOAuth2Handler_InvalidateToken(t *testing.T) {
 
 	config := &connector.AuthConfig{
 		Type: "oauth2",
-		Credentials: map[string]string{
+		Credentials: toJSON(t, map[string]string{
 			"tokenUrl":     tokenServer.URL,
 			"clientId":     "client",
 			"clientSecret": "secret",
-		},
+		}),
 	}
 
 	handler, err := NewHandler(config, nil)
@@ -420,11 +420,11 @@ func TestOAuth2Handler_InvalidateToken(t *testing.T) {
 func TestOAuth2Handler_NetworkError(t *testing.T) {
 	config := &connector.AuthConfig{
 		Type: "oauth2",
-		Credentials: map[string]string{
+		Credentials: toJSON(t, map[string]string{
 			"tokenUrl":     "http://localhost:1", // Port 1 should not be listening
 			"clientId":     "client",
 			"clientSecret": "secret",
-		},
+		}),
 	}
 
 	handler, err := NewHandler(config, &http.Client{Timeout: 100 * time.Millisecond})
@@ -452,11 +452,11 @@ func TestOAuth2Handler_DeterministicWithCache(t *testing.T) {
 
 	config := &connector.AuthConfig{
 		Type: "oauth2",
-		Credentials: map[string]string{
+		Credentials: toJSON(t, map[string]string{
 			"tokenUrl":     tokenServer.URL,
 			"clientId":     "client",
 			"clientSecret": "secret",
-		},
+		}),
 	}
 
 	handler, err := NewHandler(config, nil)
@@ -498,11 +498,11 @@ func TestOAuth2Handler_InvalidateTokenOn401(t *testing.T) {
 
 	config := &connector.AuthConfig{
 		Type: "oauth2",
-		Credentials: map[string]string{
+		Credentials: toJSON(t, map[string]string{
 			"tokenUrl":     tokenServer.URL,
 			"clientId":     "client",
 			"clientSecret": "secret",
-		},
+		}),
 	}
 
 	handler, err := NewHandler(config, nil)

@@ -13,6 +13,7 @@ import (
 
 // waitForWebhook waits for the webhook server to be ready (address available).
 // Returns true if server is ready, false if timeout.
+
 func waitForWebhook(w *input.Webhook, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -40,10 +41,10 @@ func waitForRecords(outputModule *MockOutputModule, expected int, timeout time.D
 func TestWebhook_ExecutorIntegration(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint":      "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
-		},
+		}),
 	}
 
 	webhook, err := input.NewWebhookFromConfig(config)

@@ -17,6 +17,7 @@ import (
 
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/pathutil"
+	"github.com/cannectors/runtime/pkg/connector"
 )
 
 // Error codes for script module
@@ -52,12 +53,11 @@ var (
 // ScriptConfig represents the configuration for a script filter module.
 // Either Script or ScriptFile must be provided (but not both).
 type ScriptConfig struct {
+	connector.ModuleBase
 	// Script is the inline JavaScript source code containing a transform(record) function
 	Script string `json:"script,omitempty"`
 	// ScriptFile is the path to a JavaScript file containing the transform(record) function
 	ScriptFile string `json:"scriptFile,omitempty"`
-	// OnError specifies error handling mode: "fail" (default), "skip", "log"
-	OnError string `json:"onError,omitempty"`
 }
 
 // ScriptModule implements a filter that executes JavaScript transformations using Goja.

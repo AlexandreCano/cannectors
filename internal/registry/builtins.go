@@ -5,6 +5,7 @@ package registry
 import (
 	"fmt"
 
+	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/modules/filter"
 	"github.com/cannectors/runtime/internal/modules/input"
 	"github.com/cannectors/runtime/internal/modules/output"
@@ -48,12 +49,11 @@ func registerBuiltinInputModules() {
 func registerBuiltinFilterModules() {
 	// mapping - Field mapping filter module
 	RegisterFilter("mapping", func(cfg connector.ModuleConfig, index int) (filter.Module, error) {
-		mappings, err := filter.ParseFieldMappings(cfg.Config["mappings"])
+		mapCfg, err := moduleconfig.ParseModuleConfig[filter.MappingModuleConfig](cfg)
 		if err != nil {
 			return nil, fmt.Errorf("invalid mapping config at index %d: %w", index, err)
 		}
-		onError, _ := cfg.Config["onError"].(string)
-		module, err := filter.NewMappingFromConfig(mappings, onError)
+		module, err := filter.NewMappingFromConfig(mapCfg.Mappings, mapCfg.OnError)
 		if err != nil {
 			return nil, fmt.Errorf("invalid mapping config at index %d: %w", index, err)
 		}
@@ -63,34 +63,15 @@ func registerBuiltinFilterModules() {
 	// condition - Conditional routing filter module
 	// IMPORTANT: This registry entry provides basic condition support without nested modules.
 	// For full support including nested then/else blocks, use factory.CreateFilterModules()
-	// which calls factory.createConditionFilterModule() with complete parsing via
-	// factory.ParseConditionConfig(). The factory path is the preferred and recommended
-	// approach for condition modules.
-	//
-	// This registry entry exists for API completeness and simple condition cases.
-	// It does NOT parse nested then/else modules - those will be ignored.
+	// which calls factory.createConditionFilterModule() with complete parsing.
 	RegisterFilter("condition", func(cfg connector.ModuleConfig, index int) (filter.Module, error) {
-		// Basic parsing without nested module support
-		condConfig := filter.ConditionConfig{}
-		expr, ok := cfg.Config["expression"].(string)
-		if !ok || expr == "" {
+		condConfig, err := moduleconfig.ParseModuleConfig[filter.ConditionConfig](cfg)
+		if err != nil {
+			return nil, fmt.Errorf("invalid condition config at index %d: %w", index, err)
+		}
+		if condConfig.Expression == "" {
 			return nil, fmt.Errorf("required field 'expression' is missing or empty in condition config at index %d", index)
 		}
-		condConfig.Expression = expr
-
-		if lang, ok := cfg.Config["lang"].(string); ok {
-			condConfig.Lang = lang
-		}
-		if onTrue, ok := cfg.Config["onTrue"].(string); ok {
-			condConfig.OnTrue = onTrue
-		}
-		if onFalse, ok := cfg.Config["onFalse"].(string); ok {
-			condConfig.OnFalse = onFalse
-		}
-		if onError, ok := cfg.Config["onError"].(string); ok {
-			condConfig.OnError = onError
-		}
-
 		// Note: Nested then/else modules are NOT parsed here.
 		// Use factory.CreateFilterModules() for full condition support with nested modules.
 		return filter.NewConditionFromConfig(condConfig)
@@ -98,7 +79,7 @@ func registerBuiltinFilterModules() {
 
 	// script - JavaScript transformation filter module using Goja
 	RegisterFilter("script", func(cfg connector.ModuleConfig, index int) (filter.Module, error) {
-		scriptConfig, err := filter.ParseScriptConfig(cfg.Config)
+		scriptConfig, err := moduleconfig.ParseModuleConfig[filter.ScriptConfig](cfg)
 		if err != nil {
 			return nil, fmt.Errorf("invalid script config at index %d: %w", index, err)
 		}
@@ -111,7 +92,7 @@ func registerBuiltinFilterModules() {
 
 	// http_call - HTTP call filter module with HTTP requests and caching
 	RegisterFilter("http_call", func(cfg connector.ModuleConfig, index int) (filter.Module, error) {
-		httpCallConfig, err := filter.ParseHTTPCallConfig(cfg.Config, cfg.Authentication)
+		httpCallConfig, err := moduleconfig.ParseModuleConfig[filter.HTTPCallConfig](cfg)
 		if err != nil {
 			return nil, fmt.Errorf("invalid http_call config at index %d: %w", index, err)
 		}
@@ -124,7 +105,7 @@ func registerBuiltinFilterModules() {
 
 	// sql_call - SQL call filter module with database queries and caching
 	RegisterFilter("sql_call", func(cfg connector.ModuleConfig, index int) (filter.Module, error) {
-		sqlCallConfig, err := filter.ParseSQLCallConfig(cfg.Config)
+		sqlCallConfig, err := moduleconfig.ParseModuleConfig[filter.SQLCallConfig](cfg)
 		if err != nil {
 			return nil, fmt.Errorf("invalid sql_call config at index %d: %w", index, err)
 		}
@@ -137,7 +118,7 @@ func registerBuiltinFilterModules() {
 
 	// set - Set or modify a single field on each record
 	RegisterFilter("set", func(cfg connector.ModuleConfig, index int) (filter.Module, error) {
-		setConfig, err := filter.ParseSetConfig(cfg.Config)
+		setConfig, err := moduleconfig.ParseModuleConfig[filter.SetConfig](cfg)
 		if err != nil {
 			return nil, fmt.Errorf("invalid set config at index %d: %w", index, err)
 		}
@@ -150,7 +131,7 @@ func registerBuiltinFilterModules() {
 
 	// remove - Remove one or more fields from each record
 	RegisterFilter("remove", func(cfg connector.ModuleConfig, index int) (filter.Module, error) {
-		removeConfig, err := filter.ParseRemoveConfig(cfg.Config)
+		removeConfig, err := moduleconfig.ParseModuleConfig[filter.RemoveConfig](cfg)
 		if err != nil {
 			return nil, fmt.Errorf("invalid remove config at index %d: %w", index, err)
 		}

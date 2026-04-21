@@ -3,91 +3,84 @@
 package config
 
 import (
+	"encoding/json"
 	"testing"
 )
 
+func rawToMap(t *testing.T, raw json.RawMessage) map[string]interface{} {
+	t.Helper()
+	var m map[string]interface{}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatalf("Failed to unmarshal Raw: %v", err)
+	}
+	return m
+}
+
 func TestConvertToPipeline_ValidConfig(t *testing.T) {
-	// Arrange
 	data := map[string]interface{}{
-		"schemaVersion": "1.1.0",
-		"connector": map[string]interface{}{
-			"name":        "test-connector",
-			"version":     "1.0.0",
-			"description": "A test connector",
-			"input": map[string]interface{}{
-				"type":     "httpPolling",
-				"endpoint": "https://api.example.com/data",
-				"schedule": "*/5 * * * *",
-				"method":   "GET",
-			},
-			"filters": []interface{}{
-				map[string]interface{}{
-					"type": "mapping",
-					"mappings": []interface{}{
-						map[string]interface{}{"source": "id", "target": "externalId"},
-					},
+		"name":        "test-connector",
+		"version":     "1.0.0",
+		"description": "A test connector",
+		"input": map[string]interface{}{
+			"type":     "httpPolling",
+			"endpoint": "https://api.example.com/data",
+			"schedule": "*/5 * * * *",
+			"method":   "GET",
+		},
+		"filters": []interface{}{
+			map[string]interface{}{
+				"type": "mapping",
+				"mappings": []interface{}{
+					map[string]interface{}{"source": "id", "target": "externalId"},
 				},
 			},
-			"output": map[string]interface{}{
-				"type":     "httpRequest",
-				"endpoint": "https://api.destination.com/import",
-				"method":   "POST",
-			},
+		},
+		"output": map[string]interface{}{
+			"type":     "httpRequest",
+			"endpoint": "https://api.destination.com/import",
+			"method":   "POST",
 		},
 	}
 
-	// Act
 	pipeline, err := ConvertToPipeline(data)
-
-	// Assert
 	if err != nil {
 		t.Fatalf("ConvertToPipeline() error = %v", err)
 	}
-
 	if pipeline == nil {
 		t.Fatal("ConvertToPipeline() returned nil pipeline")
 	}
-
 	if pipeline.Name != "test-connector" {
 		t.Errorf("Expected name 'test-connector', got '%s'", pipeline.Name)
 	}
-
 	if pipeline.Version != "1.0.0" {
 		t.Errorf("Expected version '1.0.0', got '%s'", pipeline.Version)
 	}
-
 	if pipeline.Description != "A test connector" {
 		t.Errorf("Expected description 'A test connector', got '%s'", pipeline.Description)
 	}
-
 	if pipeline.Input == nil {
 		t.Fatal("Expected non-nil input")
 	}
-
 	if pipeline.Input.Type != "httpPolling" {
 		t.Errorf("Expected input type 'httpPolling', got '%s'", pipeline.Input.Type)
 	}
-
 	if len(pipeline.Filters) != 1 {
 		t.Fatalf("Expected 1 filter, got %d", len(pipeline.Filters))
 	}
-
 	if pipeline.Filters[0].Type != "mapping" {
 		t.Errorf("Expected filter type 'mapping', got '%s'", pipeline.Filters[0].Type)
 	}
-
 	if pipeline.Output == nil {
 		t.Fatal("Expected non-nil output")
 	}
-
 	if pipeline.Output.Type != "httpRequest" {
 		t.Errorf("Expected output type 'httpRequest', got '%s'", pipeline.Output.Type)
 	}
 
-	// Schedule should be in input config, not pipeline level
-	schedule, ok := pipeline.Input.Config["schedule"].(string)
-	if !ok || schedule != "*/5 * * * *" {
-		t.Errorf("Expected schedule '*/5 * * * *' in input config, got '%v'", pipeline.Input.Config["schedule"])
+	// Schedule should be in Raw
+	inputRaw := rawToMap(t, pipeline.Input.Raw)
+	if inputRaw["schedule"] != "*/5 * * * *" {
+		t.Errorf("Expected schedule '*/5 * * * *' in Raw, got '%v'", inputRaw["schedule"])
 	}
 
 	if !pipeline.Enabled {
@@ -96,39 +89,27 @@ func TestConvertToPipeline_ValidConfig(t *testing.T) {
 }
 
 func TestConvertToPipeline_NilData(t *testing.T) {
-	// Act
 	pipeline, err := ConvertToPipeline(nil)
-
-	// Assert
 	if err == nil {
 		t.Error("Expected error for nil data")
 	}
-
 	if pipeline != nil {
 		t.Error("Expected nil pipeline for nil data")
 	}
 }
 
-func TestConvertToPipeline_MissingConnectorSection(t *testing.T) {
-	// Arrange
-	data := map[string]interface{}{
-		"schemaVersion": "1.1.0",
-	}
-
-	// Act
+func TestConvertToPipeline_MissingRequiredFields(t *testing.T) {
+	data := map[string]interface{}{}
 	pipeline, err := ConvertToPipeline(data)
-
-	// Assert
 	if err == nil {
-		t.Error("Expected error for missing connector section")
+		t.Error("Expected error for missing required fields")
 	}
-
 	if pipeline != nil {
-		t.Error("Expected nil pipeline for missing connector section")
+		t.Error("Expected nil pipeline for missing required fields")
 	}
 }
 
-func TestConvertToPipeline_MissingRequiredFields(t *testing.T) {
+func TestConvertToPipeline_MissingIndividualFields(t *testing.T) {
 	tests := []struct {
 		name    string
 		data    map[string]interface{}
@@ -137,57 +118,35 @@ func TestConvertToPipeline_MissingRequiredFields(t *testing.T) {
 		{
 			name: "missing name",
 			data: map[string]interface{}{
-				"connector": map[string]interface{}{
-					"version": "1.0.0",
-					"input":   map[string]interface{}{"type": "httpPolling"},
-					"output":  map[string]interface{}{"type": "httpRequest"},
-				},
+				"input":  map[string]interface{}{"type": "httpPolling"},
+				"output": map[string]interface{}{"type": "httpRequest"},
 			},
-			wantErr: "missing required field 'connector.name'",
-		},
-		{
-			name: "missing version",
-			data: map[string]interface{}{
-				"connector": map[string]interface{}{
-					"name":   "test",
-					"input":  map[string]interface{}{"type": "httpPolling"},
-					"output": map[string]interface{}{"type": "httpRequest"},
-				},
-			},
-			wantErr: "missing required field 'connector.version'",
+			wantErr: "missing required field 'name'",
 		},
 		{
 			name: "missing input",
 			data: map[string]interface{}{
-				"connector": map[string]interface{}{
-					"name":    "test",
-					"version": "1.0.0",
-					"output":  map[string]interface{}{"type": "httpRequest"},
-				},
+				"name":   "test",
+				"output": map[string]interface{}{"type": "httpRequest"},
 			},
-			wantErr: "missing or invalid 'connector.input' section",
+			wantErr: "missing or invalid 'input' section",
 		},
 		{
 			name: "missing output",
 			data: map[string]interface{}{
-				"connector": map[string]interface{}{
-					"name":    "test",
-					"version": "1.0.0",
-					"input":   map[string]interface{}{"type": "httpPolling"},
-				},
+				"name":  "test",
+				"input": map[string]interface{}{"type": "httpPolling"},
 			},
-			wantErr: "missing or invalid 'connector.output' section",
+			wantErr: "missing or invalid 'output' section",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pipeline, err := ConvertToPipeline(tt.data)
-
 			if err == nil {
 				t.Errorf("Expected error containing '%s'", tt.wantErr)
 			}
-
 			if pipeline != nil {
 				t.Error("Expected nil pipeline for missing required field")
 			}
@@ -196,179 +155,150 @@ func TestConvertToPipeline_MissingRequiredFields(t *testing.T) {
 }
 
 func TestConvertToPipeline_NoFilters(t *testing.T) {
-	// Arrange
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "test-no-filters",
-			"version": "1.0.0",
-			"input":   map[string]interface{}{"type": "httpPolling"},
-			"output":  map[string]interface{}{"type": "httpRequest"},
-		},
+		"name":    "test-no-filters",
+		"version": "1.0.0",
+		"input":   map[string]interface{}{"type": "httpPolling"},
+		"output":  map[string]interface{}{"type": "httpRequest"},
 	}
 
-	// Act
 	pipeline, err := ConvertToPipeline(data)
-
-	// Assert
 	if err != nil {
 		t.Fatalf("ConvertToPipeline() error = %v", err)
 	}
-
 	if len(pipeline.Filters) != 0 {
 		t.Errorf("Expected 0 filters, got %d", len(pipeline.Filters))
 	}
 }
 
 func TestConvertToPipeline_WithAuthentication(t *testing.T) {
-	// Arrange
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "test-auth",
-			"version": "1.0.0",
-			"input": map[string]interface{}{
-				"type":     "httpPolling",
-				"endpoint": "https://api.example.com",
-				"authentication": map[string]interface{}{
-					"type": "bearer",
-					"credentials": map[string]interface{}{
-						"token": "secret-token",
-					},
+		"name":    "test-auth",
+		"version": "1.0.0",
+		"input": map[string]interface{}{
+			"type":     "httpPolling",
+			"endpoint": "https://api.example.com",
+			"authentication": map[string]interface{}{
+				"type": "bearer",
+				"credentials": map[string]interface{}{
+					"token": "secret-token",
 				},
 			},
-			"output": map[string]interface{}{
-				"type": "httpRequest",
-			},
+		},
+		"output": map[string]interface{}{
+			"type": "httpRequest",
 		},
 	}
 
-	// Act
 	pipeline, err := ConvertToPipeline(data)
-
-	// Assert
 	if err != nil {
 		t.Fatalf("ConvertToPipeline() error = %v", err)
 	}
 
-	if pipeline.Input.Authentication == nil {
-		t.Fatal("Expected non-nil authentication")
+	// Authentication is now inside Raw
+	inputRaw := rawToMap(t, pipeline.Input.Raw)
+	authRaw, ok := inputRaw["authentication"].(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected authentication in Raw")
 	}
-
-	if pipeline.Input.Authentication.Type != "bearer" {
-		t.Errorf("Expected auth type 'bearer', got '%s'", pipeline.Input.Authentication.Type)
+	if authRaw["type"] != "bearer" {
+		t.Errorf("Expected auth type 'bearer', got '%v'", authRaw["type"])
 	}
-
-	if pipeline.Input.Authentication.Credentials["token"] != "secret-token" {
-		t.Errorf("Expected token 'secret-token', got '%s'", pipeline.Input.Authentication.Credentials["token"])
+	creds, ok := authRaw["credentials"].(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected credentials in authentication")
+	}
+	if creds["token"] != "secret-token" {
+		t.Errorf("Expected token 'secret-token', got '%v'", creds["token"])
 	}
 }
 
-func TestConvertToPipeline_WithErrorHandling(t *testing.T) {
-	// Arrange
+func TestConvertToPipeline_WithDefaults(t *testing.T) {
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "test-error-handling",
-			"version": "1.0.0",
-			"input":   map[string]interface{}{"type": "httpPolling"},
-			"output":  map[string]interface{}{"type": "httpRequest"},
-			"errorHandling": map[string]interface{}{
-				"retryCount": float64(3),
-				"retryDelay": float64(1000),
-				"onError":    "stop",
+		"name":    "test-defaults",
+		"version": "1.0.0",
+		"input":   map[string]interface{}{"type": "httpPolling"},
+		"output":  map[string]interface{}{"type": "httpRequest"},
+		"defaults": map[string]interface{}{
+			"retry": map[string]interface{}{
+				"maxAttempts": float64(3),
+				"delayMs":     float64(1000),
 			},
+			"onError": "stop",
 		},
 	}
 
-	// Act
 	pipeline, err := ConvertToPipeline(data)
-
-	// Assert
 	if err != nil {
 		t.Fatalf("ConvertToPipeline() error = %v", err)
 	}
-
-	if pipeline.ErrorHandling == nil {
-		t.Fatal("Expected non-nil error handling")
+	if pipeline.Defaults == nil {
+		t.Fatal("Expected non-nil defaults")
 	}
-
-	if pipeline.ErrorHandling.RetryCount != 3 {
-		t.Errorf("Expected retryCount 3, got %d", pipeline.ErrorHandling.RetryCount)
+	if pipeline.Defaults.Retry == nil {
+		t.Fatal("Expected non-nil retry config")
 	}
-
-	if pipeline.ErrorHandling.RetryDelay != 1000 {
-		t.Errorf("Expected retryDelay 1000, got %d", pipeline.ErrorHandling.RetryDelay)
+	if pipeline.Defaults.Retry.MaxAttempts != 3 {
+		t.Errorf("Expected retry maxAttempts 3, got %d", pipeline.Defaults.Retry.MaxAttempts)
 	}
-
-	if pipeline.ErrorHandling.OnError != "stop" {
-		t.Errorf("Expected onError 'stop', got '%s'", pipeline.ErrorHandling.OnError)
+	if pipeline.Defaults.Retry.DelayMs != 1000 {
+		t.Errorf("Expected retry delayMs 1000, got %d", pipeline.Defaults.Retry.DelayMs)
+	}
+	if pipeline.Defaults.OnError != "stop" {
+		t.Errorf("Expected onError 'stop', got '%s'", pipeline.Defaults.OnError)
 	}
 }
 
 func TestConvertToPipeline_ModuleConfigFields(t *testing.T) {
-	// Arrange - test that module config fields are properly extracted
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "test-config-fields",
-			"version": "1.0.0",
-			"input": map[string]interface{}{
-				"type":     "httpPolling",
-				"endpoint": "https://api.example.com",
-				"schedule": "0 * * * *",
-				"method":   "GET",
-				"headers": map[string]interface{}{
-					"Accept": "application/json",
-				},
+		"name":    "test-config-fields",
+		"version": "1.0.0",
+		"input": map[string]interface{}{
+			"type":     "httpPolling",
+			"endpoint": "https://api.example.com",
+			"schedule": "0 * * * *",
+			"method":   "GET",
+			"headers": map[string]interface{}{
+				"Accept": "application/json",
 			},
-			"output": map[string]interface{}{"type": "httpRequest"},
 		},
+		"output": map[string]interface{}{"type": "httpRequest"},
 	}
 
-	// Act
 	pipeline, err := ConvertToPipeline(data)
-
-	// Assert
 	if err != nil {
 		t.Fatalf("ConvertToPipeline() error = %v", err)
 	}
 
-	// Check that config fields are properly stored
-	if endpoint, ok := pipeline.Input.Config["endpoint"].(string); !ok || endpoint != "https://api.example.com" {
-		t.Errorf("Expected endpoint 'https://api.example.com', got '%v'", pipeline.Input.Config["endpoint"])
+	inputRaw := rawToMap(t, pipeline.Input.Raw)
+	if inputRaw["endpoint"] != "https://api.example.com" {
+		t.Errorf("Expected endpoint 'https://api.example.com', got '%v'", inputRaw["endpoint"])
 	}
-
-	if method, ok := pipeline.Input.Config["method"].(string); !ok || method != "GET" {
-		t.Errorf("Expected method 'GET', got '%v'", pipeline.Input.Config["method"])
+	if inputRaw["method"] != "GET" {
+		t.Errorf("Expected method 'GET', got '%v'", inputRaw["method"])
 	}
-
-	// Headers should be included in config
-	if _, ok := pipeline.Input.Config["headers"]; !ok {
-		t.Error("Expected headers in config")
+	if _, ok := inputRaw["headers"]; !ok {
+		t.Error("Expected headers in Raw")
 	}
 }
 
 func TestConvertToPipeline_MultipleFilters(t *testing.T) {
-	// Arrange
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "test-multiple-filters",
-			"version": "1.0.0",
-			"input":   map[string]interface{}{"type": "httpPolling"},
-			"filters": []interface{}{
-				map[string]interface{}{"type": "mapping"},
-				map[string]interface{}{"type": "condition"},
-				map[string]interface{}{"type": "transform"},
-			},
-			"output": map[string]interface{}{"type": "httpRequest"},
+		"name":    "test-multiple-filters",
+		"version": "1.0.0",
+		"input":   map[string]interface{}{"type": "httpPolling"},
+		"filters": []interface{}{
+			map[string]interface{}{"type": "mapping"},
+			map[string]interface{}{"type": "condition"},
+			map[string]interface{}{"type": "transform"},
 		},
+		"output": map[string]interface{}{"type": "httpRequest"},
 	}
 
-	// Act
 	pipeline, err := ConvertToPipeline(data)
-
-	// Assert
 	if err != nil {
 		t.Fatalf("ConvertToPipeline() error = %v", err)
 	}
-
 	if len(pipeline.Filters) != 3 {
 		t.Fatalf("Expected 3 filters, got %d", len(pipeline.Filters))
 	}
@@ -382,19 +312,16 @@ func TestConvertToPipeline_MultipleFilters(t *testing.T) {
 }
 
 func TestConvertToPipeline_ScheduleInInputConfig(t *testing.T) {
-	// Test that schedule defined at input level is stored in input config
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "test-schedule-in-input",
-			"version": "1.0.0",
-			"input": map[string]interface{}{
-				"type":     "httpPolling",
-				"endpoint": "https://api.example.com",
-				"schedule": "*/5 * * * *",
-			},
-			"filters": []interface{}{},
-			"output":  map[string]interface{}{"type": "httpRequest"},
+		"name":    "test-schedule-in-input",
+		"version": "1.0.0",
+		"input": map[string]interface{}{
+			"type":     "httpPolling",
+			"endpoint": "https://api.example.com",
+			"schedule": "*/5 * * * *",
 		},
+		"filters": []interface{}{},
+		"output":  map[string]interface{}{"type": "httpRequest"},
 	}
 
 	pipeline, err := ConvertToPipeline(data)
@@ -402,26 +329,22 @@ func TestConvertToPipeline_ScheduleInInputConfig(t *testing.T) {
 		t.Fatalf("ConvertToPipeline() error = %v", err)
 	}
 
-	// Schedule should be in input config
-	schedule, ok := pipeline.Input.Config["schedule"].(string)
-	if !ok || schedule != "*/5 * * * *" {
-		t.Errorf("Expected schedule '*/5 * * * *' in input config, got '%v'", pipeline.Input.Config["schedule"])
+	inputRaw := rawToMap(t, pipeline.Input.Raw)
+	if inputRaw["schedule"] != "*/5 * * * *" {
+		t.Errorf("Expected schedule '*/5 * * * *' in Raw, got '%v'", inputRaw["schedule"])
 	}
 }
 
 func TestConvertToPipeline_WebhookWithoutSchedule(t *testing.T) {
-	// Test that webhook input type works without schedule
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "test-webhook",
-			"version": "1.0.0",
-			"input": map[string]interface{}{
-				"type": "webhook",
-				"path": "/webhook",
-			},
-			"filters": []interface{}{},
-			"output":  map[string]interface{}{"type": "httpRequest"},
+		"name":    "test-webhook",
+		"version": "1.0.0",
+		"input": map[string]interface{}{
+			"type": "webhook",
+			"path": "/webhook",
 		},
+		"filters": []interface{}{},
+		"output":  map[string]interface{}{"type": "httpRequest"},
 	}
 
 	pipeline, err := ConvertToPipeline(data)
@@ -429,42 +352,59 @@ func TestConvertToPipeline_WebhookWithoutSchedule(t *testing.T) {
 		t.Fatalf("ConvertToPipeline() error = %v", err)
 	}
 
-	// Webhook should not have schedule
-	if _, hasSchedule := pipeline.Input.Config["schedule"]; hasSchedule {
+	inputRaw := rawToMap(t, pipeline.Input.Raw)
+	if _, hasSchedule := inputRaw["schedule"]; hasSchedule {
 		t.Error("Webhook input should not have schedule")
 	}
 }
 
 func TestConvertToPipeline_UsesNameAsID(t *testing.T) {
-	// When id is not specified, name should be used as ID
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"name":    "my-connector",
-			"version": "1.0.0",
-			"input":   map[string]interface{}{"type": "httpPolling"},
-			"output":  map[string]interface{}{"type": "httpRequest"},
-		},
+		"name":    "my-connector",
+		"version": "1.0.0",
+		"input":   map[string]interface{}{"type": "httpPolling"},
+		"output":  map[string]interface{}{"type": "httpRequest"},
 	}
 
 	pipeline, err := ConvertToPipeline(data)
 	if err != nil {
 		t.Fatalf("ConvertToPipeline() error = %v", err)
 	}
-
 	if pipeline.ID != "my-connector" {
 		t.Errorf("Expected ID 'my-connector' (from name), got '%s'", pipeline.ID)
 	}
 }
 
 func TestConvertToPipeline_ExplicitID(t *testing.T) {
-	// When id is specified, it should override name as ID
 	data := map[string]interface{}{
-		"connector": map[string]interface{}{
-			"id":      "explicit-id",
-			"name":    "my-connector",
-			"version": "1.0.0",
-			"input":   map[string]interface{}{"type": "httpPolling"},
-			"output":  map[string]interface{}{"type": "httpRequest"},
+		"id":      "explicit-id",
+		"name":    "my-connector",
+		"version": "1.0.0",
+		"input":   map[string]interface{}{"type": "httpPolling"},
+		"output":  map[string]interface{}{"type": "httpRequest"},
+	}
+
+	pipeline, err := ConvertToPipeline(data)
+	if err != nil {
+		t.Fatalf("ConvertToPipeline() error = %v", err)
+	}
+	if pipeline.ID != "explicit-id" {
+		t.Errorf("Expected ID 'explicit-id', got '%s'", pipeline.ID)
+	}
+}
+
+func TestConvertToPipeline_RawPopulated(t *testing.T) {
+	data := map[string]interface{}{
+		"name": "test-raw",
+		"input": map[string]interface{}{
+			"type":     "httpPolling",
+			"endpoint": "https://api.example.com",
+			"schedule": "*/5 * * * *",
+		},
+		"output": map[string]interface{}{
+			"type":     "httpRequest",
+			"endpoint": "https://dest.example.com",
+			"method":   "POST",
 		},
 	}
 
@@ -473,62 +413,241 @@ func TestConvertToPipeline_ExplicitID(t *testing.T) {
 		t.Fatalf("ConvertToPipeline() error = %v", err)
 	}
 
-	if pipeline.ID != "explicit-id" {
-		t.Errorf("Expected ID 'explicit-id', got '%s'", pipeline.ID)
+	if pipeline.Input.Raw == nil {
+		t.Fatal("Expected Input.Raw to be populated")
+	}
+
+	inputRaw := rawToMap(t, pipeline.Input.Raw)
+	if inputRaw["endpoint"] != "https://api.example.com" {
+		t.Errorf("Expected endpoint in Raw, got %v", inputRaw["endpoint"])
+	}
+	if inputRaw["schedule"] != "*/5 * * * *" {
+		t.Errorf("Expected schedule in Raw, got %v", inputRaw["schedule"])
+	}
+	if _, hasType := inputRaw["type"]; hasType {
+		t.Error("Raw should not contain 'type'")
+	}
+
+	if pipeline.Output.Raw == nil {
+		t.Fatal("Expected Output.Raw to be populated")
 	}
 }
 
-func TestConvertToPipeline_WithAndWithoutSchemaVersion(t *testing.T) {
-	// Test that schemaVersion is optional and ignored (backward compatibility)
-	tests := []struct {
-		name string
-		data map[string]interface{}
-	}{
-		{
-			name: "without schemaVersion",
-			data: map[string]interface{}{
-				"connector": map[string]interface{}{
-					"name":    "test-no-schema-version",
-					"version": "1.0.0",
-					"input":   map[string]interface{}{"type": "httpPolling"},
-					"filters": []interface{}{},
-					"output":  map[string]interface{}{"type": "httpRequest"},
+func TestConvertToPipeline_RawWithAuthentication(t *testing.T) {
+	data := map[string]interface{}{
+		"name": "test-raw-auth",
+		"input": map[string]interface{}{
+			"type":     "httpPolling",
+			"endpoint": "https://api.example.com",
+			"authentication": map[string]interface{}{
+				"type": "bearer",
+				"credentials": map[string]interface{}{
+					"token": "secret",
 				},
 			},
 		},
-		{
-			name: "with schemaVersion",
-			data: map[string]interface{}{
-				"schemaVersion": "1.1.0",
-				"connector": map[string]interface{}{
-					"name":    "test-with-schema-version",
-					"version": "1.0.0",
-					"input":   map[string]interface{}{"type": "httpPolling"},
-					"filters": []interface{}{},
-					"output":  map[string]interface{}{"type": "httpRequest"},
-				},
+		"output": map[string]interface{}{"type": "httpRequest"},
+	}
+
+	pipeline, err := ConvertToPipeline(data)
+	if err != nil {
+		t.Fatalf("ConvertToPipeline() error = %v", err)
+	}
+
+	inputRaw := rawToMap(t, pipeline.Input.Raw)
+	authRaw, ok := inputRaw["authentication"].(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected authentication in Raw")
+	}
+	if authRaw["type"] != "bearer" {
+		t.Errorf("Expected auth type 'bearer' in Raw, got %v", authRaw["type"])
+	}
+}
+
+func TestConvertToPipeline_RawWithResolvedDefaults(t *testing.T) {
+	data := map[string]interface{}{
+		"name": "test-raw-defaults",
+		"input": map[string]interface{}{
+			"type":     "httpPolling",
+			"endpoint": "https://api.example.com",
+		},
+		"defaults": map[string]interface{}{
+			"onError":   "skip",
+			"timeoutMs": float64(60000),
+		},
+		"output": map[string]interface{}{"type": "httpRequest"},
+	}
+
+	pipeline, err := ConvertToPipeline(data)
+	if err != nil {
+		t.Fatalf("ConvertToPipeline() error = %v", err)
+	}
+
+	inputRaw := rawToMap(t, pipeline.Input.Raw)
+	if inputRaw["onError"] != "skip" {
+		t.Errorf("Expected onError 'skip' in Raw, got %v", inputRaw["onError"])
+	}
+	if inputRaw["timeoutMs"] != float64(60000) {
+		t.Errorf("Expected timeoutMs 60000 in Raw, got %v", inputRaw["timeoutMs"])
+	}
+}
+
+func TestConvertToPipeline_RawFilterPopulated(t *testing.T) {
+	data := map[string]interface{}{
+		"name":  "test-raw-filter",
+		"input": map[string]interface{}{"type": "httpPolling"},
+		"filters": []interface{}{
+			map[string]interface{}{
+				"type":   "set",
+				"target": "status",
+				"value":  "active",
 			},
+		},
+		"output": map[string]interface{}{"type": "httpRequest"},
+	}
+
+	pipeline, err := ConvertToPipeline(data)
+	if err != nil {
+		t.Fatalf("ConvertToPipeline() error = %v", err)
+	}
+	if len(pipeline.Filters) != 1 {
+		t.Fatalf("Expected 1 filter, got %d", len(pipeline.Filters))
+	}
+	if pipeline.Filters[0].Raw == nil {
+		t.Fatal("Expected filter Raw to be populated")
+	}
+
+	filterRaw := rawToMap(t, pipeline.Filters[0].Raw)
+	if filterRaw["target"] != "status" {
+		t.Errorf("Expected target 'status' in Raw, got %v", filterRaw["target"])
+	}
+}
+
+func TestConvertToPipeline_WithAndWithoutVersion(t *testing.T) {
+	tests := []struct {
+		name            string
+		data            map[string]interface{}
+		expectedVersion string
+	}{
+		{
+			name: "without version",
+			data: map[string]interface{}{
+				"name":    "test-no-version",
+				"input":   map[string]interface{}{"type": "httpPolling"},
+				"filters": []interface{}{},
+				"output":  map[string]interface{}{"type": "httpRequest"},
+			},
+			expectedVersion: "",
+		},
+		{
+			name: "with version",
+			data: map[string]interface{}{
+				"name":    "test-with-version",
+				"version": "1.0.0",
+				"input":   map[string]interface{}{"type": "httpPolling"},
+				"filters": []interface{}{},
+				"output":  map[string]interface{}{"type": "httpRequest"},
+			},
+			expectedVersion: "1.0.0",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pipeline, err := ConvertToPipeline(tt.data)
-
 			if err != nil {
 				t.Fatalf("ConvertToPipeline() error = %v", err)
 			}
-
 			if pipeline == nil {
 				t.Fatal("ConvertToPipeline() returned nil pipeline")
 			}
-
-			// Both cases should produce valid pipelines
+			if pipeline.Version != tt.expectedVersion {
+				t.Errorf("Expected version '%s', got '%s'", tt.expectedVersion, pipeline.Version)
+			}
 			if pipeline.Input == nil {
 				t.Error("Expected non-nil input")
 			}
 			if pipeline.Output == nil {
 				t.Error("Expected non-nil output")
+			}
+		})
+	}
+}
+
+func TestResolveRetry_GranularMerge(t *testing.T) {
+	tests := []struct {
+		name        string
+		moduleRetry map[string]interface{}
+		defaults    map[string]interface{}
+		wantKeys    map[string]interface{}
+	}{
+		{
+			name:        "module overrides single field, inherits rest from defaults",
+			moduleRetry: map[string]interface{}{"maxAttempts": float64(5)},
+			defaults:    map[string]interface{}{"maxAttempts": float64(3), "delayMs": float64(2000), "backoffMultiplier": float64(1.5)},
+			wantKeys:    map[string]interface{}{"maxAttempts": float64(5), "delayMs": float64(2000), "backoffMultiplier": float64(1.5)},
+		},
+		{
+			name:        "no module retry uses defaults",
+			moduleRetry: nil,
+			defaults:    map[string]interface{}{"maxAttempts": float64(3), "delayMs": float64(1000)},
+			wantKeys:    map[string]interface{}{"maxAttempts": float64(3), "delayMs": float64(1000)},
+		},
+		{
+			name:        "module retry without defaults uses module only",
+			moduleRetry: map[string]interface{}{"maxAttempts": float64(5)},
+			defaults:    nil,
+			wantKeys:    map[string]interface{}{"maxAttempts": float64(5)},
+		},
+		{
+			name:        "module overrides multiple fields",
+			moduleRetry: map[string]interface{}{"maxAttempts": float64(7), "delayMs": float64(500)},
+			defaults:    map[string]interface{}{"maxAttempts": float64(3), "delayMs": float64(2000), "backoffMultiplier": float64(2.0)},
+			wantKeys:    map[string]interface{}{"maxAttempts": float64(7), "delayMs": float64(500), "backoffMultiplier": float64(2.0)},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := map[string]interface{}{
+				"name":  "test-retry-merge",
+				"input": map[string]interface{}{"type": "httpPolling"},
+				"output": map[string]interface{}{
+					"type": "httpRequest",
+				},
+			}
+			if tt.moduleRetry != nil {
+				inputMap, ok := data["input"].(map[string]interface{})
+				if !ok {
+					t.Fatalf("data[\"input\"] is not map[string]interface{}")
+				}
+				inputMap["retry"] = tt.moduleRetry
+			}
+			if tt.defaults != nil {
+				data["defaults"] = map[string]interface{}{"retry": tt.defaults}
+			}
+
+			pipeline, err := ConvertToPipeline(data)
+			if err != nil {
+				t.Fatalf("ConvertToPipeline() error = %v", err)
+			}
+
+			// Unmarshal Raw and check retry values
+			inputRaw := rawToMap(t, pipeline.Input.Raw)
+			retryRaw, ok := inputRaw["retry"].(map[string]interface{})
+			if !ok && tt.wantKeys != nil {
+				t.Fatal("Expected retry config in input Raw")
+			}
+
+			for k, want := range tt.wantKeys {
+				got, exists := retryRaw[k]
+				if !exists {
+					t.Errorf("Missing key %q in merged retry config", k)
+					continue
+				}
+				if got != want {
+					t.Errorf("retry[%q] = %v, want %v", k, got, want)
+				}
 			}
 		})
 	}

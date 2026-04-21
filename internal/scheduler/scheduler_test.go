@@ -3,6 +3,7 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -18,6 +19,14 @@ type mockExecutor struct {
 	shouldError    bool
 	mu             sync.Mutex
 	executedIDs    []string
+}
+
+func mustJSON(v interface{}) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 func (m *mockExecutor) Execute(pipeline *connector.Pipeline) (*connector.ExecutionResult, error) {
@@ -137,7 +146,7 @@ func TestScheduler_Register_ValidPipeline(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "test-pipeline-1",
 		Name:    "Test Pipeline",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "*/5 * * * *"}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "*/5 * * * *"})},
 		Enabled: true,
 	}
 
@@ -159,7 +168,7 @@ func TestScheduler_Register_DisabledPipeline(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "disabled-pipeline",
 		Name:    "Disabled Pipeline",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "*/5 * * * *"}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "*/5 * * * *"})},
 		Enabled: false,
 	}
 
@@ -176,7 +185,7 @@ func TestScheduler_Register_EmptySchedule(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "no-schedule-pipeline",
 		Name:    "No Schedule Pipeline",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": ""}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": ""})},
 		Enabled: true,
 	}
 
@@ -193,7 +202,7 @@ func TestScheduler_Register_InvalidCronExpression(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "invalid-cron-pipeline",
 		Name:    "Invalid CRON Pipeline",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "not a valid cron"}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "not a valid cron"})},
 		Enabled: true,
 	}
 
@@ -210,7 +219,7 @@ func TestScheduler_Register_DuplicatePipeline(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "duplicate-pipeline",
 		Name:    "Pipeline v1",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "*/5 * * * *"}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "*/5 * * * *"})},
 		Enabled: true,
 	}
 
@@ -223,7 +232,7 @@ func TestScheduler_Register_DuplicatePipeline(t *testing.T) {
 	pipelineV2 := &connector.Pipeline{
 		ID:      "duplicate-pipeline",
 		Name:    "Pipeline v2",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "*/10 * * * *"}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "*/10 * * * *"})},
 		Enabled: true,
 	}
 
@@ -254,7 +263,7 @@ func TestScheduler_Start_ExecutesPipelines(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "exec-test-pipeline",
 		Name:    "Execution Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second (extended format)
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "* * * * * *"})}, // Every second (extended format)
 		Enabled: true,
 	}
 
@@ -288,7 +297,7 @@ func TestScheduler_Start_AlreadyRunning(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "already-running-test",
 		Name:    "Already Running Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "0 * * * *"})},
 		Enabled: true,
 	}
 
@@ -319,7 +328,7 @@ func TestScheduler_SerializesExecution(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "serialize-test-pipeline",
 		Name:    "Serialize Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "* * * * * *"})}, // Every second
 		Enabled: true,
 	}
 
@@ -357,7 +366,7 @@ func TestScheduler_IsRunning(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "is-running-test",
 		Name:    "Is Running Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "0 * * * *"})},
 		Enabled: true,
 	}
 
@@ -388,7 +397,7 @@ func TestScheduler_Stop_GracefulShutdown(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "stop-test-pipeline",
 		Name:    "Stop Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "* * * * * *"})}, // Every second
 		Enabled: true,
 	}
 
@@ -426,7 +435,7 @@ func TestScheduler_Stop_ClearsPipelines(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "clear-test-pipeline",
 		Name:    "Clear Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "0 * * * *"})},
 		Enabled: true,
 	}
 
@@ -469,7 +478,7 @@ func TestScheduler_Stop_WithTimeout(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "timeout-test-pipeline",
 		Name:    "Timeout Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "* * * * * *"})},
 		Enabled: true,
 	}
 
@@ -501,7 +510,7 @@ func TestScheduler_RegisterAfterStart(t *testing.T) {
 	pipeline1 := &connector.Pipeline{
 		ID:      "initial-pipeline",
 		Name:    "Initial Pipeline",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "0 * * * *"})},
 		Enabled: true,
 	}
 	_ = s.Register(pipeline1)
@@ -512,7 +521,7 @@ func TestScheduler_RegisterAfterStart(t *testing.T) {
 	pipeline2 := &connector.Pipeline{
 		ID:      "dynamic-pipeline",
 		Name:    "Dynamic Pipeline",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "* * * * * *"})}, // Every second
 		Enabled: true,
 	}
 
@@ -535,7 +544,7 @@ func TestScheduler_Unregister(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "unregister-test",
 		Name:    "Unregister Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "0 * * * *"})},
 		Enabled: true,
 	}
 
@@ -574,13 +583,13 @@ func TestScheduler_PipelineCount(t *testing.T) {
 
 	_ = s.Register(&connector.Pipeline{
 		ID:      "count-test-1",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "0 * * * *"})},
 		Enabled: true,
 	})
 
 	_ = s.Register(&connector.Pipeline{
 		ID:      "count-test-2",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "0 * * * *"})},
 		Enabled: true,
 	})
 
@@ -595,13 +604,13 @@ func TestScheduler_GetPipelineIDs(t *testing.T) {
 
 	_ = s.Register(&connector.Pipeline{
 		ID:      "id-test-a",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "0 * * * *"})},
 		Enabled: true,
 	})
 
 	_ = s.Register(&connector.Pipeline{
 		ID:      "id-test-b",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "0 * * * *"})},
 		Enabled: true,
 	})
 
@@ -656,7 +665,7 @@ func TestScheduler_GetNextRun_BeforeStart(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "before-start-test",
 		Name:    "Before Start Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "0 * * * *"})},
 		Enabled: true,
 	}
 
@@ -687,7 +696,7 @@ func TestScheduler_GetQueueLength_EmptyQueue(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "queue-length-test",
 		Name:    "Queue Length Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "0 * * * *"}},
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "0 * * * *"})},
 		Enabled: true,
 	}
 
@@ -728,7 +737,7 @@ func TestScheduler_QueuesExecutionWhenPreviousRunning(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "queue-test-pipeline",
 		Name:    "Queue Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "* * * * * *"})}, // Every second
 		Enabled: true,
 	}
 
@@ -773,7 +782,7 @@ func TestScheduler_ProcessesQueueAfterExecutionCompletes(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "queue-process-test",
 		Name:    "Queue Process Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "* * * * * *"})}, // Every second
 		Enabled: true,
 	}
 
@@ -825,7 +834,7 @@ func TestScheduler_FIFOQueueOrder(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "fifo-test-pipeline",
 		Name:    "FIFO Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "* * * * * *"})}, // Every second
 		Enabled: true,
 	}
 
@@ -875,7 +884,7 @@ func TestScheduler_ClearsQueueOnStop(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "clear-queue-test",
 		Name:    "Clear Queue Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "* * * * * *"})}, // Every second
 		Enabled: true,
 	}
 
@@ -927,7 +936,7 @@ func TestScheduler_StopDoesNotStartNewQueuedExecutions(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "no-new-exec-test",
 		Name:    "No New Exec Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "* * * * * *"})}, // Every second
 		Enabled: true,
 	}
 
@@ -978,7 +987,7 @@ func TestScheduler_IsQueued(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "is-queued-test",
 		Name:    "Is Queued Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "* * * * * *"})}, // Every second
 		Enabled: true,
 	}
 
@@ -1035,7 +1044,7 @@ func TestScheduler_MultipleQueuedExecutionsProcessedSequentially(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "sequential-test",
 		Name:    "Sequential Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "* * * * * *"})}, // Every second
 		Enabled: true,
 	}
 
@@ -1082,7 +1091,7 @@ func TestScheduler_NoStarvation(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "no-starvation-test",
 		Name:    "No Starvation Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "* * * * * *"})}, // Every second
 		Enabled: true,
 	}
 
@@ -1133,7 +1142,7 @@ func TestScheduler_QueueFullDropsRequest(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "queue-full-test",
 		Name:    "Queue Full Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "* * * * * *"})}, // Every second
 		Enabled: true,
 	}
 
@@ -1190,7 +1199,7 @@ func TestScheduler_QueueFullDoesNotBlock(t *testing.T) {
 	pipeline := &connector.Pipeline{
 		ID:      "queue-block-test",
 		Name:    "Queue Block Test",
-		Input:   &connector.ModuleConfig{Type: "httpPolling", Config: map[string]interface{}{"schedule": "* * * * * *"}}, // Every second
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]interface{}{"schedule": "* * * * * *"})}, // Every second
 		Enabled: true,
 	}
 
@@ -1261,8 +1270,8 @@ func TestScheduler_GetScheduleFromInput(t *testing.T) {
 			pipeline: &connector.Pipeline{
 				ID: "test",
 				Input: &connector.ModuleConfig{
-					Type:   "httpPolling",
-					Config: map[string]interface{}{"endpoint": "https://example.com"},
+					Type: "httpPolling",
+					Raw:  mustJSON(map[string]interface{}{"endpoint": "https://example.com"}),
 				},
 			},
 			want: "",
@@ -1272,8 +1281,8 @@ func TestScheduler_GetScheduleFromInput(t *testing.T) {
 			pipeline: &connector.Pipeline{
 				ID: "test",
 				Input: &connector.ModuleConfig{
-					Type:   "httpPolling",
-					Config: map[string]interface{}{"schedule": "*/5 * * * *"},
+					Type: "httpPolling",
+					Raw:  mustJSON(map[string]interface{}{"schedule": "*/5 * * * *"}),
 				},
 			},
 			want: "*/5 * * * *",
@@ -1284,11 +1293,11 @@ func TestScheduler_GetScheduleFromInput(t *testing.T) {
 				ID: "test",
 				Input: &connector.ModuleConfig{
 					Type: "httpPolling",
-					Config: map[string]interface{}{
+					Raw: mustJSON(map[string]interface{}{
 						"endpoint": "https://example.com",
 						"schedule": "0 * * * *",
 						"method":   "GET",
-					},
+					}),
 				},
 			},
 			want: "0 * * * *",
@@ -1315,10 +1324,10 @@ func TestScheduler_Register_ScheduleFromInputConfig(t *testing.T) {
 		Enabled: true,
 		Input: &connector.ModuleConfig{
 			Type: "httpPolling",
-			Config: map[string]interface{}{
+			Raw: mustJSON(map[string]interface{}{
 				"endpoint": "https://example.com",
 				"schedule": "*/5 * * * *",
-			},
+			}),
 		},
 	}
 
@@ -1342,10 +1351,10 @@ func TestScheduler_Register_NoScheduleInInputConfig(t *testing.T) {
 		Enabled: true,
 		Input: &connector.ModuleConfig{
 			Type: "httpPolling",
-			Config: map[string]interface{}{
+			Raw: mustJSON(map[string]interface{}{
 				"endpoint": "https://example.com",
 				// No schedule
-			},
+			}),
 		},
 	}
 
@@ -1371,9 +1380,9 @@ func TestScheduler_Register_WebhookWithoutSchedule(t *testing.T) {
 		Enabled: true,
 		Input: &connector.ModuleConfig{
 			Type: "webhook",
-			Config: map[string]interface{}{
+			Raw: mustJSON(map[string]interface{}{
 				"path": "/webhook",
-			},
+			}),
 		},
 	}
 

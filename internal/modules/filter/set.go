@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/internal/moduleconfig"
 )
 
 // SetConfig represents the configuration for a set filter module.
@@ -82,13 +83,13 @@ func (m *SetModule) processRecord(record map[string]interface{}) (map[string]int
 	value := m.config.Value
 
 	// Simple case: no dot notation (flat field)
-	if !IsNestedPath(target) {
+	if !moduleconfig.IsNestedPath(target) {
 		record[target] = value
 		return record, nil
 	}
 
 	// Nested path - always create intermediate objects
-	if err := SetNestedValue(record, target, value); err != nil {
+	if err := moduleconfig.SetNestedValue(record, target, value); err != nil {
 		return nil, err
 	}
 	return record, nil

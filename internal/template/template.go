@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/internal/moduleconfig"
 )
 
 // Template syntax constants
@@ -194,7 +195,7 @@ func (e *Evaluator) resolveVariable(v Variable, record map[string]interface{}) s
 	path := strings.TrimPrefix(v.Path, "record.")
 
 	// Get the value from the record
-	value, found := GetNestedValue(record, path)
+	value, found := moduleconfig.GetNestedValue(record, path)
 
 	// Handle missing or null values
 	if !found || value == nil {
@@ -216,82 +217,6 @@ func (e *Evaluator) resolveVariable(v Variable, record map[string]interface{}) s
 
 	// Convert value to string
 	return ValueToString(value)
-}
-
-// GetNestedValue extracts a value from a nested object using dot notation.
-// Supports array indexing with [n] syntax.
-// Returns the value and a boolean indicating if the field was found.
-func GetNestedValue(obj map[string]interface{}, path string) (interface{}, bool) {
-	if path == "" {
-		return nil, false
-	}
-
-	parts := strings.Split(path, ".")
-	current := interface{}(obj)
-
-	for _, part := range parts {
-		// Handle array indexing (e.g., "items[0]")
-		arrayIdx := -1
-		key, index, hasIndex := parseArrayNotation(part)
-		if hasIndex {
-			arrayIdx = index
-			part = key
-		}
-
-		// Navigate to the field
-		switch v := current.(type) {
-		case map[string]interface{}:
-			if v == nil {
-				return nil, false
-			}
-			val, ok := v[part]
-			if !ok {
-				return nil, false
-			}
-			current = val
-		default:
-			return nil, false
-		}
-
-		// Handle array indexing
-		if arrayIdx >= 0 {
-			switch arr := current.(type) {
-			case []interface{}:
-				if arrayIdx >= len(arr) {
-					return nil, false
-				}
-				current = arr[arrayIdx]
-			default:
-				return nil, false
-			}
-		}
-	}
-
-	return current, true
-}
-
-// parseArrayNotation parses a path part for array indexing.
-// Returns the key, index, and whether an index was found.
-// E.g., "items[0]" returns ("items", 0, true)
-func parseArrayNotation(part string) (string, int, bool) {
-	idx := strings.Index(part, "[")
-	if idx == -1 {
-		return part, -1, false
-	}
-
-	endIdx := strings.Index(part, "]")
-	if endIdx == -1 || endIdx < idx+1 || endIdx != len(part)-1 {
-		return part, -1, false
-	}
-
-	indexStr := part[idx+1 : endIdx]
-	var index int
-	_, err := fmt.Sscanf(indexStr, "%d", &index)
-	if err != nil || index < 0 {
-		return part, -1, false
-	}
-
-	return part[:idx], index, true
 }
 
 // ValueToString converts any value to its string representation.

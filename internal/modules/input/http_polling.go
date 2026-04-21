@@ -15,8 +15,8 @@ import (
 
 	"github.com/cannectors/runtime/internal/auth"
 	"github.com/cannectors/runtime/internal/errhandling"
-	"github.com/cannectors/runtime/internal/httpconfig"
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/persistence"
 	"github.com/cannectors/runtime/pkg/connector"
 )
@@ -61,17 +61,14 @@ func (e *HTTPError) Error() string {
 	return fmt.Sprintf("http error %d (%s) from %s: %s", e.StatusCode, e.Status, e.Endpoint, e.Message)
 }
 
-// PaginationConfig holds pagination configuration
-type PaginationConfig struct {
-	Type            string // "page", "offset", "cursor"
-	PageParam       string
-	TotalPagesField string
-	OffsetParam     string
-	LimitParam      string
-	Limit           int
-	TotalField      string
-	CursorParam     string
-	NextCursorField string
+// HTTPPollingInputConfig holds typed configuration for the HTTP polling module.
+type HTTPPollingInputConfig struct {
+	connector.ModuleBase
+	moduleconfig.HTTPRequestBase
+	DataField        string                              `json:"dataField,omitempty"`
+	Pagination       *moduleconfig.PaginationConfig      `json:"pagination,omitempty"`
+	Retry            *connector.RetryConfig              `json:"retry,omitempty"`
+	StatePersistence *persistence.StatePersistenceConfig `json:"statePersistence,omitempty"`
 }
 
 // HTTPPolling implements polling-based HTTP data fetching.
@@ -83,11 +80,14 @@ type HTTPPolling struct {
 	headers       map[string]string
 	timeout       time.Duration
 	dataField     string
-	pagination    *PaginationConfig
+	pagination    *moduleconfig.PaginationConfig
 	authHandler   auth.Handler
 	client        *http.Client
-	retryConfig   errhandling.RetryConfig
+	retryConfig   connector.RetryConfig
 	lastRetryInfo *connector.RetryInfo
+
+	// OAuth2 token invalidation tracking
+	oauth2Invalidated bool
 
 	// State persistence
 	persistenceConfig *persistence.StatePersistenceConfig
@@ -104,7 +104,7 @@ type HTTPPolling struct {
 //
 // Optional config fields:
 //   - headers: Custom HTTP headers (map[string]string)
-//   - timeoutMs: Request timeout in milliseconds (default 30000). Also accepts timeout in seconds (float64) for backward compatibility.
+//   - timeoutMs: Request timeout in milliseconds (default 30000)
 //   - dataField: JSON field containing the array of records (for object responses)
 //   - pagination: Pagination configuration (map with type, params, etc.)
 func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, error) {
@@ -112,99 +112,54 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 		return nil, ErrNilConfig
 	}
 
-	endpoint, err := extractEndpoint(config)
+	cfg, err := moduleconfig.ParseModuleConfig[HTTPPollingInputConfig](*config)
 	if err != nil {
 		return nil, err
 	}
+	if cfg.Endpoint == "" {
+		return nil, ErrMissingEndpoint
+	}
 
-	timeout := extractTimeout(config)
-	headers := extractHeaders(config)
-	dataField := extractDataField(config)
-	pagination := extractPagination(config)
-	retryConfig := extractRetryConfig(config)
+	timeout := connector.GetTimeoutDuration(cfg.TimeoutMs, defaultTimeout)
+	retryConfig := moduleconfig.ToRetryConfig(cfg.Retry)
 
 	client := createHTTPClient(timeout)
-	authHandler, err := createAuthHandler(config, client)
+	authHandler, err := auth.NewHandler(cfg.Authentication, client)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating auth handler: %w", err)
 	}
 
-	// Parse state persistence config
-	persistenceConfig := persistence.ParseStatePersistenceConfig(config.Config)
-
 	h := &HTTPPolling{
-		endpoint:          endpoint,
-		headers:           headers,
+		endpoint:          cfg.Endpoint,
+		headers:           cfg.Headers,
 		timeout:           timeout,
-		dataField:         dataField,
-		pagination:        pagination,
+		dataField:         cfg.DataField,
+		pagination:        cfg.Pagination,
 		authHandler:       authHandler,
 		client:            client,
 		retryConfig:       retryConfig,
-		persistenceConfig: persistenceConfig,
+		persistenceConfig: cfg.StatePersistence,
 	}
 
 	// Initialize state store if persistence is enabled
-	if persistenceConfig != nil && persistenceConfig.IsEnabled() {
-		storagePath := persistenceConfig.StoragePath
+	if cfg.StatePersistence != nil && cfg.StatePersistence.IsEnabled() {
+		storagePath := cfg.StatePersistence.StoragePath
 		if storagePath == "" {
 			storagePath = persistence.DefaultStatePath
 		}
 		h.stateStore = persistence.NewStateStore(storagePath)
 
 		logger.Debug("state persistence enabled for HTTP polling module",
-			"endpoint", endpoint,
-			"timestamp_enabled", persistenceConfig.TimestampEnabled(),
-			"id_enabled", persistenceConfig.IDEnabled(),
+			"endpoint", cfg.Endpoint,
+			"timestamp_enabled", cfg.StatePersistence.TimestampEnabled(),
+			"id_enabled", cfg.StatePersistence.IDEnabled(),
 			"storage_path", storagePath,
 		)
 	}
 
-	logModuleCreation(endpoint, timeout, authHandler, pagination, retryConfig)
+	logModuleCreation(cfg.Endpoint, timeout, authHandler, cfg.Pagination, retryConfig)
 
 	return h, nil
-}
-
-// extractEndpoint extracts and validates the endpoint (required).
-func extractEndpoint(config *connector.ModuleConfig) (string, error) {
-	base := httpconfig.ExtractBaseConfig(config)
-	if base.Endpoint == "" {
-		return "", ErrMissingEndpoint
-	}
-	return base.Endpoint, nil
-}
-
-// extractTimeout extracts timeout from config (timeoutMs or legacy timeout in seconds).
-func extractTimeout(config *connector.ModuleConfig) time.Duration {
-	base := httpconfig.ExtractBaseConfig(config)
-	return httpconfig.GetTimeoutDuration(base.TimeoutMs, defaultTimeout)
-}
-
-// extractHeaders extracts headers from config.
-func extractHeaders(config *connector.ModuleConfig) map[string]string {
-	return httpconfig.ExtractStringMap(config.Config, "headers")
-}
-
-// extractDataField extracts dataField from config.
-func extractDataField(config *connector.ModuleConfig) string {
-	dec := httpconfig.ExtractDataExtractionConfig(config.Config)
-	return dec.DataField
-}
-
-// extractPagination extracts pagination config from config.
-func extractPagination(config *connector.ModuleConfig) *PaginationConfig {
-	if paginationVal, ok := config.Config["pagination"].(map[string]interface{}); ok {
-		return parsePaginationConfig(paginationVal)
-	}
-	return nil
-}
-
-// extractRetryConfig extracts retry configuration from config.
-func extractRetryConfig(config *connector.ModuleConfig) errhandling.RetryConfig {
-	if retryVal, ok := config.Config["retry"].(map[string]interface{}); ok {
-		return errhandling.ParseRetryConfig(retryVal)
-	}
-	return errhandling.DefaultRetryConfig()
 }
 
 // createHTTPClient creates an HTTP client with the configured timeout.
@@ -215,19 +170,8 @@ func createHTTPClient(timeout time.Duration) *http.Client {
 }
 
 // createAuthHandler creates an authentication handler if configured.
-func createAuthHandler(config *connector.ModuleConfig, client *http.Client) (auth.Handler, error) {
-	if config.Authentication == nil {
-		return nil, nil
-	}
-	authHandler, err := auth.NewHandler(config.Authentication, client)
-	if err != nil {
-		return nil, fmt.Errorf("creating auth handler: %w", err)
-	}
-	return authHandler, nil
-}
-
 // logModuleCreation logs module creation details.
-func logModuleCreation(endpoint string, timeout time.Duration, authHandler auth.Handler, pagination *PaginationConfig, retryConfig errhandling.RetryConfig) {
+func logModuleCreation(endpoint string, timeout time.Duration, authHandler auth.Handler, pagination *moduleconfig.PaginationConfig, retryConfig connector.RetryConfig) {
 	logger.Debug("http polling module created",
 		"endpoint", endpoint,
 		"timeout", timeout.String(),
@@ -235,47 +179,6 @@ func logModuleCreation(endpoint string, timeout time.Duration, authHandler auth.
 		"has_pagination", pagination != nil,
 		"retry_max_attempts", retryConfig.MaxAttempts,
 	)
-}
-
-// parsePaginationConfig extracts pagination configuration from map
-func parsePaginationConfig(config map[string]interface{}) *PaginationConfig {
-	p := &PaginationConfig{}
-
-	if t, ok := config["type"].(string); ok {
-		p.Type = t
-	}
-
-	// Page-based pagination
-	if param, ok := config["pageParam"].(string); ok {
-		p.PageParam = param
-	}
-	if field, ok := config["totalPagesField"].(string); ok {
-		p.TotalPagesField = field
-	}
-
-	// Offset-based pagination
-	if param, ok := config["offsetParam"].(string); ok {
-		p.OffsetParam = param
-	}
-	if param, ok := config["limitParam"].(string); ok {
-		p.LimitParam = param
-	}
-	if limit, ok := config["limit"].(float64); ok {
-		p.Limit = int(limit)
-	}
-	if field, ok := config["totalField"].(string); ok {
-		p.TotalField = field
-	}
-
-	// Cursor-based pagination
-	if param, ok := config["cursorParam"].(string); ok {
-		p.CursorParam = param
-	}
-	if field, ok := config["nextCursorField"].(string); ok {
-		p.NextCursorField = field
-	}
-
-	return p
 }
 
 // Fetch retrieves data via HTTP polling.
@@ -292,6 +195,9 @@ func parsePaginationConfig(config map[string]interface{}) *PaginationConfig {
 //   - error: Any error encountered during fetching
 func (h *HTTPPolling) Fetch(ctx context.Context) ([]map[string]interface{}, error) {
 	startTime := time.Now()
+
+	// Reset OAuth2 invalidation tracking for this fetch cycle
+	h.oauth2Invalidated = false
 
 	// Build endpoint with state-based query params if applicable
 	endpoint, err := h.buildEndpointWithState(h.endpoint)
@@ -497,6 +403,8 @@ func truncateBodyForLogging(body []byte) string {
 }
 
 // handleOAuth2Unauthorized handles 401 with OAuth2 by invalidating the token.
+// Only invalidates once per Fetch call to prevent infinite retry loops
+// when credentials are permanently invalid.
 func (h *HTTPPolling) handleOAuth2Unauthorized(resp *http.Response, endpoint string) {
 	if resp.StatusCode != http.StatusUnauthorized || h.authHandler == nil {
 		return
@@ -507,10 +415,18 @@ func (h *HTTPPolling) handleOAuth2Unauthorized(resp *http.Response, endpoint str
 		return
 	}
 
+	if h.oauth2Invalidated {
+		logger.Warn("401 Unauthorized persists after OAuth2 token refresh, likely invalid credentials",
+			"endpoint", endpoint,
+		)
+		return
+	}
+
 	logger.Debug("401 Unauthorized with OAuth2, invalidating cached token",
 		"endpoint", endpoint,
 	)
 	invalidator.InvalidateToken()
+	h.oauth2Invalidated = true
 }
 
 // logRequestStart logs the start of an HTTP request.

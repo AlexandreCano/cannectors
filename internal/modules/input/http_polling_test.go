@@ -18,6 +18,7 @@ import (
 // =============================================================================
 
 // TestHTTPPolling_Fetch_SuccessfulGET tests basic HTTP GET request execution.
+
 func TestHTTPPolling_Fetch_SuccessfulGET(t *testing.T) {
 	// Setup: Create test server returning JSON array
 	expected := []map[string]interface{}{
@@ -37,9 +38,9 @@ func TestHTTPPolling_Fetch_SuccessfulGET(t *testing.T) {
 	// Create module configuration
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
+		}),
 	}
 
 	// Execute
@@ -78,9 +79,9 @@ func TestHTTPPolling_Fetch_JSONArrayResponse(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -118,10 +119,10 @@ func TestHTTPPolling_Fetch_JSONObjectWithArrayField(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint":  server.URL,
 			"dataField": "data",
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -149,9 +150,9 @@ func TestHTTPPolling_Fetch_EmptyResponse(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -183,13 +184,13 @@ func TestHTTPPolling_Fetch_CustomHeaders(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
 			"headers": map[string]interface{}{
 				"X-Custom-Header": "custom-value",
 				"Accept":          "application/json",
 			},
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -219,10 +220,10 @@ func TestHTTPPolling_Fetch_ConfigurableTimeout(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
-			"endpoint": server.URL,
-			"timeout":  float64(0.1), // 100ms timeout
-		},
+		Raw: mustJSON(map[string]interface{}{
+			"endpoint":  server.URL,
+			"timeoutMs": float64(100), // 100ms timeout
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -240,8 +241,8 @@ func TestHTTPPolling_Fetch_ConfigurableTimeout(t *testing.T) {
 // TestHTTPPolling_NewHTTPPollingFromConfig_MissingEndpoint tests validation of required fields.
 func TestHTTPPolling_NewHTTPPollingFromConfig_MissingEndpoint(t *testing.T) {
 	config := &connector.ModuleConfig{
-		Type:   "http-polling",
-		Config: map[string]interface{}{},
+		Type: "http-polling",
+		Raw:  mustJSON(map[string]interface{}{}),
 	}
 
 	_, err := NewHTTPPollingFromConfig(config)
@@ -277,16 +278,16 @@ func TestHTTPPolling_Fetch_APIKeyHeader(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
-		Authentication: &connector.AuthConfig{
-			Type: "api-key",
-			Credentials: map[string]string{
-				"key":      "my-secret-key",
-				"location": "header",
+			"authentication": map[string]interface{}{
+				"type": "api-key",
+				"credentials": map[string]string{
+					"key":      "my-secret-key",
+					"location": "header",
+				},
 			},
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -318,17 +319,17 @@ func TestHTTPPolling_Fetch_APIKeyQuery(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
-		Authentication: &connector.AuthConfig{
-			Type: "api-key",
-			Credentials: map[string]string{
-				"key":       "my-secret-key",
-				"location":  "query",
-				"paramName": "api_key",
+			"authentication": map[string]interface{}{
+				"type": "api-key",
+				"credentials": map[string]string{
+					"key":       "my-secret-key",
+					"location":  "query",
+					"paramName": "api_key",
+				},
 			},
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -379,17 +380,17 @@ func TestHTTPPolling_Fetch_OAuth2ClientCredentials(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": apiServer.URL,
-		},
-		Authentication: &connector.AuthConfig{
-			Type: "oauth2",
-			Credentials: map[string]string{
-				"clientId":     "test-client-id",
-				"clientSecret": "test-client-secret",
-				"tokenUrl":     tokenServer.URL,
+			"authentication": map[string]interface{}{
+				"type": "oauth2",
+				"credentials": map[string]string{
+					"clientId":     "test-client-id",
+					"clientSecret": "test-client-secret",
+					"tokenUrl":     tokenServer.URL,
+				},
 			},
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -421,15 +422,15 @@ func TestHTTPPolling_Fetch_BearerToken(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
-		Authentication: &connector.AuthConfig{
-			Type: "bearer",
-			Credentials: map[string]string{
-				"token": "my-bearer-token",
+			"authentication": map[string]interface{}{
+				"type": "bearer",
+				"credentials": map[string]string{
+					"token": "my-bearer-token",
+				},
 			},
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -462,16 +463,16 @@ func TestHTTPPolling_Fetch_BasicAuth(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
-		Authentication: &connector.AuthConfig{
-			Type: "basic",
-			Credentials: map[string]string{
-				"username": "testuser",
-				"password": "testpass",
+			"authentication": map[string]interface{}{
+				"type": "basic",
+				"credentials": map[string]string{
+					"username": "testuser",
+					"password": "testpass",
+				},
 			},
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -508,16 +509,16 @@ func TestHTTPPolling_Fetch_AuthenticationError(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
-		Authentication: &connector.AuthConfig{
-			Type: "api-key",
-			Credentials: map[string]string{
-				"key":      "invalid-key",
-				"location": "header",
+			"authentication": map[string]interface{}{
+				"type": "api-key",
+				"credentials": map[string]string{
+					"key":      "invalid-key",
+					"location": "header",
+				},
 			},
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -572,7 +573,7 @@ func TestHTTPPolling_Fetch_PageBasedPagination(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint":  server.URL,
 			"dataField": "data",
 			"pagination": map[string]interface{}{
@@ -580,7 +581,7 @@ func TestHTTPPolling_Fetch_PageBasedPagination(t *testing.T) {
 				"pageParam":       "page",
 				"totalPagesField": "total_pages",
 			},
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -637,7 +638,7 @@ func TestHTTPPolling_Fetch_OffsetBasedPagination(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint":  server.URL,
 			"dataField": "items",
 			"pagination": map[string]interface{}{
@@ -647,7 +648,7 @@ func TestHTTPPolling_Fetch_OffsetBasedPagination(t *testing.T) {
 				"limit":       float64(2),
 				"totalField":  "total",
 			},
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -696,7 +697,7 @@ func TestHTTPPolling_Fetch_CursorBasedPagination(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint":  server.URL,
 			"dataField": "results",
 			"pagination": map[string]interface{}{
@@ -704,7 +705,7 @@ func TestHTTPPolling_Fetch_CursorBasedPagination(t *testing.T) {
 				"cursorParam":     "cursor",
 				"nextCursorField": "next_cursor",
 			},
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -740,9 +741,9 @@ func TestHTTPPolling_Fetch_HTTPError400(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -766,9 +767,9 @@ func TestHTTPPolling_Fetch_HTTPError401(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -792,9 +793,9 @@ func TestHTTPPolling_Fetch_HTTPError403(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -818,9 +819,9 @@ func TestHTTPPolling_Fetch_HTTPError404(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -844,9 +845,9 @@ func TestHTTPPolling_Fetch_HTTPError500(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -865,10 +866,10 @@ func TestHTTPPolling_Fetch_HTTPError500(t *testing.T) {
 func TestHTTPPolling_Fetch_NetworkError(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
-			"endpoint": "http://localhost:99999/nonexistent",
-			"timeout":  float64(1),
-		},
+		Raw: mustJSON(map[string]interface{}{
+			"endpoint":  "http://localhost:99999/nonexistent",
+			"timeoutMs": float64(1000),
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -893,9 +894,9 @@ func TestHTTPPolling_Fetch_JSONParseError(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -930,9 +931,9 @@ func TestHTTPPolling_Fetch_DeterministicOutput(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
+		}),
 	}
 
 	// Execute multiple times
@@ -985,7 +986,7 @@ func TestHTTPPolling_Fetch_DeterministicPaginationOrder(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint":  server.URL,
 			"dataField": "data",
 			"pagination": map[string]interface{}{
@@ -993,7 +994,7 @@ func TestHTTPPolling_Fetch_DeterministicPaginationOrder(t *testing.T) {
 				"pageParam":       "page",
 				"totalPagesField": "total_pages",
 			},
-		},
+		}),
 	}
 
 	// Execute multiple times
@@ -1025,9 +1026,9 @@ func TestHTTPPolling_Fetch_DeterministicPaginationOrder(t *testing.T) {
 func TestHTTPPolling_ImplementsModule(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": "http://example.com",
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -1059,9 +1060,9 @@ func TestHTTPPolling_Fetch_LargeDataset(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -1107,9 +1108,9 @@ func TestHTTPPolling_IntegrationWithExecutor(t *testing.T) {
 	// Create HTTPPolling module from config
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -1190,7 +1191,7 @@ func TestHTTPPolling_IntegrationWithPaginatedData(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint":  server.URL,
 			"dataField": "users",
 			"pagination": map[string]interface{}{
@@ -1198,7 +1199,7 @@ func TestHTTPPolling_IntegrationWithPaginatedData(t *testing.T) {
 				"pageParam":       "page",
 				"totalPagesField": "total_pages",
 			},
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -1251,15 +1252,15 @@ func TestHTTPPolling_IntegrationWithAuthentication(t *testing.T) {
 	// Test with valid authentication
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
-		Authentication: &connector.AuthConfig{
-			Type: "bearer",
-			Credentials: map[string]string{
-				"token": expectedToken,
+			"authentication": map[string]interface{}{
+				"type": "bearer",
+				"credentials": map[string]string{
+					"token": expectedToken,
+				},
 			},
-		},
+		}),
 	}
 
 	polling, err := NewHTTPPollingFromConfig(config)
@@ -1279,9 +1280,9 @@ func TestHTTPPolling_IntegrationWithAuthentication(t *testing.T) {
 	// Test without authentication (should fail)
 	configNoAuth := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
+		}),
 	}
 
 	pollingNoAuth, _ := NewHTTPPollingFromConfig(configNoAuth)
@@ -1306,9 +1307,9 @@ func TestHTTPPolling_Close_ReleasesConnections(t *testing.T) {
 	// Create module configuration
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
-		},
+		}),
 	}
 
 	// Create module

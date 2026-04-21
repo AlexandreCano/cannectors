@@ -235,7 +235,7 @@ func runPipeline(_ *cobra.Command, args []string) {
 
 	// Check if pipeline has a schedule in input module config
 	schedule := scheduler.GetScheduleFromInput(pipeline)
-	if schedule != "" {
+	if schedule != "" && !dryRun {
 		runScheduledPipeline(pipeline, schedule)
 		return
 	}

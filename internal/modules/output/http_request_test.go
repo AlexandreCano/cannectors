@@ -75,9 +75,13 @@ func (ts *testServer) getRequests() []*capturedRequest {
 
 // Helper to create ModuleConfig from map
 func newModuleConfig(configMap map[string]interface{}) *connector.ModuleConfig {
+	raw, err := json.Marshal(configMap)
+	if err != nil {
+		panic(err)
+	}
 	return &connector.ModuleConfig{
-		Type:   "httpRequest",
-		Config: configMap,
+		Type: "httpRequest",
+		Raw:  raw,
 	}
 }
 
@@ -334,11 +338,9 @@ func TestHTTPRequest_Send_SingleRecordMode(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/data",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record", // Single record per request
-		},
+		"endpoint":    ts.URL + "/api/data",
+		"method":      "POST",
+		"requestMode": "single", // Single record per request
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -594,14 +596,18 @@ func TestNewHTTPRequestFromConfig_CustomTimeout(t *testing.T) {
 // =============================================================================
 
 // Helper to create ModuleConfig with authentication
-func newModuleConfigWithAuth(configMap map[string]interface{}, authType string, creds map[string]string) *connector.ModuleConfig {
+func newModuleConfigWithAuth(configMap map[string]interface{}, authType string, creds json.RawMessage) *connector.ModuleConfig {
+	configMap["authentication"] = map[string]interface{}{
+		"type":        authType,
+		"credentials": creds,
+	}
+	raw, err := json.Marshal(configMap)
+	if err != nil {
+		panic(err)
+	}
 	return &connector.ModuleConfig{
-		Type:   "httpRequest",
-		Config: configMap,
-		Authentication: &connector.AuthConfig{
-			Type:        authType,
-			Credentials: creds,
-		},
+		Type: "httpRequest",
+		Raw:  raw,
 	}
 }
 
@@ -615,11 +621,11 @@ func TestHTTPRequest_Send_APIKeyAuth_Header(t *testing.T) {
 			"method":   "POST",
 		},
 		"api-key",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"key":        "test-api-key-12345",
 			"location":   "header",
 			"headerName": "X-API-Key",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -654,11 +660,11 @@ func TestHTTPRequest_Send_APIKeyAuth_Query(t *testing.T) {
 			"method":   "POST",
 		},
 		"api-key",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"key":       "test-api-key-query",
 			"location":  "query",
 			"paramName": "api_key",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -693,9 +699,9 @@ func TestHTTPRequest_Send_BearerAuth(t *testing.T) {
 			"method":   "POST",
 		},
 		"bearer",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test-token",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -731,10 +737,10 @@ func TestHTTPRequest_Send_BasicAuth(t *testing.T) {
 			"method":   "POST",
 		},
 		"basic",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"username": "testuser",
 			"password": "testpass123",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -785,11 +791,11 @@ func TestHTTPRequest_Send_OAuth2Auth(t *testing.T) {
 			"method":   "POST",
 		},
 		"oauth2",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"tokenUrl":     tokenServer.URL,
 			"clientId":     "test-client-id",
 			"clientSecret": "test-client-secret",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -834,11 +840,11 @@ func TestHTTPRequest_Send_OAuth2Auth_TokenCaching(t *testing.T) {
 			"method":   "POST",
 		},
 		"oauth2",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"tokenUrl":     tokenServer.URL,
 			"clientId":     "test-client-id",
 			"clientSecret": "test-client-secret",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -871,10 +877,10 @@ func TestHTTPRequest_Send_APIKeyAuth_MissingKey(t *testing.T) {
 			"method":   "POST",
 		},
 		"api-key",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"location": "header",
 			// key is missing
-		},
+		}),
 	)
 
 	// With shared auth package, validation happens at creation time
@@ -894,9 +900,9 @@ func TestHTTPRequest_Send_BearerAuth_MissingToken(t *testing.T) {
 			"method":   "POST",
 		},
 		"bearer",
-		map[string]string{
+		toJSON(t, map[string]string{
 			// token is missing
-		},
+		}),
 	)
 
 	// With shared auth package, validation happens at creation time
@@ -916,10 +922,10 @@ func TestHTTPRequest_Send_BasicAuth_MissingCredentials(t *testing.T) {
 			"method":   "POST",
 		},
 		"basic",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"username": "testuser",
 			// password is missing
-		},
+		}),
 	)
 
 	// With shared auth package, validation happens at creation time
@@ -939,11 +945,11 @@ func TestHTTPRequest_Send_OAuth2Auth_MissingCredentials(t *testing.T) {
 			"method":   "POST",
 		},
 		"oauth2",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"tokenUrl": "https://auth.example.com/token",
 			"clientId": "test-client-id",
 			// clientSecret is missing
-		},
+		}),
 	)
 
 	// With shared auth package, validation happens at creation time
@@ -991,9 +997,9 @@ func TestHTTPRequest_Send_UnknownAuthType(t *testing.T) {
 			"method":   "POST",
 		},
 		"unknown-auth-type",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"key": "value",
-		},
+		}),
 	)
 
 	// With shared auth package, unknown auth types return error at creation time
@@ -1012,14 +1018,12 @@ func TestHTTPRequest_Send_PathParameterSubstitution(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/users/{userId}/orders/{orderId}",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-			"pathParams": map[string]interface{}{
-				"userId":  "user.id",
-				"orderId": "order_id",
-			},
+		"endpoint":    ts.URL + "/api/users/{userId}/orders/{orderId}",
+		"method":      "POST",
+		"requestMode": "single",
+		"keys": []interface{}{
+			map[string]interface{}{"field": "user.id", "paramType": "path", "paramName": "userId"},
+			map[string]interface{}{"field": "order_id", "paramType": "path", "paramName": "orderId"},
 		},
 	})
 
@@ -1058,13 +1062,11 @@ func TestHTTPRequest_Send_PathParameterWithNilMap(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/users/{userId}",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-			"pathParams": map[string]interface{}{
-				"userId": "user.id",
-			},
+		"endpoint":    ts.URL + "/api/users/{userId}",
+		"method":      "POST",
+		"requestMode": "single",
+		"keys": []interface{}{
+			map[string]interface{}{"field": "user.id", "paramType": "path", "paramName": "userId"},
 		},
 	})
 
@@ -1105,11 +1107,9 @@ func TestHTTPRequest_Send_QueryParameters(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"request": map[string]interface{}{
-			"query": map[string]interface{}{
-				"status": "active",
-				"limit":  "100",
-			},
+		"queryParams": map[string]interface{}{
+			"status": "active",
+			"limit":  "100",
 		},
 	})
 
@@ -1143,14 +1143,12 @@ func TestHTTPRequest_Send_QueryParametersFromRecordData(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/data",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-			"queryFromRecord": map[string]interface{}{
-				"filter_status": "status",
-				"user_type":     "type",
-			},
+		"endpoint":    ts.URL + "/api/data",
+		"method":      "POST",
+		"requestMode": "single",
+		"keys": []interface{}{
+			map[string]interface{}{"field": "status", "paramType": "query", "paramName": "filter_status"},
+			map[string]interface{}{"field": "type", "paramType": "query", "paramName": "user_type"},
 		},
 	})
 
@@ -1187,14 +1185,12 @@ func TestHTTPRequest_Send_HeadersFromRecordData(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/data",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-			"headersFromRecord": map[string]interface{}{
-				"X-Correlation-ID": "correlation_id",
-				"X-Request-Source": "source",
-			},
+		"endpoint":    ts.URL + "/api/data",
+		"method":      "POST",
+		"requestMode": "single",
+		"keys": []interface{}{
+			map[string]interface{}{"field": "correlation_id", "paramType": "header", "paramName": "X-Correlation-ID"},
+			map[string]interface{}{"field": "source", "paramType": "header", "paramName": "X-Request-Source"},
 		},
 	})
 
@@ -1237,7 +1233,7 @@ func TestHTTPRequest_Send_JSONArrayFormat(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		// Default: bodyFrom = "records" (batch mode)
+		// Default: requestMode = "batch" (batch mode)
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -1275,11 +1271,9 @@ func TestHTTPRequest_Send_JSONObjectFormat(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/data",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record", // Single record mode
-		},
+		"endpoint":    ts.URL + "/api/data",
+		"method":      "POST",
+		"requestMode": "single", // Single record mode
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -1435,11 +1429,9 @@ func TestHTTPRequest_Send_SpecialCharactersInQueryParams(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"request": map[string]interface{}{
-			"query": map[string]interface{}{
-				"filter": "value with spaces & special=chars",
-				"email":  "user@example.com",
-			},
+		"queryParams": map[string]interface{}{
+			"filter": "value with spaces & special=chars",
+			"email":  "user@example.com",
 		},
 	})
 
@@ -1478,14 +1470,12 @@ func TestHTTPRequest_Send_SpecialCharactersInPathParams(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/users/{userId}/posts/{postId}",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-			"pathParams": map[string]interface{}{
-				"userId": "id",
-				"postId": "post.id",
-			},
+		"endpoint":    ts.URL + "/api/users/{userId}/posts/{postId}",
+		"method":      "POST",
+		"requestMode": "single",
+		"keys": []interface{}{
+			map[string]interface{}{"field": "id", "paramType": "path", "paramName": "userId"},
+			map[string]interface{}{"field": "post.id", "paramType": "path", "paramName": "postId"},
 		},
 	})
 
@@ -1761,7 +1751,7 @@ func TestHTTPRequest_Send_ServerError500(t *testing.T) {
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 		"retry": map[string]interface{}{
-			"backoffMs": float64(1), // Minimal backoff for fast tests
+			"delayMs": float64(1), // Minimal backoff for fast tests
 		},
 	})
 
@@ -1793,7 +1783,7 @@ func TestHTTPRequest_Send_ServerError503(t *testing.T) {
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 		"retry": map[string]interface{}{
-			"backoffMs": float64(1), // Minimal backoff for fast tests
+			"delayMs": float64(1), // Minimal backoff for fast tests
 		},
 	})
 
@@ -1967,8 +1957,8 @@ func TestHTTPRequest_Send_RetryOn5xx(t *testing.T) {
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 		"retry": map[string]interface{}{
-			"maxRetries":        float64(3),
-			"backoffMs":         float64(10), // Small for tests
+			"maxAttempts":       float64(3),
+			"delayMs":           float64(10), // Small for tests
 			"backoffMultiplier": float64(1.0),
 		},
 	})
@@ -2002,8 +1992,8 @@ func TestHTTPRequest_Send_RetryExhausted(t *testing.T) {
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 		"retry": map[string]interface{}{
-			"maxRetries":        float64(2),
-			"backoffMs":         float64(10),
+			"maxAttempts":       float64(2),
+			"delayMs":           float64(10),
 			"backoffMultiplier": float64(1.0),
 		},
 	})
@@ -2041,8 +2031,8 @@ func TestHTTPRequest_Send_NoRetryOn4xx(t *testing.T) {
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 		"retry": map[string]interface{}{
-			"maxRetries":        float64(3),
-			"backoffMs":         float64(10),
+			"maxAttempts":       float64(3),
+			"delayMs":           float64(10),
 			"backoffMultiplier": float64(1.0),
 		},
 	})
@@ -2103,12 +2093,10 @@ func TestHTTPRequest_Send_OnErrorSkip_SingleRecordMode(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/data",
-		"method":   "POST",
-		"onError":  "skip",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-		},
+		"endpoint":    ts.URL + "/api/data",
+		"method":      "POST",
+		"onError":     "skip",
+		"requestMode": "single",
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -2148,12 +2136,10 @@ func TestHTTPRequest_Send_OnErrorLog_SingleRecordMode(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/data",
-		"method":   "POST",
-		"onError":  "log",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-		},
+		"endpoint":    ts.URL + "/api/data",
+		"method":      "POST",
+		"onError":     "log",
+		"requestMode": "single",
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -2187,7 +2173,8 @@ func TestHTTPRequest_Send_DefaultRetryConfig(t *testing.T) {
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 		"retry": map[string]interface{}{
-			"backoffMs": float64(1), // Minimal backoff for fast tests
+			"maxAttempts": float64(3),
+			"delayMs":     float64(1), // Minimal backoff for fast tests
 		},
 	})
 
@@ -2284,12 +2271,10 @@ func TestHTTPRequest_Send_ReturnsCorrectCount_PartialFailure(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/data",
-		"method":   "POST",
-		"onError":  "skip", // Skip failed records
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-		},
+		"endpoint":    ts.URL + "/api/data",
+		"method":      "POST",
+		"onError":     "skip", // Skip failed records
+		"requestMode": "single",
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -2426,11 +2411,9 @@ func TestHTTPRequest_Send_SingleRecordMode_CorrectCount(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": ts.URL + "/api/data",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-		},
+		"endpoint":    ts.URL + "/api/data",
+		"method":      "POST",
+		"requestMode": "single",
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -2568,11 +2551,11 @@ func TestHTTPRequest_Deterministic_AuthHeaders(t *testing.T) {
 				"method":   "POST",
 			},
 			"api-key",
-			map[string]string{
+			toJSON(t, map[string]string{
 				"key":        "test-api-key-123",
 				"location":   "header",
 				"headerName": "X-API-Key",
-			},
+			}),
 		)
 
 		module, err := NewHTTPRequestFromConfig(config)
@@ -2606,13 +2589,11 @@ func TestHTTPRequest_Deterministic_PathParams(t *testing.T) {
 		ts := newTestServer()
 
 		config := newModuleConfig(map[string]interface{}{
-			"endpoint": ts.URL + "/api/users/{userId}",
-			"method":   "POST",
-			"request": map[string]interface{}{
-				"bodyFrom": "record",
-				"pathParams": map[string]interface{}{
-					"userId": "id",
-				},
+			"endpoint":    ts.URL + "/api/users/{userId}",
+			"method":      "POST",
+			"requestMode": "single",
+			"keys": []interface{}{
+				map[string]interface{}{"field": "id", "paramType": "path", "paramName": "userId"},
 			},
 		})
 
@@ -2799,11 +2780,9 @@ func TestHTTPRequest_PreviewRequest_BatchMode(t *testing.T) {
 
 func TestHTTPRequest_PreviewRequest_SingleRecordMode(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": "https://api.example.com/data",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-		},
+		"endpoint":    "https://api.example.com/data",
+		"method":      "POST",
+		"requestMode": "single",
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -2854,14 +2833,12 @@ func TestHTTPRequest_PreviewRequest_SingleRecordMode(t *testing.T) {
 
 func TestHTTPRequest_PreviewRequest_PathParameters(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": "https://api.example.com/users/{userId}/orders/{orderId}",
-		"method":   "PUT",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-			"pathParams": map[string]interface{}{
-				"userId":  "user.id",
-				"orderId": "order_id",
-			},
+		"endpoint":    "https://api.example.com/users/{userId}/orders/{orderId}",
+		"method":      "PUT",
+		"requestMode": "single",
+		"keys": []interface{}{
+			map[string]interface{}{"field": "user.id", "paramType": "path", "paramName": "userId"},
+			map[string]interface{}{"field": "order_id", "paramType": "path", "paramName": "orderId"},
 		},
 	})
 
@@ -2898,11 +2875,9 @@ func TestHTTPRequest_PreviewRequest_QueryParameters(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
 		"endpoint": "https://api.example.com/data",
 		"method":   "POST",
-		"request": map[string]interface{}{
-			"query": map[string]interface{}{
-				"status": "active",
-				"limit":  "100",
-			},
+		"queryParams": map[string]interface{}{
+			"status": "active",
+			"limit":  "100",
 		},
 	})
 
@@ -2934,14 +2909,12 @@ func TestHTTPRequest_PreviewRequest_QueryParameters(t *testing.T) {
 
 func TestHTTPRequest_PreviewRequest_QueryParametersFromRecord(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": "https://api.example.com/data",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-			"queryFromRecord": map[string]interface{}{
-				"filter_status": "status",
-				"user_type":     "type",
-			},
+		"endpoint":    "https://api.example.com/data",
+		"method":      "POST",
+		"requestMode": "single",
+		"keys": []interface{}{
+			map[string]interface{}{"field": "status", "paramType": "query", "paramName": "filter_status"},
+			map[string]interface{}{"field": "type", "paramType": "query", "paramName": "user_type"},
 		},
 	})
 
@@ -2980,11 +2953,11 @@ func TestHTTPRequest_PreviewRequest_AuthHeadersMasked_APIKey(t *testing.T) {
 			"method":   "POST",
 		},
 		"api-key",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"key":        "super-secret-api-key-12345",
 			"location":   "header",
 			"headerName": "X-API-Key",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -3040,9 +3013,9 @@ func TestHTTPRequest_PreviewRequest_AuthHeadersMasked_Bearer(t *testing.T) {
 			"method":   "POST",
 		},
 		"bearer",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.super-secret-payload",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -3082,10 +3055,10 @@ func TestHTTPRequest_PreviewRequest_AuthHeadersMasked_Basic(t *testing.T) {
 			"method":   "POST",
 		},
 		"basic",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"username": "testuser",
 			"password": "super-secret-password",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -3127,9 +3100,9 @@ func TestHTTPRequest_PreviewRequest_ShowCredentials_Bearer(t *testing.T) {
 			"method":   "POST",
 		},
 		"bearer",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"token": "my-secret-bearer-token-12345",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -3172,11 +3145,11 @@ func TestHTTPRequest_PreviewRequest_ShowCredentials_APIKey(t *testing.T) {
 			"method":   "POST",
 		},
 		"api-key",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"key":        "secret-api-key-xyz789",
 			"headerName": "X-Api-Key",
 			"location":   "header",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -3289,14 +3262,12 @@ func TestHTTPRequest_PreviewRequest_BodyPreviewFormatted(t *testing.T) {
 
 func TestHTTPRequest_PreviewRequest_HeadersFromRecord(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
-		"endpoint": "https://api.example.com/data",
-		"method":   "POST",
-		"request": map[string]interface{}{
-			"bodyFrom": "record",
-			"headersFromRecord": map[string]interface{}{
-				"X-Correlation-ID": "correlation_id",
-				"X-Request-Source": "source",
-			},
+		"endpoint":    "https://api.example.com/data",
+		"method":      "POST",
+		"requestMode": "single",
+		"keys": []interface{}{
+			map[string]interface{}{"field": "correlation_id", "paramType": "header", "paramName": "X-Correlation-ID"},
+			map[string]interface{}{"field": "source", "paramType": "header", "paramName": "X-Request-Source"},
 		},
 	})
 
@@ -4451,11 +4422,9 @@ func TestHTTPRequest_MetadataExclusion(t *testing.T) {
 		defer ts.Close()
 
 		config := newModuleConfig(map[string]interface{}{
-			"endpoint": ts.URL + "/api/data",
-			"method":   "POST",
-			"request": map[string]interface{}{
-				"bodyFrom": "record",
-			},
+			"endpoint":    ts.URL + "/api/data",
+			"method":      "POST",
+			"requestMode": "single",
 		})
 
 		module, err := NewHTTPRequestFromConfig(config)
@@ -4480,4 +4449,13 @@ func TestHTTPRequest_MetadataExclusion(t *testing.T) {
 			t.Errorf("expected metadata to be excluded in single record mode, got: %s", receivedBody)
 		}
 	})
+}
+
+func toJSON(t *testing.T, v interface{}) json.RawMessage {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("toJSON: %v", err)
+	}
+	return b
 }

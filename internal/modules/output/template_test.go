@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/template"
 )
 
@@ -700,7 +701,7 @@ func TestGetNestedValueFromPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, found := template.GetNestedValue(tt.obj, tt.path)
+			result, found := moduleconfig.GetNestedValue(tt.obj, tt.path)
 			if found != tt.found {
 				t.Errorf("GetNestedValue(%q) found = %v, want %v", tt.path, found, tt.found)
 			}

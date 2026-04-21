@@ -18,8 +18,8 @@ import (
 	"github.com/cannectors/runtime/internal/auth"
 	"github.com/cannectors/runtime/internal/cache"
 	"github.com/cannectors/runtime/internal/errhandling"
-	"github.com/cannectors/runtime/internal/httpconfig"
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/template"
 	"github.com/cannectors/runtime/pkg/connector"
 )
@@ -55,54 +55,21 @@ var (
 	ErrHTTPCallKeyInvalid      = fmt.Errorf("http_call key paramType must be 'query', 'path', or 'header'")
 )
 
-// KeyConfig defines how to extract a key from a record and use it in HTTP requests.
-type KeyConfig struct {
-	// Field is the dot-notation path to extract the key value from the record (e.g., "customer.id")
-	Field string `json:"field"`
-	// ParamType specifies how to include the key in the request: "query", "path", or "header"
-	ParamType string `json:"paramType"`
-	// ParamName is the parameter name to use in the request
-	ParamName string `json:"paramName"`
-}
-
-// CacheConfig defines cache behavior for the http_call module.
-type CacheConfig struct {
-	// MaxSize is the maximum number of entries in the cache (default 1000)
-	MaxSize int `json:"maxSize"`
-	// DefaultTTL is the TTL for cache entries in seconds (default 300)
-	DefaultTTL int `json:"defaultTTL"`
-	// Key is the cache key configuration (optional).
-	// If not specified, uses default: endpoint + "::" + keyValue.
-	// Can be:
-	//   - A static string: "my-cache-key"
-	//   - A dot notation path: "customerId" or "user.profile.id" (extracts value from record)
-	Key string `json:"key"`
-}
-
 // HTTPCallConfig represents the configuration for an http_call filter module.
-// Fields are organized in logical groups matching httpconfig types for consistency,
-// but kept as direct fields for simpler struct literal syntax in tests and usage.
 type HTTPCallConfig struct {
-	// Base HTTP configuration (from httpconfig.BaseConfig)
-	Endpoint       string                `json:"endpoint"`
-	Method         string                `json:"method,omitempty"`
-	Headers        map[string]string     `json:"headers,omitempty"`
-	TimeoutMs      int                   `json:"timeoutMs,omitempty"`
-	Authentication *connector.AuthConfig `json:"authentication,omitempty"`
+	connector.ModuleBase
+	moduleconfig.HTTPRequestBase
 
-	// Body template configuration (from httpconfig.BodyTemplateConfig)
+	// Body template configuration
 	BodyTemplateFile string `json:"bodyTemplateFile,omitempty"`
 
-	// Error handling configuration (from httpconfig.ErrorHandlingConfig)
-	OnError string `json:"onError,omitempty"`
-
-	// Data extraction configuration (from httpconfig.DataExtractionConfig)
+	// Data extraction configuration
 	DataField string `json:"dataField,omitempty"`
 
 	// Keys defines how to extract values from records and use them in requests (required for GET, optional for POST/PUT with template)
-	Keys []KeyConfig `json:"keys"`
+	Keys []moduleconfig.KeyConfig `json:"keys"`
 	// Cache defines cache behavior (optional, uses defaults if not specified)
-	Cache CacheConfig `json:"cache"`
+	Cache moduleconfig.CacheConfig `json:"cache"`
 	// MergeStrategy defines how to merge response data: "merge" (default), "replace", "append"
 	MergeStrategy string `json:"mergeStrategy"`
 }
@@ -220,7 +187,7 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 
 	mergeStrategy := normalizeHTTPCallMergeStrategy(config.MergeStrategy)
 	onError := normalizeHTTPCallOnError(config.OnError)
-	timeout := httpconfig.GetTimeoutDuration(config.TimeoutMs, defaultHTTPCallTimeout)
+	timeout := connector.GetTimeoutDuration(config.TimeoutMs, defaultHTTPCallTimeout)
 
 	httpClient := &http.Client{Timeout: timeout}
 	authHandler, err := buildHTTPCallAuth(config.Authentication, httpClient)
@@ -388,7 +355,7 @@ func httpCallHasTemplating(endpoint string, headers map[string]string, hasBodyTe
 }
 
 // validateKeysConfig validates the keys extraction configuration.
-func validateKeysConfig(keys []KeyConfig) error {
+func validateKeysConfig(keys []moduleconfig.KeyConfig) error {
 	if len(keys) == 0 {
 		return newHTTPCallError(ErrCodeHTTPCallKeyMissing, "http_call keys is required (at least one key config)", -1, "", 0, "")
 	}
@@ -408,118 +375,6 @@ func validateKeysConfig(keys []KeyConfig) error {
 	}
 	return nil
 }
-
-// ParseHTTPCallConfig parses an http_call filter configuration from raw config map.
-// The authentication parameter is passed separately (from cfg.Authentication) to match
-// the ModuleConfig structure used by input and output modules.
-func ParseHTTPCallConfig(cfg map[string]interface{}, auth *connector.AuthConfig) (HTTPCallConfig, error) {
-	config := HTTPCallConfig{}
-
-	// Use httpconfig extraction for base config
-	config.Endpoint = parseStringField(cfg, "endpoint")
-	config.Method = parseStringField(cfg, "method")
-	config.Headers = parseHeaders(cfg)
-	config.TimeoutMs = parseIntField(cfg, "timeoutMs")
-	config.Authentication = auth
-
-	// Parse key configuration (required for GET, optional for POST/PUT with template)
-	config.Keys = parseKeysConfig(cfg)
-
-	// Parse cache configuration (optional)
-	config.Cache = parseCacheConfig(cfg)
-
-	// Parse optional fields
-	config.MergeStrategy = parseStringField(cfg, "mergeStrategy")
-	config.DataField = parseStringField(cfg, "dataField")
-	config.OnError = parseStringField(cfg, "onError")
-
-	// Parse body template file (optional, for POST/PUT)
-	config.BodyTemplateFile = parseStringField(cfg, "bodyTemplateFile")
-
-	return config, nil
-}
-
-// parseStringField extracts a string field from the config map.
-func parseStringField(cfg map[string]interface{}, fieldName string) string {
-	if value, ok := cfg[fieldName].(string); ok {
-		return value
-	}
-	return ""
-}
-
-// parseIntField extracts an integer field from the config map.
-func parseIntField(cfg map[string]interface{}, fieldName string) int {
-	if value, ok := cfg[fieldName].(float64); ok {
-		return int(value)
-	}
-	return 0
-}
-
-// parseKeysConfig extracts the keys configuration from the config map.
-func parseKeysConfig(cfg map[string]interface{}) []KeyConfig {
-	if keysRaw, ok := cfg["keys"].([]interface{}); ok {
-		result := make([]KeyConfig, 0, len(keysRaw))
-		for _, item := range keysRaw {
-			if m, ok := item.(map[string]interface{}); ok {
-				result = append(result, keyConfigFromMap(m))
-			}
-		}
-		return result
-	}
-	return nil
-}
-
-func keyConfigFromMap(m map[string]interface{}) KeyConfig {
-	return KeyConfig{
-		Field:     parseStringField(m, "field"),
-		ParamType: parseStringField(m, "paramType"),
-		ParamName: parseStringField(m, "paramName"),
-	}
-}
-
-// parseCacheConfig extracts the cache configuration from the config map.
-func parseCacheConfig(cfg map[string]interface{}) CacheConfig {
-	cacheConfig := CacheConfig{}
-	if cacheRaw, ok := cfg["cache"].(map[string]interface{}); ok {
-		if maxSize, ok := cacheRaw["maxSize"].(float64); ok {
-			maxSizeInt := int(maxSize)
-			if maxSizeInt > 0 {
-				cacheConfig.MaxSize = maxSizeInt
-			}
-		}
-		if ttl, ok := cacheRaw["defaultTTL"].(float64); ok {
-			ttlInt := int(ttl)
-			if ttlInt > 0 {
-				cacheConfig.DefaultTTL = ttlInt
-			}
-		}
-		cacheConfig.Key = parseStringField(cacheRaw, "key")
-	}
-	return cacheConfig
-}
-
-// parseHeaders extracts headers from the config map.
-func parseHeaders(cfg map[string]interface{}) map[string]string {
-	headers := make(map[string]string)
-	if headersRaw, ok := cfg["headers"].(map[string]interface{}); ok {
-		for k, v := range headersRaw {
-			if strVal, ok := v.(string); ok {
-				headers[k] = strVal
-			}
-		}
-	}
-	return headers
-}
-
-// Process makes HTTP requests for each input record and can enrich them with response data.
-// For each record:
-//  1. Extracts the key value from the record
-//  2. Checks the cache for existing data
-//  3. If cache miss, makes an HTTP request to fetch the data
-//  4. Merges the fetched data into the record
-//  5. Caches successful responses
-//
-// The context can be used to cancel long-running operations.
 func (m *HTTPCallModule) Process(ctx context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
 	if records == nil {
 		return []map[string]interface{}{}, nil
@@ -661,7 +516,7 @@ func (m *HTTPCallModule) processRecord(ctx context.Context, record map[string]in
 func (m *HTTPCallModule) extractKeyValues(record map[string]interface{}, recordIdx int) (map[string]string, error) {
 	result := make(map[string]string, len(m.keys))
 	for _, k := range m.keys {
-		value, found := GetNestedValue(record, k.field)
+		value, found := moduleconfig.GetNestedValue(record, k.field)
 		if !found {
 			return nil, newHTTPCallError(
 				ErrCodeHTTPCallKeyExtract,
@@ -704,7 +559,7 @@ func (m *HTTPCallModule) extractKeyValues(record map[string]interface{}, recordI
 // If cacheKey is not configured, uses default: endpoint + "::" + joined key values (in config order)
 func (m *HTTPCallModule) buildCacheKey(keyValues map[string]string, record map[string]interface{}) string {
 	if m.cacheKey != "" {
-		if value, found := GetNestedValue(record, m.cacheKey); found {
+		if value, found := moduleconfig.GetNestedValue(record, m.cacheKey); found {
 			return fmt.Sprintf("%v", value)
 		}
 		return m.cacheKey

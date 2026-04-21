@@ -3,20 +3,24 @@ package filter
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
 func TestNewHTTPCallFromConfig(t *testing.T) {
 	t.Run("creates module with valid config", func(t *testing.T) {
 		config := HTTPCallConfig{
-			Endpoint: "https://api.example.com/customers/{id}",
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: "https://api.example.com/customers/{id}",
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "customerId",
 				ParamType: "path",
 				ParamName: "id",
@@ -44,7 +48,7 @@ func TestNewHTTPCallFromConfig(t *testing.T) {
 
 	t.Run("returns error for missing endpoint", func(t *testing.T) {
 		config := HTTPCallConfig{
-			Keys: []KeyConfig{{
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "customerId",
 				ParamType: "path",
 				ParamName: "id",
@@ -59,8 +63,10 @@ func TestNewHTTPCallFromConfig(t *testing.T) {
 
 	t.Run("returns error for missing key field", func(t *testing.T) {
 		config := HTTPCallConfig{
-			Endpoint: "https://api.example.com/customers",
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: "https://api.example.com/customers",
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				ParamType: "query",
 				ParamName: "id",
 			}},
@@ -74,8 +80,10 @@ func TestNewHTTPCallFromConfig(t *testing.T) {
 
 	t.Run("returns error for invalid key paramType", func(t *testing.T) {
 		config := HTTPCallConfig{
-			Endpoint: "https://api.example.com/customers",
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: "https://api.example.com/customers",
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "customerId",
 				ParamType: "invalid",
 				ParamName: "id",
@@ -91,8 +99,10 @@ func TestNewHTTPCallFromConfig(t *testing.T) {
 	t.Run("accepts valid paramTypes", func(t *testing.T) {
 		for _, paramType := range []string{"query", "path", "header"} {
 			config := HTTPCallConfig{
-				Endpoint: "https://api.example.com/customers",
-				Keys: []KeyConfig{{
+				HTTPRequestBase: moduleconfig.HTTPRequestBase{
+					Endpoint: "https://api.example.com/customers",
+				},
+				Keys: []moduleconfig.KeyConfig{{
 					Field:     "customerId",
 					ParamType: paramType,
 					ParamName: "id",
@@ -109,13 +119,15 @@ func TestNewHTTPCallFromConfig(t *testing.T) {
 
 	t.Run("uses custom cache configuration", func(t *testing.T) {
 		config := HTTPCallConfig{
-			Endpoint: "https://api.example.com/customers",
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: "https://api.example.com/customers",
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "customerId",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			Cache: CacheConfig{
+			Cache: moduleconfig.CacheConfig{
 				MaxSize:    500,
 				DefaultTTL: 60,
 			},
@@ -132,16 +144,18 @@ func TestNewHTTPCallFromConfig(t *testing.T) {
 
 	t.Run("creates module with authentication", func(t *testing.T) {
 		config := HTTPCallConfig{
-			Endpoint: "https://api.example.com/customers",
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: "https://api.example.com/customers",
+				Authentication: &connector.AuthConfig{
+					Type:        "bearer",
+					Credentials: json.RawMessage(`{"token":"test-token"}`),
+				},
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "customerId",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			Authentication: &connector.AuthConfig{
-				Type:        "bearer",
-				Credentials: map[string]string{"token": "test-token"},
-			},
 		}
 
 		module, err := NewHTTPCallFromConfig(config)
@@ -150,140 +164,6 @@ func TestNewHTTPCallFromConfig(t *testing.T) {
 		}
 		if module.authHandler == nil {
 			t.Error("expected auth handler to be configured")
-		}
-	})
-}
-
-func TestParseHTTPCallConfig(t *testing.T) {
-	t.Run("parses complete config with keys", func(t *testing.T) {
-		raw := map[string]interface{}{
-			"endpoint": "https://api.example.com/customers/{id}",
-			"keys": []interface{}{
-				map[string]interface{}{
-					"field":     "customerId",
-					"paramType": "path",
-					"paramName": "id",
-				},
-			},
-			"cache": map[string]interface{}{
-				"maxSize":    float64(500),
-				"defaultTTL": float64(60),
-			},
-			"mergeStrategy": "replace",
-			"dataField":     "data",
-			"onError":       "skip",
-			"timeoutMs":     float64(5000),
-			"headers": map[string]interface{}{
-				"X-Custom": "value",
-			},
-		}
-
-		config, err := ParseHTTPCallConfig(raw, nil)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-
-		if config.Endpoint != "https://api.example.com/customers/{id}" {
-			t.Errorf("unexpected endpoint: %s", config.Endpoint)
-		}
-		if len(config.Keys) != 1 {
-			t.Fatalf("expected 1 key, got %d", len(config.Keys))
-		}
-		if config.Keys[0].Field != "customerId" {
-			t.Errorf("unexpected key field: %s", config.Keys[0].Field)
-		}
-		if config.Keys[0].ParamType != "path" {
-			t.Errorf("unexpected key paramType: %s", config.Keys[0].ParamType)
-		}
-		if config.Cache.MaxSize != 500 {
-			t.Errorf("unexpected cache maxSize: %d", config.Cache.MaxSize)
-		}
-		if config.MergeStrategy != "replace" {
-			t.Errorf("unexpected mergeStrategy: %s", config.MergeStrategy)
-		}
-		if config.OnError != "skip" {
-			t.Errorf("unexpected onError: %s", config.OnError)
-		}
-		if config.Headers["X-Custom"] != "value" {
-			t.Errorf("unexpected header: %v", config.Headers)
-		}
-	})
-
-	t.Run("parses auth config from separate parameter", func(t *testing.T) {
-		raw := map[string]interface{}{
-			"endpoint": "https://api.example.com/customers",
-			"keys": []interface{}{
-				map[string]interface{}{
-					"field":     "id",
-					"paramType": "query",
-					"paramName": "id",
-				},
-			},
-		}
-
-		authConfig := &connector.AuthConfig{
-			Type: "api-key",
-			Credentials: map[string]string{
-				"key":        "secret",
-				"headerName": "X-API-Key",
-			},
-		}
-
-		config, err := ParseHTTPCallConfig(raw, authConfig)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-
-		if config.Authentication == nil {
-			t.Fatal("expected auth config")
-		}
-		if config.Authentication.Type != "api-key" {
-			t.Errorf("unexpected auth type: %s", config.Authentication.Type)
-		}
-		if config.Authentication.Credentials["key"] != "secret" {
-			t.Errorf("unexpected auth key: %s", config.Authentication.Credentials["key"])
-		}
-	})
-
-	t.Run("ignores auth in config map when separate auth parameter provided", func(t *testing.T) {
-		// This test verifies that when authentication is provided via cfg.Authentication
-		// (as done by the registry), any "auth" field in cfg.Config is ignored.
-		// This matches the behavior of input/output modules.
-		raw := map[string]interface{}{
-			"endpoint": "https://api.example.com/customers",
-			"keys": []interface{}{
-				map[string]interface{}{
-					"field":     "id",
-					"paramType": "query",
-					"paramName": "id",
-				},
-			},
-			"auth": map[string]interface{}{
-				"type": "ignored",
-			},
-		}
-
-		authConfig := &connector.AuthConfig{
-			Type: "bearer",
-			Credentials: map[string]string{
-				"token": "correct-token",
-			},
-		}
-
-		config, err := ParseHTTPCallConfig(raw, authConfig)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-
-		// Should use the separate auth parameter, not the one in the map
-		if config.Authentication == nil {
-			t.Fatal("expected auth config")
-		}
-		if config.Authentication.Type != "bearer" {
-			t.Errorf("expected auth type 'bearer' from separate parameter, got '%s'", config.Authentication.Type)
-		}
-		if config.Authentication.Credentials["token"] != "correct-token" {
-			t.Errorf("expected token 'correct-token' from separate parameter, got '%s'", config.Authentication.Credentials["token"])
 		}
 	})
 }
@@ -306,8 +186,10 @@ func TestHTTPCallModule_Process(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{
 				{
 					Field:     "customerId",
 					ParamType: "query",
@@ -364,8 +246,10 @@ func TestHTTPCallModule_Process(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
@@ -422,8 +306,10 @@ func TestHTTPCallModule_Process(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL + "/customers/{id}/details",
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL + "/customers/{id}/details",
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "customerId",
 				ParamType: "path",
 				ParamName: "id",
@@ -463,8 +349,10 @@ func TestHTTPCallModule_Process(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "customerId",
 				ParamType: "header",
 				ParamName: "X-Customer-ID",
@@ -502,8 +390,10 @@ func TestHTTPCallModule_Process(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "customer.id",
 				ParamType: "query",
 				ParamName: "id",
@@ -551,8 +441,10 @@ func TestHTTPCallModule_Process(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
@@ -597,8 +489,10 @@ func TestHTTPCallModule_Process(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
@@ -647,8 +541,10 @@ func TestHTTPCallModule_Process(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
@@ -686,8 +582,10 @@ func TestHTTPCallModule_Process(t *testing.T) {
 
 	t.Run("handles nil records", func(t *testing.T) {
 		config := HTTPCallConfig{
-			Endpoint: "https://api.example.com",
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: "https://api.example.com",
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
@@ -716,8 +614,10 @@ func TestHTTPCallModule_Process(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
@@ -751,13 +651,15 @@ func TestHTTPCallModule_ErrorHandling(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			OnError: "fail",
+			ModuleBase: connector.ModuleBase{OnError: "fail"},
 		}
 
 		module, err := NewHTTPCallFromConfig(config)
@@ -796,13 +698,15 @@ func TestHTTPCallModule_ErrorHandling(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			OnError: "skip",
+			ModuleBase: connector.ModuleBase{OnError: "skip"},
 		}
 
 		module, err := NewHTTPCallFromConfig(config)
@@ -833,13 +737,15 @@ func TestHTTPCallModule_ErrorHandling(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			OnError: "log",
+			ModuleBase: connector.ModuleBase{OnError: "log"},
 		}
 
 		module, err := NewHTTPCallFromConfig(config)
@@ -876,13 +782,15 @@ func TestHTTPCallModule_ErrorHandling(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "customerId",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			OnError: "fail",
+			ModuleBase: connector.ModuleBase{OnError: "fail"},
 		}
 
 		module, err := NewHTTPCallFromConfig(config)
@@ -910,13 +818,15 @@ func TestHTTPCallModule_ErrorHandling(t *testing.T) {
 
 	t.Run("handles null key value", func(t *testing.T) {
 		config := HTTPCallConfig{
-			Endpoint: "https://api.example.com",
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: "https://api.example.com",
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			OnError: "fail",
+			ModuleBase: connector.ModuleBase{OnError: "fail"},
 		}
 
 		module, err := NewHTTPCallFromConfig(config)
@@ -942,13 +852,15 @@ func TestHTTPCallModule_ErrorHandling(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			OnError: "fail",
+			ModuleBase: connector.ModuleBase{OnError: "fail"},
 		}
 
 		module, err := NewHTTPCallFromConfig(config)
@@ -1000,16 +912,20 @@ func TestHTTPCallModule_CacheIsolation(t *testing.T) {
 		defer server2.Close()
 
 		config1 := HTTPCallConfig{
-			Endpoint: server1.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server1.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
 			}},
 		}
 		config2 := HTTPCallConfig{
-			Endpoint: server2.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server2.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
@@ -1062,8 +978,10 @@ func TestHTTPCallModule_DeepMerge(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
@@ -1128,8 +1046,10 @@ func TestHTTPCallModule_NumericKeyValues(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
@@ -1170,8 +1090,10 @@ func TestHTTPCallModule_ClearCache(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
@@ -1218,20 +1140,18 @@ func TestHTTPCallModule_Authentication(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+				Authentication: &connector.AuthConfig{
+					Type:        "api-key",
+					Credentials: json.RawMessage(`{"key": "my-secret-api-key", "location": "query", "paramName": "api_key"}`),
+				},
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			Authentication: &connector.AuthConfig{
-				Type: "api-key",
-				Credentials: map[string]string{
-					"key":       "my-secret-api-key",
-					"location":  "query",
-					"paramName": "api_key",
-				},
-			},
 		}
 
 		module, err := NewHTTPCallFromConfig(config)
@@ -1264,18 +1184,18 @@ func TestHTTPCallModule_Authentication(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+				Authentication: &connector.AuthConfig{
+					Type:        "bearer",
+					Credentials: json.RawMessage(`{"token": "my-bearer-token-123"}`),
+				},
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			Authentication: &connector.AuthConfig{
-				Type: "bearer",
-				Credentials: map[string]string{
-					"token": "my-bearer-token-123",
-				},
-			},
 		}
 
 		module, err := NewHTTPCallFromConfig(config)
@@ -1310,19 +1230,18 @@ func TestHTTPCallModule_Authentication(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+				Authentication: &connector.AuthConfig{
+					Type:        "basic",
+					Credentials: json.RawMessage(`{"username": "testuser", "password": "testpass"}`),
+				},
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			Authentication: &connector.AuthConfig{
-				Type: "basic",
-				Credentials: map[string]string{
-					"username": "testuser",
-					"password": "testpass",
-				},
-			},
 		}
 
 		module, err := NewHTTPCallFromConfig(config)
@@ -1383,20 +1302,18 @@ func TestHTTPCallModule_Authentication(t *testing.T) {
 		defer apiServer.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: apiServer.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: apiServer.URL,
+				Authentication: &connector.AuthConfig{
+					Type:        "oauth2",
+					Credentials: json.RawMessage(fmt.Sprintf(`{"clientId":"test-client-id","clientSecret":"test-client-secret","tokenUrl":"%s"}`, tokenServer.URL)),
+				},
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			Authentication: &connector.AuthConfig{
-				Type: "oauth2",
-				Credentials: map[string]string{
-					"clientId":     "test-client-id",
-					"clientSecret": "test-client-secret",
-					"tokenUrl":     tokenServer.URL,
-				},
-			},
 		}
 
 		module, err := NewHTTPCallFromConfig(config)
@@ -1432,13 +1349,15 @@ func TestHTTPCallModule_CacheTTLExpiration(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			Cache: CacheConfig{
+			Cache: moduleconfig.CacheConfig{
 				MaxSize:    100,
 				DefaultTTL: 1, // 1 second TTL for testing
 			},
@@ -1502,13 +1421,15 @@ func TestHTTPCallModule_CacheSizeLimitAndLRU(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			Cache: CacheConfig{
+			Cache: moduleconfig.CacheConfig{
 				MaxSize:    3, // Small cache size for testing
 				DefaultTTL: 300,
 			},
@@ -1585,13 +1506,15 @@ func TestHTTPCallModule_CacheKeyCollision(t *testing.T) {
 
 		// Create module with endpoint that contains ":"
 		config := HTTPCallConfig{
-			Endpoint: server.URL, // Contains "http://" which has ":"
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL, // Contains "http://" which has ":"
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			Cache: CacheConfig{
+			Cache: moduleconfig.CacheConfig{
 				MaxSize:    10,
 				DefaultTTL: 300,
 			},
@@ -1664,13 +1587,15 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			Cache: CacheConfig{
+			Cache: moduleconfig.CacheConfig{
 				MaxSize:    10,
 				DefaultTTL: 300,
 				Key:        "static-cache-key",
@@ -1720,13 +1645,15 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			Cache: CacheConfig{
+			Cache: moduleconfig.CacheConfig{
 				MaxSize:    10,
 				DefaultTTL: 300,
 				Key:        "user.profile.id",
@@ -1793,13 +1720,15 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 		defer server.Close()
 
 		config := HTTPCallConfig{
-			Endpoint: server.URL,
-			Keys: []KeyConfig{{
+			HTTPRequestBase: moduleconfig.HTTPRequestBase{
+				Endpoint: server.URL,
+			},
+			Keys: []moduleconfig.KeyConfig{{
 				Field:     "id",
 				ParamType: "query",
 				ParamName: "id",
 			}},
-			Cache: CacheConfig{
+			Cache: moduleconfig.CacheConfig{
 				MaxSize:    10,
 				DefaultTTL: 300,
 				Key:        "metadata.nonexistent",

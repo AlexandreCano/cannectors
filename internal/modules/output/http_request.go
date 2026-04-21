@@ -22,8 +22,8 @@ import (
 
 	"github.com/cannectors/runtime/internal/auth"
 	"github.com/cannectors/runtime/internal/errhandling"
-	"github.com/cannectors/runtime/internal/httpconfig"
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
@@ -112,10 +112,6 @@ type RequestConfig struct {
 	bodyTemplateRaw  string            // Loaded template content (internal use)
 }
 
-// RetryConfig is an alias for errhandling.RetryConfig for backward compatibility.
-// Use errhandling.RetryConfig directly for new code.
-type RetryConfig = errhandling.RetryConfig
-
 // HTTPRequestModule implements HTTP-based data sending.
 // It sends transformed records to a target REST API via HTTP requests.
 type HTTPRequestModule struct {
@@ -124,7 +120,7 @@ type HTTPRequestModule struct {
 	headers           map[string]string
 	timeout           time.Duration
 	request           RequestConfig
-	retry             RetryConfig
+	retry             connector.RetryConfig
 	authHandler       auth.Handler
 	client            *http.Client
 	onError           errhandling.OnErrorStrategy // "fail", "skip", "log"
@@ -132,6 +128,22 @@ type HTTPRequestModule struct {
 	lastRetryInfo     *connector.RetryInfo
 	retryHintProgram  *vm.Program        // Compiled expr program for retryHintFromBody
 	templateEvaluator *TemplateEvaluator // Template evaluator for dynamic content
+}
+
+// HTTPRequestOutputConfig holds typed configuration for the HTTP request output module.
+type HTTPRequestOutputConfig struct {
+	connector.ModuleBase
+	moduleconfig.HTTPRequestBase
+	RequestMode      string                   `json:"requestMode,omitempty"`
+	Keys             []moduleconfig.KeyConfig `json:"keys,omitempty"`
+	BodyTemplateFile string                   `json:"bodyTemplateFile,omitempty"`
+	Success          *SuccessCodeConfig       `json:"success,omitempty"`
+	Retry            *connector.RetryConfig   `json:"retry,omitempty"`
+}
+
+// SuccessCodeConfig holds success status codes configuration.
+type SuccessCodeConfig struct {
+	StatusCodes []int `json:"statusCodes,omitempty"`
 }
 
 // Default success status codes
@@ -154,20 +166,56 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 		return nil, ErrNilConfig
 	}
 
-	endpoint, method, timeout, err := extractBasicConfig(config.Config)
+	cfg, err := moduleconfig.ParseModuleConfig[HTTPRequestOutputConfig](*config)
 	if err != nil {
-		return nil, fmt.Errorf("extracting basic config: %w", err)
+		return nil, err
+	}
+	if cfg.Endpoint == "" {
+		return nil, ErrMissingEndpoint
+	}
+	if cfg.Method == "" {
+		return nil, ErrMissingMethod
+	}
+	method := strings.ToUpper(cfg.Method)
+	if !supportedMethods[method] {
+		return nil, fmt.Errorf("%w: %s", ErrInvalidMethod, method)
 	}
 
-	headers := extractHeaders(config.Config)
-	reqConfig := extractRequestConfig(config.Config)
-	onError := extractErrorHandling(config.Config)
-	successCodes := extractSuccessCodes(config.Config)
-	retryConfig := extractRetryConfig(config.Config)
+	timeout := connector.GetTimeoutDuration(cfg.TimeoutMs, defaultHTTPTimeout)
+	headers := cfg.Headers
+	reqConfig := RequestConfig{
+		RequestMode:      cfg.RequestMode,
+		QueryParams:      cfg.QueryParams,
+		BodyTemplateFile: cfg.BodyTemplateFile,
+	}
+	if reqConfig.RequestMode == "" {
+		reqConfig.RequestMode = defaultRequestMode
+	}
+	reqConfig.Keys = make([]keyEntry, len(cfg.Keys))
+	for i, k := range cfg.Keys {
+		reqConfig.Keys[i] = keyEntry{field: k.Field, paramType: k.ParamType, paramName: k.ParamName}
+	}
+
+	var onError errhandling.OnErrorStrategy
+	if cfg.OnError != "" {
+		onError = errhandling.ParseOnErrorStrategy(cfg.OnError)
+	} else {
+		onError = errhandling.OnErrorFail
+	}
+
+	var successCodes []int
+	if cfg.Success != nil && len(cfg.Success.StatusCodes) > 0 {
+		successCodes = cfg.Success.StatusCodes
+	} else {
+		successCodes = defaultSuccessCodes
+	}
+
+	retryConfig := moduleconfig.ToRetryConfig(cfg.Retry)
+
 	client := createHTTPClient(timeout)
 
 	// Create authentication handler if configured
-	authHandler, err := auth.NewHandler(config.Authentication, client)
+	authHandler, err := auth.NewHandler(cfg.Authentication, client)
 	if err != nil {
 		return nil, fmt.Errorf("creating auth handler: %w", err)
 	}
@@ -186,7 +234,7 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 	}
 
 	// Validate template syntax in endpoint and headers
-	if err := validateTemplateConfig(endpoint, headers); err != nil {
+	if err := validateTemplateConfig(cfg.Endpoint, headers); err != nil {
 		return nil, fmt.Errorf("validating template configuration: %w", err)
 	}
 
@@ -210,7 +258,7 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 	}
 
 	module := &HTTPRequestModule{
-		endpoint:          endpoint,
+		endpoint:          cfg.Endpoint,
 		method:            method,
 		headers:           headers,
 		timeout:           timeout,
@@ -225,7 +273,7 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 	}
 
 	// Check if endpoint/headers use templating
-	hasTemplating := HasTemplateVariables(endpoint)
+	hasTemplating := HasTemplateVariables(cfg.Endpoint)
 	for _, v := range headers {
 		if HasTemplateVariables(v) {
 			hasTemplating = true
@@ -234,7 +282,7 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 	}
 
 	logger.Debug("http request output module created",
-		slog.String("endpoint", endpoint),
+		slog.String("endpoint", cfg.Endpoint),
 		slog.String("method", method),
 		slog.String("timeout", timeout.String()),
 		slog.Bool("has_auth", authHandler != nil),
@@ -261,106 +309,6 @@ func validateTemplateConfig(endpoint string, headers map[string]string) error {
 	}
 
 	return nil
-}
-
-// extractBasicConfig extracts required configuration: endpoint, method, and timeout
-func extractBasicConfig(config map[string]interface{}) (endpoint, method string, timeout time.Duration, err error) {
-	endpoint, ok := config["endpoint"].(string)
-	if !ok || endpoint == "" {
-		return "", "", 0, ErrMissingEndpoint
-	}
-
-	method, ok = config["method"].(string)
-	if !ok || method == "" {
-		return "", "", 0, ErrMissingMethod
-	}
-
-	method = strings.ToUpper(method)
-	if !supportedMethods[method] {
-		return "", "", 0, fmt.Errorf("%w: %s", ErrInvalidMethod, method)
-	}
-
-	timeoutMs := 0
-	if ms, ok := config["timeoutMs"].(float64); ok && ms > 0 {
-		timeoutMs = int(ms)
-	}
-	timeout = httpconfig.GetTimeoutDuration(timeoutMs, defaultHTTPTimeout)
-
-	return endpoint, method, timeout, nil
-}
-
-// extractHeaders extracts custom HTTP headers from configuration
-func extractHeaders(config map[string]interface{}) map[string]string {
-	return httpconfig.ExtractStringMap(config, "headers")
-}
-
-// extractRequestConfig extracts request-specific configuration
-func extractRequestConfig(config map[string]interface{}) RequestConfig {
-	reqConfig := RequestConfig{
-		RequestMode: defaultRequestMode,
-	}
-
-	// Extract keys and static query params
-	keys := httpconfig.ExtractKeysConfig(config)
-	reqConfig.Keys = make([]keyEntry, len(keys))
-	for i, k := range keys {
-		reqConfig.Keys[i] = keyEntry{field: k.Field, paramType: k.ParamType, paramName: k.ParamName}
-	}
-	reqConfig.QueryParams = httpconfig.ExtractStringMap(config, "queryParams")
-
-	// Extract body template and requestMode from root
-	bodyTemplateConfig := httpconfig.ExtractBodyTemplateConfig(config)
-	reqConfig.BodyTemplateFile = bodyTemplateConfig.BodyTemplateFile
-
-	if requestMode, ok := config["requestMode"].(string); ok {
-		reqConfig.RequestMode = requestMode
-	}
-
-	return reqConfig
-}
-
-// extractErrorHandling extracts error handling mode from configuration
-func extractErrorHandling(config map[string]interface{}) errhandling.OnErrorStrategy {
-	ehc := httpconfig.ExtractErrorHandlingConfig(config)
-	if ehc.OnError != "" {
-		return errhandling.ParseOnErrorStrategy(ehc.OnError)
-	}
-	return errhandling.OnErrorFail // default
-}
-
-// extractSuccessCodes extracts custom success status codes from configuration
-func extractSuccessCodes(config map[string]interface{}) []int {
-	successConfig, ok := config["success"].(map[string]interface{})
-	if !ok {
-		return defaultSuccessCodes
-	}
-
-	statusCodes, ok := successConfig["statusCodes"].([]interface{})
-	if !ok || len(statusCodes) == 0 {
-		return defaultSuccessCodes
-	}
-
-	successCodes := make([]int, 0, len(statusCodes))
-	for _, code := range statusCodes {
-		if codeFloat, ok := code.(float64); ok {
-			successCodes = append(successCodes, int(codeFloat))
-		}
-	}
-
-	if len(successCodes) == 0 {
-		return defaultSuccessCodes
-	}
-
-	return successCodes
-}
-
-// extractRetryConfig extracts retry configuration from config using errhandling.
-func extractRetryConfig(config map[string]interface{}) RetryConfig {
-	retryVal, ok := config["retry"].(map[string]interface{})
-	if !ok {
-		return errhandling.DefaultRetryConfig()
-	}
-	return errhandling.ParseRetryConfig(retryVal)
 }
 
 // createHTTPClient creates an HTTP client with configured timeout and transport settings

@@ -1,10 +1,29 @@
 package input
 
 import (
+	"encoding/json"
 	"testing"
 
+	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/pkg/connector"
 )
+
+// parseDatabaseInputConfigFromMap is a test helper that converts a map to DatabaseInputConfig via JSON.
+
+func mustJSON(v interface{}) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+func parseDatabaseInputConfigFromMap(cfg map[string]interface{}) DatabaseInputConfig {
+	data, _ := json.Marshal(cfg)
+	var config DatabaseInputConfig
+	_ = json.Unmarshal(data, &config)
+	return config
+}
 
 func TestParseDatabaseInputConfig(t *testing.T) {
 	t.Parallel()
@@ -113,11 +132,11 @@ func TestParseDatabaseInputConfig(t *testing.T) {
 				if config.MaxIdleConns != 10 {
 					t.Errorf("MaxIdleConns = %d, want 10", config.MaxIdleConns)
 				}
-				if config.ConnMaxLifetime != 3600 {
-					t.Errorf("ConnMaxLifetime = %d, want 3600", config.ConnMaxLifetime)
+				if config.ConnMaxLifetimeSeconds != 3600 {
+					t.Errorf("ConnMaxLifetime = %d, want 3600", config.ConnMaxLifetimeSeconds)
 				}
-				if config.ConnMaxIdleTime != 600 {
-					t.Errorf("ConnMaxIdleTime = %d, want 600", config.ConnMaxIdleTime)
+				if config.ConnMaxIdleTimeSeconds != 600 {
+					t.Errorf("ConnMaxIdleTime = %d, want 600", config.ConnMaxIdleTimeSeconds)
 				}
 				if config.TimeoutMs != 60000 {
 					t.Errorf("TimeoutMs = %d, want 60000", config.TimeoutMs)
@@ -128,7 +147,7 @@ func TestParseDatabaseInputConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := parseDatabaseInputConfig(tt.cfg)
+			config := parseDatabaseInputConfigFromMap(tt.cfg)
 			if tt.wantErr {
 				t.Error("parseDatabaseInputConfig() should not return error, but test expects error")
 				return
@@ -146,7 +165,7 @@ func TestParseDatabasePaginationConfig(t *testing.T) {
 	tests := []struct {
 		name  string
 		cfg   map[string]interface{}
-		check func(t *testing.T, config *DatabasePaginationConfig)
+		check func(t *testing.T, config *moduleconfig.DatabasePaginationConfig)
 	}{
 		{
 			name: "limit-offset pagination",
@@ -155,7 +174,7 @@ func TestParseDatabasePaginationConfig(t *testing.T) {
 				"limit":       float64(100),
 				"offsetParam": "offset",
 			},
-			check: func(t *testing.T, config *DatabasePaginationConfig) {
+			check: func(t *testing.T, config *moduleconfig.DatabasePaginationConfig) {
 				if config.Type != "limit-offset" {
 					t.Errorf("Type = %q, want limit-offset", config.Type)
 				}
@@ -175,7 +194,7 @@ func TestParseDatabasePaginationConfig(t *testing.T) {
 				"cursorField": "id",
 				"cursorParam": "after_id",
 			},
-			check: func(t *testing.T, config *DatabasePaginationConfig) {
+			check: func(t *testing.T, config *moduleconfig.DatabasePaginationConfig) {
 				if config.Type != "cursor" {
 					t.Errorf("Type = %q, want cursor", config.Type)
 				}
@@ -192,9 +211,10 @@ func TestParseDatabasePaginationConfig(t *testing.T) {
 			cfg: map[string]interface{}{
 				"type": "limit-offset",
 			},
-			check: func(t *testing.T, config *DatabasePaginationConfig) {
-				if config.Limit != defaultQueryLimit {
-					t.Errorf("Limit = %d, want %d (default)", config.Limit, defaultQueryLimit)
+			check: func(t *testing.T, config *moduleconfig.DatabasePaginationConfig) {
+				// Limit defaults are applied at usage time (not parse time), so 0 is expected
+				if config.Limit != 0 {
+					t.Errorf("Limit = %d, want 0 (default applied at usage)", config.Limit)
 				}
 			},
 		},
@@ -202,7 +222,9 @@ func TestParseDatabasePaginationConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := parseDatabasePaginationConfig(tt.cfg)
+			data, _ := json.Marshal(tt.cfg)
+			config := &moduleconfig.DatabasePaginationConfig{}
+			_ = json.Unmarshal(data, config)
 			if tt.check != nil {
 				tt.check(t, config)
 			}
@@ -260,7 +282,9 @@ func TestParseIncrementalConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := parseIncrementalConfig(tt.cfg)
+			data, _ := json.Marshal(tt.cfg)
+			config := &IncrementalConfig{}
+			_ = json.Unmarshal(data, config)
 			if tt.check != nil {
 				tt.check(t, config)
 			}
@@ -285,9 +309,9 @@ func TestNewDatabaseInputFromConfig_Validation(t *testing.T) {
 			name: "missing query",
 			cfg: &connector.ModuleConfig{
 				Type: "database",
-				Config: map[string]interface{}{
+				Raw: mustJSON(map[string]interface{}{
 					"connectionString": "postgres://localhost/db",
-				},
+				}),
 			},
 			wantErr: ErrDatabaseMissingQuery,
 		},
@@ -295,9 +319,9 @@ func TestNewDatabaseInputFromConfig_Validation(t *testing.T) {
 			name: "missing connection string",
 			cfg: &connector.ModuleConfig{
 				Type: "database",
-				Config: map[string]interface{}{
+				Raw: mustJSON(map[string]interface{}{
 					"query": "SELECT * FROM users",
-				},
+				}),
 			},
 			wantErr: ErrDatabaseMissingConnStr,
 		},

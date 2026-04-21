@@ -17,6 +17,7 @@ import (
 	"github.com/cannectors/runtime/internal/cache"
 	"github.com/cannectors/runtime/internal/database"
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/pathutil"
 	"github.com/cannectors/runtime/internal/template"
 	"github.com/cannectors/runtime/pkg/connector"
@@ -48,41 +49,15 @@ var (
 
 // SQLCallConfig represents the configuration for a sql_call filter module.
 type SQLCallConfig struct {
-	// Connection configuration
-	ConnectionString    string `json:"connectionString"`
-	ConnectionStringRef string `json:"connectionStringRef"`
-	Driver              string `json:"driver"`
-
-	// Query configuration - use query OR queryFile
-	Query     string `json:"query"`     // SQL query with {{record.field}} templates
-	QueryFile string `json:"queryFile"` // Path to SQL file with {{record.field}} templates
+	connector.ModuleBase
+	moduleconfig.SQLRequestBase
 
 	// Result handling
 	MergeStrategy string `json:"mergeStrategy"` // "merge", "replace", "append"
 	ResultKey     string `json:"resultKey"`     // Key for storing result in "append" mode
 
-	// Error handling
-	OnError string `json:"onError"` // "fail", "skip", "log"
-
 	// Cache configuration
-	Cache SQLCallCacheConfig `json:"cache"`
-
-	// Pool configuration
-	MaxOpenConns    int `json:"maxOpenConns"`
-	MaxIdleConns    int `json:"maxIdleConns"`
-	ConnMaxLifetime int `json:"connMaxLifetimeSeconds"`
-	ConnMaxIdleTime int `json:"connMaxIdleTimeSeconds"`
-
-	// Timeout
-	TimeoutMs int `json:"timeoutMs"`
-}
-
-// SQLCallCacheConfig defines cache configuration for sql_call module.
-type SQLCallCacheConfig struct {
-	Enabled    bool   `json:"enabled"`
-	MaxSize    int    `json:"maxSize"`
-	DefaultTTL int    `json:"defaultTTL"` // in seconds
-	Key        string `json:"key"`        // Cache key template
+	Cache moduleconfig.CacheConfig `json:"cache"`
 }
 
 // SQLCallModule implements a filter that executes SQL queries for enrichment.
@@ -208,8 +183,8 @@ func createDatabaseConnection(config SQLCallConfig, timeout time.Duration) (*sql
 		Driver:              config.Driver,
 		MaxOpenConns:        config.MaxOpenConns,
 		MaxIdleConns:        config.MaxIdleConns,
-		ConnMaxLifetime:     time.Duration(config.ConnMaxLifetime) * time.Second,
-		ConnMaxIdleTime:     time.Duration(config.ConnMaxIdleTime) * time.Second,
+		ConnMaxLifetime:     time.Duration(config.ConnMaxLifetimeSeconds) * time.Second,
+		ConnMaxIdleTime:     time.Duration(config.ConnMaxIdleTimeSeconds) * time.Second,
 		ConnectTimeout:      timeout,
 	}
 
@@ -252,106 +227,6 @@ func logSQLCallModuleInitialization(driver, mergeStrategy, onError string, cache
 		slog.Bool("cache_enabled", cacheEnabled),
 		slog.Duration("timeout", timeout),
 	)
-}
-
-// ParseSQLCallConfig parses sql_call filter configuration from raw config map.
-func ParseSQLCallConfig(cfg map[string]interface{}) (SQLCallConfig, error) {
-	config := SQLCallConfig{}
-
-	parseConnectionSettings(&config, cfg)
-	parseQuerySettings(&config, cfg)
-	parseResultHandlingSettings(&config, cfg)
-	parseErrorHandlingSettings(&config, cfg)
-	parsePoolSettings(&config, cfg)
-	parseCacheSettings(&config, cfg)
-
-	return config, nil
-}
-
-// parseConnectionSettings extracts connection-related settings from config.
-func parseConnectionSettings(config *SQLCallConfig, cfg map[string]interface{}) {
-	if v, ok := cfg["connectionString"].(string); ok {
-		config.ConnectionString = v
-	}
-	if v, ok := cfg["connectionStringRef"].(string); ok {
-		config.ConnectionStringRef = v
-	}
-	if v, ok := cfg["driver"].(string); ok {
-		config.Driver = v
-	}
-}
-
-// parseQuerySettings extracts query-related settings from config.
-func parseQuerySettings(config *SQLCallConfig, cfg map[string]interface{}) {
-	if v, ok := cfg["query"].(string); ok {
-		config.Query = v
-	}
-	if v, ok := cfg["queryFile"].(string); ok {
-		config.QueryFile = v
-	}
-}
-
-// parseResultHandlingSettings extracts result handling settings from config.
-func parseResultHandlingSettings(config *SQLCallConfig, cfg map[string]interface{}) {
-	if v, ok := cfg["mergeStrategy"].(string); ok {
-		config.MergeStrategy = v
-	}
-	if v, ok := cfg["resultKey"].(string); ok {
-		config.ResultKey = v
-	}
-}
-
-// parseErrorHandlingSettings extracts error handling settings from config.
-func parseErrorHandlingSettings(config *SQLCallConfig, cfg map[string]interface{}) {
-	if v, ok := cfg["onError"].(string); ok {
-		config.OnError = v
-	}
-}
-
-// parsePoolSettings extracts connection pool settings from config.
-func parsePoolSettings(config *SQLCallConfig, cfg map[string]interface{}) {
-	if v, ok := cfg["maxOpenConns"].(float64); ok {
-		config.MaxOpenConns = int(v)
-	}
-	if v, ok := cfg["maxIdleConns"].(float64); ok {
-		config.MaxIdleConns = int(v)
-	}
-	if v, ok := cfg["connMaxLifetimeSeconds"].(float64); ok {
-		config.ConnMaxLifetime = int(v)
-	}
-	if v, ok := cfg["connMaxIdleTimeSeconds"].(float64); ok {
-		config.ConnMaxIdleTime = int(v)
-	}
-	if v, ok := cfg["timeoutMs"].(float64); ok {
-		config.TimeoutMs = int(v)
-	}
-}
-
-// parseCacheSettings extracts cache settings from config.
-func parseCacheSettings(config *SQLCallConfig, cfg map[string]interface{}) {
-	if cacheRaw, ok := cfg["cache"].(map[string]interface{}); ok {
-		config.Cache = parseSQLCallCacheConfig(cacheRaw)
-	}
-}
-
-// parseSQLCallCacheConfig parses cache configuration.
-func parseSQLCallCacheConfig(cfg map[string]interface{}) SQLCallCacheConfig {
-	config := SQLCallCacheConfig{}
-
-	if v, ok := cfg["enabled"].(bool); ok {
-		config.Enabled = v
-	}
-	if v, ok := cfg["maxSize"].(float64); ok {
-		config.MaxSize = int(v)
-	}
-	if v, ok := cfg["defaultTTL"].(float64); ok {
-		config.DefaultTTL = int(v)
-	}
-	if v, ok := cfg["key"].(string); ok {
-		config.Key = v
-	}
-
-	return config
 }
 
 // Process executes SQL queries for each input record and enriches them.

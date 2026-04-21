@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -27,7 +28,7 @@ func TestNewHandler(t *testing.T) {
 			name: "api-key type creates handler",
 			config: &connector.AuthConfig{
 				Type:        "api-key",
-				Credentials: map[string]string{"key": "test-key"},
+				Credentials: toJSON(t, map[string]string{"key": "test-key"}),
 			},
 			wantType: "api-key",
 			wantErr:  false,
@@ -36,7 +37,7 @@ func TestNewHandler(t *testing.T) {
 			name: "bearer type creates handler",
 			config: &connector.AuthConfig{
 				Type:        "bearer",
-				Credentials: map[string]string{"token": "test-token"},
+				Credentials: toJSON(t, map[string]string{"token": "test-token"}),
 			},
 			wantType: "bearer",
 			wantErr:  false,
@@ -45,7 +46,7 @@ func TestNewHandler(t *testing.T) {
 			name: "basic type creates handler",
 			config: &connector.AuthConfig{
 				Type:        "basic",
-				Credentials: map[string]string{"username": "user", "password": "pass"},
+				Credentials: toJSON(t, map[string]string{"username": "user", "password": "pass"}),
 			},
 			wantType: "basic",
 			wantErr:  false,
@@ -54,11 +55,11 @@ func TestNewHandler(t *testing.T) {
 			name: "oauth2 type creates handler",
 			config: &connector.AuthConfig{
 				Type: "oauth2",
-				Credentials: map[string]string{
+				Credentials: toJSON(t, map[string]string{
 					"tokenUrl":     "https://example.com/token",
 					"clientId":     "client-id",
 					"clientSecret": "client-secret",
-				},
+				}),
 			},
 			wantType: "oauth2",
 			wantErr:  false,
@@ -67,7 +68,7 @@ func TestNewHandler(t *testing.T) {
 			name: "unknown type returns error",
 			config: &connector.AuthConfig{
 				Type:        "unknown",
-				Credentials: map[string]string{},
+				Credentials: toJSON(t, map[string]string{}),
 			},
 			wantErr:     true,
 			errContains: "unknown authentication type",
@@ -76,7 +77,7 @@ func TestNewHandler(t *testing.T) {
 			name: "api-key missing key returns error",
 			config: &connector.AuthConfig{
 				Type:        "api-key",
-				Credentials: map[string]string{},
+				Credentials: toJSON(t, map[string]string{}),
 			},
 			wantErr:     true,
 			errContains: "api key is required",
@@ -85,7 +86,7 @@ func TestNewHandler(t *testing.T) {
 			name: "bearer missing token returns error",
 			config: &connector.AuthConfig{
 				Type:        "bearer",
-				Credentials: map[string]string{},
+				Credentials: toJSON(t, map[string]string{}),
 			},
 			wantErr:     true,
 			errContains: "token is required",
@@ -94,7 +95,7 @@ func TestNewHandler(t *testing.T) {
 			name: "basic missing username returns error",
 			config: &connector.AuthConfig{
 				Type:        "basic",
-				Credentials: map[string]string{"password": "pass"},
+				Credentials: toJSON(t, map[string]string{"password": "pass"}),
 			},
 			wantErr:     true,
 			errContains: "username and password are required",
@@ -103,7 +104,7 @@ func TestNewHandler(t *testing.T) {
 			name: "basic missing password returns error",
 			config: &connector.AuthConfig{
 				Type:        "basic",
-				Credentials: map[string]string{"username": "user"},
+				Credentials: toJSON(t, map[string]string{"username": "user"}),
 			},
 			wantErr:     true,
 			errContains: "username and password are required",
@@ -112,10 +113,10 @@ func TestNewHandler(t *testing.T) {
 			name: "oauth2 missing tokenUrl returns error",
 			config: &connector.AuthConfig{
 				Type: "oauth2",
-				Credentials: map[string]string{
+				Credentials: toJSON(t, map[string]string{
 					"clientId":     "client-id",
 					"clientSecret": "client-secret",
-				},
+				}),
 			},
 			wantErr:     true,
 			errContains: "tokenUrl, clientId, and clientSecret are required",
@@ -161,11 +162,11 @@ func TestNewHandler(t *testing.T) {
 func TestAPIKeyHandler_ApplyAuth_Header(t *testing.T) {
 	config := &connector.AuthConfig{
 		Type: "api-key",
-		Credentials: map[string]string{
+		Credentials: toJSON(t, map[string]string{
 			"key":        "my-api-key",
 			"location":   "header",
 			"headerName": "X-Custom-Key",
-		},
+		}),
 	}
 
 	handler, err := NewHandler(config, nil)
@@ -188,10 +189,10 @@ func TestAPIKeyHandler_ApplyAuth_Header(t *testing.T) {
 func TestAPIKeyHandler_ApplyAuth_HeaderDefault(t *testing.T) {
 	config := &connector.AuthConfig{
 		Type: "api-key",
-		Credentials: map[string]string{
+		Credentials: toJSON(t, map[string]string{
 			"key": "my-api-key",
 			// location defaults to header, headerName defaults to X-API-Key
-		},
+		}),
 	}
 
 	handler, err := NewHandler(config, nil)
@@ -214,11 +215,11 @@ func TestAPIKeyHandler_ApplyAuth_HeaderDefault(t *testing.T) {
 func TestAPIKeyHandler_ApplyAuth_Query(t *testing.T) {
 	config := &connector.AuthConfig{
 		Type: "api-key",
-		Credentials: map[string]string{
+		Credentials: toJSON(t, map[string]string{
 			"key":       "my-api-key",
 			"location":  "query",
 			"paramName": "apikey",
-		},
+		}),
 	}
 
 	handler, err := NewHandler(config, nil)
@@ -247,11 +248,11 @@ func TestAPIKeyHandler_ApplyAuth_Query(t *testing.T) {
 func TestAPIKeyHandler_ApplyAuth_QueryDefaultParamName(t *testing.T) {
 	config := &connector.AuthConfig{
 		Type: "api-key",
-		Credentials: map[string]string{
+		Credentials: toJSON(t, map[string]string{
 			"key":      "my-api-key",
 			"location": "query",
 			// paramName defaults to api_key
-		},
+		}),
 	}
 
 	handler, err := NewHandler(config, nil)
@@ -274,7 +275,7 @@ func TestAPIKeyHandler_ApplyAuth_QueryDefaultParamName(t *testing.T) {
 func TestBearerHandler_ApplyAuth(t *testing.T) {
 	config := &connector.AuthConfig{
 		Type:        "bearer",
-		Credentials: map[string]string{"token": "my-bearer-token"},
+		Credentials: toJSON(t, map[string]string{"token": "my-bearer-token"}),
 	}
 
 	handler, err := NewHandler(config, nil)
@@ -298,7 +299,7 @@ func TestBearerHandler_ApplyAuth(t *testing.T) {
 func TestBasicHandler_ApplyAuth(t *testing.T) {
 	config := &connector.AuthConfig{
 		Type:        "basic",
-		Credentials: map[string]string{"username": "myuser", "password": "mypass"},
+		Credentials: toJSON(t, map[string]string{"username": "myuser", "password": "mypass"}),
 	}
 
 	handler, err := NewHandler(config, nil)
@@ -336,28 +337,28 @@ func TestDeterministicAuth(t *testing.T) {
 			name: "api-key header is deterministic",
 			config: &connector.AuthConfig{
 				Type:        "api-key",
-				Credentials: map[string]string{"key": "test-key"},
+				Credentials: toJSON(t, map[string]string{"key": "test-key"}),
 			},
 		},
 		{
 			name: "api-key query is deterministic",
 			config: &connector.AuthConfig{
 				Type:        "api-key",
-				Credentials: map[string]string{"key": "test-key", "location": "query"},
+				Credentials: toJSON(t, map[string]string{"key": "test-key", "location": "query"}),
 			},
 		},
 		{
 			name: "bearer is deterministic",
 			config: &connector.AuthConfig{
 				Type:        "bearer",
-				Credentials: map[string]string{"token": "test-token"},
+				Credentials: toJSON(t, map[string]string{"token": "test-token"}),
 			},
 		},
 		{
 			name: "basic is deterministic",
 			config: &connector.AuthConfig{
 				Type:        "basic",
-				Credentials: map[string]string{"username": "user", "password": "pass"},
+				Credentials: toJSON(t, map[string]string{"username": "user", "password": "pass"}),
 			},
 		},
 	}
@@ -426,7 +427,7 @@ func TestSecurity_CredentialsNotInErrorMessages(t *testing.T) {
 			name: "api-key missing key doesn't expose credentials",
 			config: &connector.AuthConfig{
 				Type:        "api-key",
-				Credentials: map[string]string{}, // Missing key
+				Credentials: toJSON(t, map[string]string{}), // Missing key
 			},
 			expectedErrKey: "api key is required",
 			credentialKey:  "key",
@@ -436,7 +437,7 @@ func TestSecurity_CredentialsNotInErrorMessages(t *testing.T) {
 			name: "bearer missing token doesn't expose credentials",
 			config: &connector.AuthConfig{
 				Type:        "bearer",
-				Credentials: map[string]string{}, // Missing token
+				Credentials: toJSON(t, map[string]string{}), // Missing token
 			},
 			expectedErrKey: "token is required",
 			credentialKey:  "token",
@@ -446,7 +447,7 @@ func TestSecurity_CredentialsNotInErrorMessages(t *testing.T) {
 			name: "basic missing password doesn't expose credentials",
 			config: &connector.AuthConfig{
 				Type:        "basic",
-				Credentials: map[string]string{"username": "user"}, // Missing password
+				Credentials: toJSON(t, map[string]string{"username": "user"}), // Missing password
 			},
 			expectedErrKey: "username and password are required",
 			credentialKey:  "password",
@@ -456,7 +457,7 @@ func TestSecurity_CredentialsNotInErrorMessages(t *testing.T) {
 			name: "oauth2 missing credentials doesn't expose values",
 			config: &connector.AuthConfig{
 				Type:        "oauth2",
-				Credentials: map[string]string{}, // Missing all OAuth2 creds
+				Credentials: toJSON(t, map[string]string{}), // Missing all OAuth2 creds
 			},
 			expectedErrKey: "tokenUrl, clientId, and clientSecret are required",
 			credentialKey:  "clientSecret",
@@ -495,7 +496,7 @@ func TestSecurity_ValidCredentialsNotInErrors(t *testing.T) {
 			name: "api-key with valid credentials, unknown type doesn't expose credentials",
 			config: &connector.AuthConfig{
 				Type:        "unknown-type",
-				Credentials: map[string]string{"key": "secret-api-key-valid"},
+				Credentials: toJSON(t, map[string]string{"key": "secret-api-key-valid"}),
 			},
 			credentialVal: "secret-api-key-valid",
 		},
@@ -503,7 +504,7 @@ func TestSecurity_ValidCredentialsNotInErrors(t *testing.T) {
 			name: "bearer with valid token, unknown type doesn't expose token",
 			config: &connector.AuthConfig{
 				Type:        "unknown-type",
-				Credentials: map[string]string{"token": "secret-bearer-token-valid"},
+				Credentials: toJSON(t, map[string]string{"token": "secret-bearer-token-valid"}),
 			},
 			credentialVal: "secret-bearer-token-valid",
 		},
@@ -511,7 +512,7 @@ func TestSecurity_ValidCredentialsNotInErrors(t *testing.T) {
 			name: "basic with valid credentials, unknown type doesn't expose password",
 			config: &connector.AuthConfig{
 				Type:        "unknown-type",
-				Credentials: map[string]string{"username": "user", "password": "secret-password-valid"},
+				Credentials: toJSON(t, map[string]string{"username": "user", "password": "secret-password-valid"}),
 			},
 			credentialVal: "secret-password-valid",
 		},
@@ -519,11 +520,11 @@ func TestSecurity_ValidCredentialsNotInErrors(t *testing.T) {
 			name: "oauth2 with valid credentials, unknown type doesn't expose clientSecret",
 			config: &connector.AuthConfig{
 				Type: "unknown-type",
-				Credentials: map[string]string{
+				Credentials: toJSON(t, map[string]string{
 					"tokenUrl":     "https://example.com/token",
 					"clientId":     "client-id",
 					"clientSecret": "secret-oauth2-client-secret-valid",
-				},
+				}),
 			},
 			credentialVal: "secret-oauth2-client-secret-valid",
 		},
@@ -547,4 +548,13 @@ func TestSecurity_ValidCredentialsNotInErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func toJSON(t *testing.T, v interface{}) json.RawMessage {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("toJSON: %v", err)
+	}
+	return b
 }

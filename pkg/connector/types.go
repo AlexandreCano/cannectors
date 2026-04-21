@@ -3,7 +3,10 @@
 // to interact with the Cannectors runtime.
 package connector
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Pipeline represents a complete connector pipeline configuration.
 // It contains all the modules (Input, Filters, Output) and metadata
@@ -33,10 +36,7 @@ type Pipeline struct {
 	// DryRunOptions configures dry-run mode behavior
 	DryRunOptions *DryRunOptions `json:"dryRunOptions,omitempty"`
 
-	// ErrorHandling configures retry and failure behavior (legacy; prefer Defaults)
-	ErrorHandling *ErrorHandling `json:"errorHandling,omitempty"`
-
-	// Defaults holds module-level defaults (onError, timeoutMs, retry). Precedence: module > defaults > errorHandling.
+	// Defaults holds module-level defaults (onError, timeoutMs, retry).
 	Defaults *ModuleDefaults `json:"defaults,omitempty"`
 
 	// Enabled indicates whether the pipeline is active
@@ -51,15 +51,17 @@ type Pipeline struct {
 
 // ModuleConfig represents the configuration for a pipeline module.
 // Modules can be Input, Filter, or Output types.
+//
+// Raw contains all module configuration fields (except "type") as JSON,
+// with defaults (onError, timeoutMs, retry) already resolved.
+// Modules parse this via moduleconfig.ParseModuleConfig[T] or json.Unmarshal.
 type ModuleConfig struct {
 	// Type identifies the module type (e.g., "http-polling", "mapping", "http-request")
 	Type string `json:"type"`
 
-	// Config contains the module-specific configuration
-	Config map[string]interface{} `json:"config"`
-
-	// Authentication references an authentication configuration
-	Authentication *AuthConfig `json:"authentication,omitempty"`
+	// Raw contains the full JSON of all module fields except "type", with defaults resolved.
+	// Populated by the converter. Modules parse this via moduleconfig.ParseConfig[T].
+	Raw json.RawMessage `json:"config"`
 }
 
 // AuthConfig defines authentication configuration for a module.
@@ -67,27 +69,16 @@ type AuthConfig struct {
 	// Type is the authentication type (e.g., "basic", "bearer", "oauth2", "api-key")
 	Type string `json:"type"`
 
-	// Credentials contains the authentication credentials
-	Credentials map[string]string `json:"credentials"`
+	// Credentials contains the raw authentication credentials as JSON.
+	// Each auth type unmarshals this into its own typed struct (e.g., CredentialsAPIKey).
+	Credentials json.RawMessage `json:"credentials"`
 }
 
 // ModuleDefaults holds default settings for all modules. Overridable per module.
 type ModuleDefaults struct {
-	OnError   string                 `json:"onError,omitempty"`
-	TimeoutMs int                    `json:"timeoutMs,omitempty"`
-	Retry     map[string]interface{} `json:"retry,omitempty"`
-}
-
-// ErrorHandling defines how errors should be handled during execution.
-type ErrorHandling struct {
-	// OnError specifies the action on error: "fail", "skip", "log"
-	OnError string `json:"onError"`
-
-	// TimeoutMs is the default timeout in milliseconds
-	TimeoutMs int `json:"timeoutMs"`
-
-	// Retry holds full retry config (module > defaults > errorHandling). Parsed from "retry" in config.
-	Retry map[string]interface{} `json:"retry,omitempty"`
+	OnError   string       `json:"onError,omitempty"`
+	TimeoutMs int          `json:"timeoutMs,omitempty"`
+	Retry     *RetryConfig `json:"retry,omitempty"`
 }
 
 // DryRunOptions configures dry-run mode behavior.
@@ -184,4 +175,54 @@ type ExecutionError struct {
 
 	// Details contains additional error context
 	Details map[string]interface{} `json:"details,omitempty"`
+}
+
+// ModuleBase contains properties common to all modules.
+// Mirrors common-schema.json#/$defs/moduleBase with resolved defaults.
+type ModuleBase struct {
+	ID          string   `json:"id,omitempty"`
+	Name        string   `json:"name,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Enabled     *bool    `json:"enabled,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+	OnError     string   `json:"onError,omitempty"`
+}
+
+// RetryConfig holds typed retry configuration.
+// Mirrors common-schema.json#/$defs/retryConfig.
+type RetryConfig struct {
+	MaxAttempts          int     `json:"maxAttempts,omitempty"`
+	DelayMs              int     `json:"delayMs,omitempty"`
+	BackoffMultiplier    float64 `json:"backoffMultiplier,omitempty"`
+	MaxDelayMs           int     `json:"maxDelayMs,omitempty"`
+	RetryableStatusCodes []int   `json:"retryableStatusCodes,omitempty"`
+	UseRetryAfterHeader  bool    `json:"useRetryAfterHeader,omitempty"`
+	RetryHintFromBody    string  `json:"retryHintFromBody,omitempty"`
+}
+
+// CredentialsAPIKey holds credentials for api-key authentication.
+type CredentialsAPIKey struct {
+	Key        string `json:"key"`
+	Location   string `json:"location,omitempty"`
+	HeaderName string `json:"headerName,omitempty"`
+	ParamName  string `json:"paramName,omitempty"`
+}
+
+// CredentialsBearer holds credentials for bearer token authentication.
+type CredentialsBearer struct {
+	Token string `json:"token"`
+}
+
+// CredentialsBasic holds credentials for basic HTTP authentication.
+type CredentialsBasic struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// CredentialsOAuth2 holds credentials for OAuth2 client credentials.
+type CredentialsOAuth2 struct {
+	TokenURL     string   `json:"tokenUrl"`
+	ClientID     string   `json:"clientId"`
+	ClientSecret string   `json:"clientSecret"`
+	Scopes       []string `json:"scopes,omitempty"`
 }

@@ -4,11 +4,10 @@ package errhandling
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"math"
 	"strings"
 	"time"
+
+	"github.com/cannectors/runtime/pkg/connector"
 )
 
 // Default retry configuration values
@@ -18,8 +17,6 @@ const (
 	DefaultBackoffMultiplier = 2.0
 	DefaultMaxDelayMs        = 30000
 	DefaultTimeoutMs         = 30000
-	MaxRetryAttempts         = 10
-	MinBackoffMultiplier     = 1.0
 )
 
 // OnErrorStrategy defines what action to take when an error occurs.
@@ -37,67 +34,9 @@ const (
 	OnErrorLog OnErrorStrategy = "log"
 )
 
-// RetryConfig holds retry configuration for pipeline execution.
-// This configuration determines how transient errors are handled with automatic retries.
-type RetryConfig struct {
-	// MaxAttempts is the maximum number of retry attempts (0 = no retry).
-	// Default: 3, Max: 10
-	MaxAttempts int
-
-	// DelayMs is the initial delay between retries in milliseconds.
-	// Default: 1000
-	DelayMs int
-
-	// BackoffMultiplier is the multiplier for exponential backoff.
-	// Default: 2.0, Min: 1.0, Max: 10.0
-	BackoffMultiplier float64
-
-	// MaxDelayMs is the maximum delay between retries in milliseconds.
-	// Default: 30000
-	MaxDelayMs int
-
-	// RetryableStatusCodes are HTTP status codes that trigger retry.
-	// Default: [429, 500, 502, 503, 504]
-	RetryableStatusCodes []int
-
-	// UseRetryAfterHeader enables using the Retry-After response header to determine
-	// the delay before retrying. When enabled and the server returns a valid Retry-After
-	// header (seconds or HTTP-date format), that value is used instead of the backoff.
-	// The delay is still capped by MaxDelayMs.
-	// Default: false
-	//
-	// Example usage:
-	//   config := RetryConfig{
-	//     UseRetryAfterHeader: true,
-	//     MaxDelayMs: 60000, // Cap at 60 seconds even if server says more
-	//   }
-	//   // Server returns: Retry-After: 120 → waits 60s (capped)
-	//   // Server returns: Retry-After: 30 → waits 30s
-	UseRetryAfterHeader bool
-
-	// RetryHintFromBody is an expr expression (e.g., "body.retryable == true",
-	// "body.error.code == \"TEMPORARY\"") to evaluate against the JSON response body.
-	// The parsed JSON body is available as the "body" variable.
-	// If the expression returns true, the error is retryable; if false, not retryable.
-	// If the body is not valid JSON, falls back to status code only.
-	// Default: "" (disabled)
-	//
-	// Example expressions:
-	//   "body.retryable == true"                    // Check boolean field
-	//   "body.error.code == \"TEMPORARY\""          // Check string field
-	//   "body.error.code != \"PERMANENT\""          // Negation
-	//   "body.error.code == \"RATE_LIMIT\" || body.error.code == \"TEMPORARY\""  // Complex condition
-	//
-	// Example usage:
-	//   config := RetryConfig{
-	//     RetryableStatusCodes: []int{500, 503},
-	//     RetryHintFromBody: "body.error.code != \"PERMANENT\"",
-	//   }
-	//   // 500 with {"error": {"code": "TEMPORARY"}} → retried (expression true)
-	//   // 500 with {"error": {"code": "PERMANENT"}} → NOT retried (expression false)
-	//   // 500 with non-JSON body → retried (fallback to status code)
-	RetryHintFromBody string
-}
+// RetryConfig is an alias for connector.RetryConfig.
+// Methods (Validate, CalculateDelay, IsStatusCodeRetryable) are defined on connector.RetryConfig.
+type RetryConfig = connector.RetryConfig
 
 // ErrorHandlingConfig holds error handling configuration for a module.
 type ErrorHandlingConfig struct {
@@ -113,13 +52,7 @@ type ErrorHandlingConfig struct {
 
 // DefaultRetryConfig returns the default retry configuration.
 func DefaultRetryConfig() RetryConfig {
-	return RetryConfig{
-		MaxAttempts:          DefaultMaxAttempts,
-		DelayMs:              DefaultDelayMs,
-		BackoffMultiplier:    DefaultBackoffMultiplier,
-		MaxDelayMs:           DefaultMaxDelayMs,
-		RetryableStatusCodes: []int{429, 500, 502, 503, 504},
-	}
+	return connector.DefaultRetryConfig()
 }
 
 // DefaultErrorHandlingConfig returns the default error handling configuration.
@@ -131,143 +64,18 @@ func DefaultErrorHandlingConfig() ErrorHandlingConfig {
 	}
 }
 
-// Validate validates the retry configuration.
-// Returns an error if any value is out of valid range.
-func (c RetryConfig) Validate() error {
-	if c.MaxAttempts < 0 {
-		return errors.New("maxAttempts must be >= 0")
-	}
-	if c.MaxAttempts > MaxRetryAttempts {
-		return fmt.Errorf("maxAttempts must be <= %d", MaxRetryAttempts)
-	}
-	if c.DelayMs < 0 {
-		return errors.New("delayMs must be >= 0")
-	}
-	if c.BackoffMultiplier < MinBackoffMultiplier {
-		return fmt.Errorf("backoffMultiplier must be >= %v", MinBackoffMultiplier)
-	}
-	if c.MaxDelayMs < 0 {
-		return errors.New("maxDelayMs must be >= 0")
-	}
-	return nil
-}
-
-// CalculateDelay calculates the retry delay for a given attempt using exponential backoff.
-// The formula is: min(delayMs * (backoffMultiplier ^ attempt), maxDelayMs)
-func (c RetryConfig) CalculateDelay(attempt int) time.Duration {
-	if attempt < 0 {
-		attempt = 0
-	}
-
-	// Calculate delay with exponential backoff
-	delayMs := float64(c.DelayMs) * math.Pow(c.BackoffMultiplier, float64(attempt))
-
-	// Cap at max delay
-	if delayMs > float64(c.MaxDelayMs) {
-		delayMs = float64(c.MaxDelayMs)
-	}
-
-	return time.Duration(delayMs) * time.Millisecond
-}
-
-// ShouldRetry determines if a retry should be attempted based on the attempt number and error.
-// Returns false if:
-//   - Error is nil
-//   - MaxAttempts is 0 (retries disabled)
-//   - Current attempt >= MaxAttempts
-//   - Error is not retryable (fatal errors like authentication, validation)
-func (c RetryConfig) ShouldRetry(attempt int, err error) bool {
-	// No error, no retry needed
+// ShouldRetry determines if a retry should be attempted based on the config, attempt number and error.
+func ShouldRetry(c RetryConfig, attempt int, err error) bool {
 	if err == nil {
 		return false
 	}
-
-	// Retries disabled
 	if c.MaxAttempts == 0 {
 		return false
 	}
-
-	// Max attempts reached
 	if attempt >= c.MaxAttempts {
 		return false
 	}
-
-	// Check if error is retryable
 	return IsRetryable(err)
-}
-
-// IsStatusCodeRetryable checks if the given status code is in the retryable list.
-func (c RetryConfig) IsStatusCodeRetryable(statusCode int) bool {
-	for _, code := range c.RetryableStatusCodes {
-		if statusCode == code {
-			return true
-		}
-	}
-	return false
-}
-
-// ParseRetryConfig parses retry configuration from a map.
-// Missing values are filled with defaults.
-func ParseRetryConfig(m map[string]interface{}) RetryConfig {
-	config := DefaultRetryConfig()
-
-	if m == nil {
-		return config
-	}
-
-	if maxAttempts, ok := getInt(m, "maxAttempts"); ok {
-		config.MaxAttempts = maxAttempts
-	}
-
-	if delayMs, ok := getInt(m, "delayMs"); ok {
-		config.DelayMs = delayMs
-	}
-
-	if backoffMultiplier, ok := getFloat(m, "backoffMultiplier"); ok {
-		config.BackoffMultiplier = backoffMultiplier
-	}
-
-	if maxDelayMs, ok := getInt(m, "maxDelayMs"); ok {
-		config.MaxDelayMs = maxDelayMs
-	}
-
-	if codes, ok := getIntSlice(m, "retryableStatusCodes"); ok {
-		config.RetryableStatusCodes = codes
-	}
-
-	if useRetryAfter, ok := m["useRetryAfterHeader"].(bool); ok {
-		config.UseRetryAfterHeader = useRetryAfter
-	}
-
-	if retryHintPath, ok := m["retryHintFromBody"].(string); ok {
-		config.RetryHintFromBody = retryHintPath
-	}
-
-	return config
-}
-
-// ParseErrorHandlingConfig parses error handling configuration from a map.
-// Missing values are filled with defaults.
-func ParseErrorHandlingConfig(m map[string]interface{}) ErrorHandlingConfig {
-	config := DefaultErrorHandlingConfig()
-
-	if m == nil {
-		return config
-	}
-
-	if onError, ok := m["onError"].(string); ok {
-		config.OnError = onError
-	}
-
-	if timeoutMs, ok := getInt(m, "timeoutMs"); ok {
-		config.TimeoutMs = timeoutMs
-	}
-
-	if retryMap, ok := m["retry"].(map[string]interface{}); ok {
-		config.Retry = ParseRetryConfig(retryMap)
-	}
-
-	return config
 }
 
 // ResolveRetryConfig resolves the effective retry configuration with granular merge.
@@ -370,63 +178,6 @@ func ParseOnErrorStrategy(s string) OnErrorStrategy {
 	default:
 		return OnErrorFail
 	}
-}
-
-// getInt extracts an int value from a map, handling float64 (JSON) and int types.
-func getInt(m map[string]interface{}, key string) (int, bool) {
-	if v, ok := m[key]; ok {
-		switch val := v.(type) {
-		case float64:
-			return int(val), true
-		case int:
-			return val, true
-		case int64:
-			return int(val), true
-		}
-	}
-	return 0, false
-}
-
-// getFloat extracts a float64 value from a map.
-func getFloat(m map[string]interface{}, key string) (float64, bool) {
-	if v, ok := m[key]; ok {
-		switch val := v.(type) {
-		case float64:
-			return val, true
-		case int:
-			return float64(val), true
-		case int64:
-			return float64(val), true
-		}
-	}
-	return 0, false
-}
-
-// getIntSlice extracts a slice of ints from a map.
-func getIntSlice(m map[string]interface{}, key string) ([]int, bool) {
-	v, ok := m[key]
-	if !ok {
-		return nil, false
-	}
-
-	slice, ok := v.([]interface{})
-	if !ok {
-		return nil, false
-	}
-
-	result := make([]int, 0, len(slice))
-	for _, item := range slice {
-		switch val := item.(type) {
-		case float64:
-			result = append(result, int(val))
-		case int:
-			result = append(result, val)
-		case int64:
-			result = append(result, int(val))
-		}
-	}
-
-	return result, len(result) > 0
 }
 
 // ============================

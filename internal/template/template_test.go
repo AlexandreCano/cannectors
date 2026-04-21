@@ -2,6 +2,8 @@ package template
 
 import (
 	"testing"
+
+	"github.com/cannectors/runtime/internal/moduleconfig"
 )
 
 func TestEvaluator_BasicTemplates(t *testing.T) {
@@ -132,7 +134,7 @@ func TestGetNestedValue(t *testing.T) {
 				"processed": true,
 			},
 		}
-		val, found := GetNestedValue(record, "_metadata.processed")
+		val, found := moduleconfig.GetNestedValue(record, "_metadata.processed")
 		if !found {
 			t.Error("expected to find _metadata.processed")
 		}

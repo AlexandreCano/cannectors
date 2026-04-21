@@ -1,11 +1,4 @@
-// Package filter provides implementations for filter modules.
-// This file contains path utilities for navigating and manipulating nested structures.
-//
-// Path notation supports:
-// - Dot notation for nested objects: "user.profile.name"
-// - Array indexing: "items[0].name", "data[2]"
-// - Combined: "users[0].addresses[1].city"
-package filter
+package moduleconfig
 
 import (
 	"errors"
@@ -21,8 +14,6 @@ var (
 )
 
 // IsNestedPath checks if a path contains dot notation or array indexing.
-// Returns true for paths like "user.name", "items[0]", "data.items[0].name".
-// Returns false for simple field names like "id", "name".
 func IsNestedPath(path string) bool {
 	for _, c := range path {
 		if c == '.' || c == '[' {
@@ -34,7 +25,6 @@ func IsNestedPath(path string) bool {
 
 // GetNestedValue extracts a value from a nested object using dot notation.
 // Supports paths like "user.profile.name" and array indexing like "items[0].name".
-// Returns the value and a boolean indicating whether the path was found.
 func GetNestedValue(obj map[string]interface{}, path string) (interface{}, bool) {
 	value, _, ok := navigate(obj, path, false)
 	return value, ok
@@ -42,7 +32,6 @@ func GetNestedValue(obj map[string]interface{}, path string) (interface{}, bool)
 
 // SetNestedValue sets a value in a nested object using dot notation.
 // Creates intermediate objects as needed.
-// Supports paths like "user.profile.name" and array indexing like "items[0].name".
 func SetNestedValue(obj map[string]interface{}, path string, value interface{}) error {
 	if path == "" {
 		return ErrEmptyPath
@@ -67,7 +56,6 @@ func SetNestedValue(obj map[string]interface{}, path string, value interface{}) 
 			continue
 		}
 
-		// Handle array indexing
 		if isLast {
 			return setArrayElement(current, part, index, value)
 		}
@@ -78,8 +66,6 @@ func SetNestedValue(obj map[string]interface{}, path string, value interface{}) 
 }
 
 // DeleteNestedValue removes a value from a nested object using dot notation.
-// If any intermediate key does not exist, the function returns without error.
-// Supports paths like "user.profile.name" and array indexing like "items[0]".
 func DeleteNestedValue(obj map[string]interface{}, path string) {
 	parent, lastPart, ok := navigate(obj, path, true)
 	if !ok {
@@ -88,9 +74,27 @@ func DeleteNestedValue(obj map[string]interface{}, path string) {
 	deleteLeafFromParent(parent, lastPart)
 }
 
+// ParsePathPart parses a path segment and extracts the key and optional array index.
+func ParsePathPart(part string) (key string, index int, hasIndex bool, err error) {
+	idx := strings.Index(part, "[")
+	if idx == -1 {
+		return part, -1, false, nil
+	}
+	endIdx := strings.Index(part, "]")
+	if endIdx == -1 || endIdx < idx+1 {
+		return "", -1, false, fmt.Errorf("%w: %q", ErrInvalidArrayIndex, part)
+	}
+	if endIdx != len(part)-1 {
+		return "", -1, false, fmt.Errorf("%w: %q", ErrInvalidArrayIndex, part)
+	}
+	arrayIndex, parseErr := strconv.Atoi(part[idx+1 : endIdx])
+	if parseErr != nil || arrayIndex < 0 {
+		return "", -1, false, fmt.Errorf("%w: %q", ErrInvalidArrayIndex, part)
+	}
+	return part[:idx], arrayIndex, true, nil
+}
+
 // navigate walks a path through nested maps and arrays.
-// If stopBeforeLast is true, returns (parent, lastPart, ok) for Delete operations.
-// If stopBeforeLast is false, returns (value, "", ok) for Get operations.
 func navigate(obj map[string]interface{}, path string, stopBeforeLast bool) (current interface{}, lastPart string, ok bool) {
 	if path == "" {
 		return nil, "", false
@@ -119,7 +123,6 @@ func navigate(obj map[string]interface{}, path string, stopBeforeLast bool) (cur
 	return current, lastPart, true
 }
 
-// navigateStep advances one step through a path segment (e.g. "key" or "items[0]").
 func navigateStep(current interface{}, part string) (next interface{}, ok bool) {
 	key, arrayIdx, hasIndex, err := ParsePathPart(part)
 	if err != nil {
@@ -152,7 +155,6 @@ func getFromArray(current interface{}, index int) (interface{}, bool) {
 	return arr[index], true
 }
 
-// deleteLeafFromParent removes the target from parent based on the last path segment.
 func deleteLeafFromParent(parent interface{}, lastPart string) {
 	key, arrayIdx, hasIndex, err := ParsePathPart(lastPart)
 	if err != nil {
@@ -186,31 +188,6 @@ func deleteFromArray(parent []interface{}, key string, arrayIdx int, hasIndex bo
 	}
 }
 
-// ParsePathPart parses a path segment and extracts the key and optional array index.
-// For "items[0]" returns ("items", 0, true, nil)
-// For "name" returns ("name", -1, false, nil)
-func ParsePathPart(part string) (key string, index int, hasIndex bool, err error) {
-	idx := strings.Index(part, "[")
-	if idx == -1 {
-		return part, -1, false, nil
-	}
-	endIdx := strings.Index(part, "]")
-	if endIdx == -1 || endIdx < idx+1 {
-		return "", -1, false, fmt.Errorf("%w: %q", ErrInvalidArrayIndex, part)
-	}
-	if endIdx != len(part)-1 {
-		return "", -1, false, fmt.Errorf("%w: %q", ErrInvalidArrayIndex, part)
-	}
-	arrayIndex, parseErr := strconv.Atoi(part[idx+1 : endIdx])
-	if parseErr != nil || arrayIndex < 0 {
-		return "", -1, false, fmt.Errorf("%w: %q", ErrInvalidArrayIndex, part)
-	}
-	return part[:idx], arrayIndex, true, nil
-}
-
-// Helper functions for SetNestedValue
-
-// ensureMapAtPath ensures a map exists at the given path in the current object.
 func ensureMapAtPath(current map[string]interface{}, key string) map[string]interface{} {
 	next, ok := current[key].(map[string]interface{})
 	if !ok {
@@ -220,7 +197,6 @@ func ensureMapAtPath(current map[string]interface{}, key string) map[string]inte
 	return next
 }
 
-// setArrayElement sets a value at a specific index in an array.
 func setArrayElement(current map[string]interface{}, key string, index int, value interface{}) error {
 	arr := ensureArrayAtPath(current, key)
 	if len(arr) <= index {
@@ -231,7 +207,6 @@ func setArrayElement(current map[string]interface{}, key string, index int, valu
 	return nil
 }
 
-// ensureArrayAtPath ensures an array exists at the given path in the current object.
 func ensureArrayAtPath(current map[string]interface{}, key string) []interface{} {
 	arr, ok := current[key].([]interface{})
 	if !ok {
@@ -241,7 +216,6 @@ func ensureArrayAtPath(current map[string]interface{}, key string) []interface{}
 	return arr
 }
 
-// ensureMapInArray ensures a map exists at a specific index in an array.
 func ensureMapInArray(current map[string]interface{}, key string, index int) map[string]interface{} {
 	arr := ensureArrayAtPath(current, key)
 	if len(arr) <= index {

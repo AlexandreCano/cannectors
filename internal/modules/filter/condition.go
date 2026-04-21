@@ -13,6 +13,7 @@ import (
 	"github.com/expr-lang/expr/vm"
 
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/pkg/connector"
 )
 
 // Error codes for condition module
@@ -82,6 +83,7 @@ const (
 
 // ConditionConfig represents the configuration for a condition filter module.
 type ConditionConfig struct {
+	connector.ModuleBase
 	// Expression is the condition expression string (required)
 	Expression string `json:"expression"`
 	// Lang is the expression language: "simple" (default), "cel", "jsonata", "jmespath"
@@ -90,8 +92,6 @@ type ConditionConfig struct {
 	OnTrue string `json:"onTrue,omitempty"`
 	// OnFalse specifies behavior when condition is false: "continue" or "skip" (default)
 	OnFalse string `json:"onFalse,omitempty"`
-	// OnError specifies error handling mode: "fail" (default), "skip", "log"
-	OnError string `json:"onError,omitempty"`
 	// Then contains nested filter module configurations to execute when condition is true (optional)
 	Then []*NestedModuleConfig `json:"then,omitempty"`
 	// Else contains nested filter module configurations to execute when condition is false (optional)
@@ -365,11 +365,11 @@ func createNestedModuleWithDepth(config *NestedModuleConfig, depth int) (Module,
 		}
 		// Create the condition module using the internal function with depth tracking
 		return newConditionFromConfigWithDepth(ConditionConfig{
+			ModuleBase: connector.ModuleBase{OnError: config.OnError},
 			Expression: config.Expression,
 			Lang:       config.Lang,
 			OnTrue:     config.OnTrue,
 			OnFalse:    config.OnFalse,
-			OnError:    config.OnError,
 			Then:       config.Then,
 			Else:       config.Else,
 		}, depth+1)

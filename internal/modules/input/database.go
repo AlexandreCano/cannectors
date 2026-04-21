@@ -13,6 +13,7 @@ import (
 
 	"github.com/cannectors/runtime/internal/database"
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/pathutil"
 	"github.com/cannectors/runtime/internal/persistence"
 	"github.com/cannectors/runtime/pkg/connector"
@@ -39,44 +40,17 @@ var (
 
 // DatabaseInputConfig holds configuration for the database input module.
 type DatabaseInputConfig struct {
-	// Connection configuration
-	ConnectionString    string `json:"connectionString"`
-	ConnectionStringRef string `json:"connectionStringRef"`
-	Driver              string `json:"driver"`
+	connector.ModuleBase
+	moduleconfig.SQLRequestBase
 
-	// Query configuration - use query OR queryFile
-	Query      string                 `json:"query"`     // Inline SQL query
-	QueryFile  string                 `json:"queryFile"` // Path to SQL file
+	// Query parameters
 	Parameters map[string]interface{} `json:"parameters"`
 
 	// Pagination configuration
-	Pagination *DatabasePaginationConfig `json:"pagination"`
+	Pagination *moduleconfig.DatabasePaginationConfig `json:"pagination"`
 
 	// Incremental query configuration
 	Incremental *IncrementalConfig `json:"incremental"`
-
-	// Pool configuration
-	MaxOpenConns    int `json:"maxOpenConns"`
-	MaxIdleConns    int `json:"maxIdleConns"`
-	ConnMaxLifetime int `json:"connMaxLifetimeSeconds"`
-	ConnMaxIdleTime int `json:"connMaxIdleTimeSeconds"`
-
-	// Timeout
-	TimeoutMs int `json:"timeoutMs"`
-}
-
-// DatabasePaginationConfig defines pagination behavior for database queries.
-type DatabasePaginationConfig struct {
-	// Type: "limit-offset" or "cursor"
-	Type string `json:"type"`
-	// Limit: number of records per page
-	Limit int `json:"limit"`
-	// OffsetParam: for limit-offset pagination
-	OffsetParam string `json:"offsetParam"`
-	// CursorField: field to use for cursor-based pagination
-	CursorField string `json:"cursorField"`
-	// CursorParam: parameter name for cursor value
-	CursorParam string `json:"cursorParam"`
 }
 
 // IncrementalConfig defines incremental query configuration.
@@ -111,7 +85,10 @@ func NewDatabaseInputFromConfig(cfg *connector.ModuleConfig) (*DatabaseInput, er
 		return nil, ErrDatabaseNilConfig
 	}
 
-	config := parseDatabaseInputConfig(cfg.Config)
+	config, err := moduleconfig.ParseModuleConfig[DatabaseInputConfig](*cfg)
+	if err != nil {
+		return nil, err
+	}
 
 	// Load query from file if queryFile is specified
 	if config.QueryFile != "" && config.Query == "" {
@@ -143,8 +120,8 @@ func NewDatabaseInputFromConfig(cfg *connector.ModuleConfig) (*DatabaseInput, er
 		Driver:              config.Driver,
 		MaxOpenConns:        config.MaxOpenConns,
 		MaxIdleConns:        config.MaxIdleConns,
-		ConnMaxLifetime:     time.Duration(config.ConnMaxLifetime) * time.Second,
-		ConnMaxIdleTime:     time.Duration(config.ConnMaxIdleTime) * time.Second,
+		ConnMaxLifetime:     time.Duration(config.ConnMaxLifetimeSeconds) * time.Second,
+		ConnMaxIdleTime:     time.Duration(config.ConnMaxIdleTimeSeconds) * time.Second,
 		ConnectTimeout:      timeout,
 	}
 
@@ -174,111 +151,6 @@ func NewDatabaseInputFromConfig(cfg *connector.ModuleConfig) (*DatabaseInput, er
 	)
 
 	return module, nil
-}
-
-// parseDatabaseInputConfig parses the raw configuration map into DatabaseInputConfig.
-func parseDatabaseInputConfig(cfg map[string]interface{}) DatabaseInputConfig {
-	config := DatabaseInputConfig{}
-
-	// Connection settings
-	if v, ok := cfg["connectionString"].(string); ok {
-		config.ConnectionString = v
-	}
-	if v, ok := cfg["connectionStringRef"].(string); ok {
-		config.ConnectionStringRef = v
-	}
-	if v, ok := cfg["driver"].(string); ok {
-		config.Driver = v
-	}
-
-	// Query settings
-	if v, ok := cfg["query"].(string); ok {
-		config.Query = v
-	}
-	if v, ok := cfg["queryFile"].(string); ok {
-		config.QueryFile = v
-	}
-	if v, ok := cfg["parameters"].(map[string]interface{}); ok {
-		config.Parameters = v
-	}
-
-	// Pool settings
-	if v, ok := cfg["maxOpenConns"].(float64); ok {
-		config.MaxOpenConns = int(v)
-	}
-	if v, ok := cfg["maxIdleConns"].(float64); ok {
-		config.MaxIdleConns = int(v)
-	}
-	if v, ok := cfg["connMaxLifetimeSeconds"].(float64); ok {
-		config.ConnMaxLifetime = int(v)
-	}
-	if v, ok := cfg["connMaxIdleTimeSeconds"].(float64); ok {
-		config.ConnMaxIdleTime = int(v)
-	}
-	if v, ok := cfg["timeoutMs"].(float64); ok {
-		config.TimeoutMs = int(v)
-	}
-
-	// Parse pagination
-	if paginationRaw, ok := cfg["pagination"].(map[string]interface{}); ok {
-		config.Pagination = parseDatabasePaginationConfig(paginationRaw)
-	}
-
-	// Parse incremental
-	if incrementalRaw, ok := cfg["incremental"].(map[string]interface{}); ok {
-		config.Incremental = parseIncrementalConfig(incrementalRaw)
-	}
-
-	return config
-}
-
-// parseDatabasePaginationConfig parses pagination configuration.
-func parseDatabasePaginationConfig(cfg map[string]interface{}) *DatabasePaginationConfig {
-	config := &DatabasePaginationConfig{
-		Type:  "limit-offset",
-		Limit: defaultQueryLimit,
-	}
-
-	if v, ok := cfg["type"].(string); ok {
-		config.Type = v
-	}
-	if v, ok := cfg["limit"].(float64); ok && v > 0 {
-		config.Limit = int(v)
-	}
-	if v, ok := cfg["offsetParam"].(string); ok {
-		config.OffsetParam = v
-	}
-	if v, ok := cfg["cursorField"].(string); ok {
-		config.CursorField = v
-	}
-	if v, ok := cfg["cursorParam"].(string); ok {
-		config.CursorParam = v
-	}
-
-	return config
-}
-
-// parseIncrementalConfig parses incremental query configuration.
-func parseIncrementalConfig(cfg map[string]interface{}) *IncrementalConfig {
-	config := &IncrementalConfig{}
-
-	if v, ok := cfg["enabled"].(bool); ok {
-		config.Enabled = v
-	}
-	if v, ok := cfg["timestampField"].(string); ok {
-		config.TimestampField = v
-	}
-	if v, ok := cfg["timestampParam"].(string); ok {
-		config.TimestampParam = v
-	}
-	if v, ok := cfg["idField"].(string); ok {
-		config.IDField = v
-	}
-	if v, ok := cfg["idParam"].(string); ok {
-		config.IDParam = v
-	}
-
-	return config
 }
 
 // Fetch retrieves data from the database.

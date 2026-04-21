@@ -58,6 +58,15 @@
 				},
 				"retry": {
 					"$ref": "#/$defs/retryConfig"
+				},
+				"onError": {
+					"type": "string",
+					"enum": [
+						"fail",
+						"skip",
+						"log"
+					],
+					"description": "Default error handling strategy for all modules."
 				}
 			},
 			"additionalProperties": false

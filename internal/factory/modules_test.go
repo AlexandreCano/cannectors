@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"testing"
@@ -9,6 +10,14 @@ import (
 	"github.com/cannectors/runtime/internal/registry"
 	"github.com/cannectors/runtime/pkg/connector"
 )
+
+func mustJSON(v interface{}) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
 
 func TestCreateInputModule_Nil(t *testing.T) {
 	got, err := CreateInputModule(nil)
@@ -22,8 +31,8 @@ func TestCreateInputModule_Nil(t *testing.T) {
 
 func TestCreateInputModule_Registered(t *testing.T) {
 	cfg := &connector.ModuleConfig{
-		Type:   "httpPolling",
-		Config: map[string]interface{}{"endpoint": "https://example.com/api"},
+		Type: "httpPolling",
+		Raw:  mustJSON(map[string]interface{}{"endpoint": "https://example.com/api"}),
 	}
 
 	got, err := CreateInputModule(cfg)
@@ -37,8 +46,8 @@ func TestCreateInputModule_Registered(t *testing.T) {
 
 func TestCreateInputModule_Unknown(t *testing.T) {
 	cfg := &connector.ModuleConfig{
-		Type:   "unknownType",
-		Config: map[string]interface{}{"endpoint": "https://test.com"},
+		Type: "unknownType",
+		Raw:  mustJSON(map[string]interface{}{"endpoint": "https://test.com"}),
 	}
 
 	got, err := CreateInputModule(cfg)
@@ -64,11 +73,11 @@ func TestCreateFilterModules_Mapping(t *testing.T) {
 	cfgs := []connector.ModuleConfig{
 		{
 			Type: "mapping",
-			Config: map[string]interface{}{
+			Raw: mustJSON(map[string]interface{}{
 				"mappings": []interface{}{
 					map[string]interface{}{"source": "a", "target": "b"},
 				},
-			},
+			}),
 		},
 	}
 
@@ -83,7 +92,7 @@ func TestCreateFilterModules_Mapping(t *testing.T) {
 
 func TestCreateFilterModules_Unknown(t *testing.T) {
 	cfgs := []connector.ModuleConfig{
-		{Type: "unknownFilter", Config: map[string]interface{}{}},
+		{Type: "unknownFilter", Raw: mustJSON(map[string]interface{}{})},
 	}
 
 	got, err := CreateFilterModules(cfgs)
@@ -108,10 +117,10 @@ func TestCreateOutputModule_Nil(t *testing.T) {
 func TestCreateOutputModule_Registered(t *testing.T) {
 	cfg := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": "https://example.com/api",
 			"method":   "POST",
-		},
+		}),
 	}
 
 	got, err := CreateOutputModule(cfg)
@@ -126,10 +135,10 @@ func TestCreateOutputModule_Registered(t *testing.T) {
 func TestCreateOutputModule_Unknown(t *testing.T) {
 	cfg := &connector.ModuleConfig{
 		Type: "unknownOutput",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": "https://test.com",
 			"method":   "PUT",
-		},
+		}),
 	}
 
 	got, err := CreateOutputModule(cfg)
@@ -163,8 +172,8 @@ func TestCreateInputModule_CustomRegistered(t *testing.T) {
 	}()
 
 	cfg := &connector.ModuleConfig{
-		Type:   "customInput",
-		Config: map[string]interface{}{},
+		Type: "customInput",
+		Raw:  mustJSON(map[string]interface{}{}),
 	}
 
 	got, err := CreateInputModule(cfg)
@@ -192,10 +201,10 @@ func TestCreateInputModule_ErrorReturnsError(t *testing.T) {
 	// We'll use httpPolling with invalid config to trigger the error path
 	cfg := &connector.ModuleConfig{
 		Type: "httpPolling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			// Missing required endpoint or invalid config that causes NewHTTPPollingFromConfig to error
 			"invalid": "config",
-		},
+		}),
 	}
 
 	got, err := CreateInputModule(cfg)
@@ -234,8 +243,8 @@ func TestCreateInputModule_ConstructorError(t *testing.T) {
 	}()
 
 	cfg := &connector.ModuleConfig{
-		Type:   "errorInput",
-		Config: map[string]interface{}{},
+		Type: "errorInput",
+		Raw:  mustJSON(map[string]interface{}{}),
 	}
 
 	got, err := CreateInputModule(cfg)
@@ -247,67 +256,5 @@ func TestCreateInputModule_ConstructorError(t *testing.T) {
 	}
 	if got != nil {
 		t.Error("expected nil module when constructor returns error")
-	}
-}
-
-func TestParseConditionConfig_Valid(t *testing.T) {
-	cfg := map[string]interface{}{
-		"expression": "status == 'active'",
-		"lang":       "simple",
-		"onTrue":     "continue",
-		"onFalse":    "skip",
-	}
-
-	got, err := ParseConditionConfig(cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got.Expression != "status == 'active'" {
-		t.Errorf("expected expression 'status == \"active\"', got %s", got.Expression)
-	}
-	if got.Lang != "simple" {
-		t.Errorf("expected lang 'simple', got %s", got.Lang)
-	}
-	if got.OnTrue != "continue" {
-		t.Errorf("expected onTrue 'continue', got %s", got.OnTrue)
-	}
-	if got.OnFalse != "skip" {
-		t.Errorf("expected onFalse 'skip', got %s", got.OnFalse)
-	}
-}
-
-func TestParseConditionConfig_MissingExpression(t *testing.T) {
-	cfg := map[string]interface{}{
-		"lang": "simple",
-	}
-
-	_, err := ParseConditionConfig(cfg)
-	if err == nil {
-		t.Fatal("expected error for missing expression")
-	}
-}
-
-func TestParseConditionConfig_NestedThen(t *testing.T) {
-	cfg := map[string]interface{}{
-		"expression": "status == 'active'",
-		"then": map[string]interface{}{
-			"type": "mapping",
-			"mappings": []interface{}{
-				map[string]interface{}{"source": "a", "target": "b"},
-			},
-		},
-	}
-
-	got, err := ParseConditionConfig(cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got.Then == nil || len(got.Then) == 0 {
-		t.Fatal("expected 'then' to be parsed")
-	}
-	if got.Then[0].Type != "mapping" {
-		t.Errorf("expected then type 'mapping', got %s", got.Then[0].Type)
 	}
 }

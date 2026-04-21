@@ -8,6 +8,14 @@ import (
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
+func mustJSON(v interface{}) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
 func TestPipelineJSONSerialization(t *testing.T) {
 	pipeline := connector.Pipeline{
 		ID:          "test-pipeline",
@@ -16,32 +24,32 @@ func TestPipelineJSONSerialization(t *testing.T) {
 		Version:     "1.0.0",
 		Input: &connector.ModuleConfig{
 			Type: "http-polling",
-			Config: map[string]interface{}{
+			Raw: mustJSON(map[string]interface{}{
 				"endpoint": "https://api.example.com/data",
 				"schedule": "*/5 * * * *",
-			},
+			}),
 		},
 		Filters: []connector.ModuleConfig{
 			{
 				Type: "mapping",
-				Config: map[string]interface{}{
+				Raw: mustJSON(map[string]interface{}{
 					"mappings": map[string]string{
 						"source": "target",
 					},
-				},
+				}),
 			},
 		},
 		Output: &connector.ModuleConfig{
 			Type: "http-request",
-			Config: map[string]interface{}{
+			Raw: mustJSON(map[string]interface{}{
 				"endpoint": "https://api.dest.com/import",
-			},
+			}),
 		},
-		ErrorHandling: &connector.ErrorHandling{
+		Defaults: &connector.ModuleDefaults{
 			OnError: "notify",
-			Retry: map[string]interface{}{
-				"maxAttempts": 3,
-				"delayMs":     5000,
+			Retry: &connector.RetryConfig{
+				MaxAttempts: 3,
+				DelayMs:     5000,
 			},
 		},
 		Enabled:   true,
@@ -80,23 +88,23 @@ func TestPipelineJSONSerialization(t *testing.T) {
 	if decoded.Output.Type != pipeline.Output.Type {
 		t.Errorf("Expected Output.Type %q, got %q", pipeline.Output.Type, decoded.Output.Type)
 	}
-	if decoded.ErrorHandling.OnError != pipeline.ErrorHandling.OnError {
-		t.Errorf("Expected OnError %q, got %q", pipeline.ErrorHandling.OnError, decoded.ErrorHandling.OnError)
+	if decoded.Defaults.OnError != pipeline.Defaults.OnError {
+		t.Errorf("Expected OnError %q, got %q", pipeline.Defaults.OnError, decoded.Defaults.OnError)
 	}
 }
 
 func TestModuleConfigWithAuthentication(t *testing.T) {
 	module := connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": "https://api.example.com/data",
-		},
-		Authentication: &connector.AuthConfig{
-			Type: "bearer",
-			Credentials: map[string]string{
-				"token": "test-token",
+			"authentication": map[string]interface{}{
+				"type": "bearer",
+				"credentials": map[string]string{
+					"token": "test-token",
+				},
 			},
-		},
+		}),
 	}
 
 	data, err := json.Marshal(module)
@@ -109,14 +117,17 @@ func TestModuleConfigWithAuthentication(t *testing.T) {
 		t.Fatalf("Failed to unmarshal module config: %v", err)
 	}
 
-	if decoded.Authentication == nil {
-		t.Fatal("Expected authentication to be present")
+	// Authentication is now inside Raw
+	var raw map[string]interface{}
+	if err := json.Unmarshal(decoded.Raw, &raw); err != nil {
+		t.Fatalf("Failed to unmarshal Raw: %v", err)
 	}
-	if decoded.Authentication.Type != "bearer" {
-		t.Errorf("Expected auth type 'bearer', got %q", decoded.Authentication.Type)
+	authRaw, ok := raw["authentication"].(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected authentication in Raw")
 	}
-	if decoded.Authentication.Credentials["token"] != "test-token" {
-		t.Errorf("Expected token 'test-token', got %q", decoded.Authentication.Credentials["token"])
+	if authRaw["type"] != "bearer" {
+		t.Errorf("Expected auth type 'bearer', got %v", authRaw["type"])
 	}
 }
 
@@ -186,4 +197,13 @@ func TestExecutionResultWithError(t *testing.T) {
 	if decoded.Error.Module != "http-polling" {
 		t.Errorf("Expected module 'http-polling', got %q", decoded.Error.Module)
 	}
+}
+
+func toJSON(t *testing.T, v interface{}) json.RawMessage {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("toJSON: %v", err)
+	}
+	return b
 }

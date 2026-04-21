@@ -75,9 +75,13 @@ func (ts *testServer) getRequests() []*capturedRequest {
 
 // Helper to create ModuleConfig from map
 func newModuleConfig(configMap map[string]interface{}) *connector.ModuleConfig {
+	raw, err := json.Marshal(configMap)
+	if err != nil {
+		panic(err)
+	}
 	return &connector.ModuleConfig{
-		Type:   "httpRequest",
-		Config: configMap,
+		Type: "httpRequest",
+		Raw:  raw,
 	}
 }
 
@@ -592,14 +596,18 @@ func TestNewHTTPRequestFromConfig_CustomTimeout(t *testing.T) {
 // =============================================================================
 
 // Helper to create ModuleConfig with authentication
-func newModuleConfigWithAuth(configMap map[string]interface{}, authType string, creds map[string]string) *connector.ModuleConfig {
+func newModuleConfigWithAuth(configMap map[string]interface{}, authType string, creds json.RawMessage) *connector.ModuleConfig {
+	configMap["authentication"] = map[string]interface{}{
+		"type":        authType,
+		"credentials": json.RawMessage(creds),
+	}
+	raw, err := json.Marshal(configMap)
+	if err != nil {
+		panic(err)
+	}
 	return &connector.ModuleConfig{
-		Type:   "httpRequest",
-		Config: configMap,
-		Authentication: &connector.AuthConfig{
-			Type:        authType,
-			Credentials: creds,
-		},
+		Type: "httpRequest",
+		Raw:  raw,
 	}
 }
 
@@ -613,11 +621,11 @@ func TestHTTPRequest_Send_APIKeyAuth_Header(t *testing.T) {
 			"method":   "POST",
 		},
 		"api-key",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"key":        "test-api-key-12345",
 			"location":   "header",
 			"headerName": "X-API-Key",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -652,11 +660,11 @@ func TestHTTPRequest_Send_APIKeyAuth_Query(t *testing.T) {
 			"method":   "POST",
 		},
 		"api-key",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"key":       "test-api-key-query",
 			"location":  "query",
 			"paramName": "api_key",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -691,9 +699,9 @@ func TestHTTPRequest_Send_BearerAuth(t *testing.T) {
 			"method":   "POST",
 		},
 		"bearer",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test-token",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -729,10 +737,10 @@ func TestHTTPRequest_Send_BasicAuth(t *testing.T) {
 			"method":   "POST",
 		},
 		"basic",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"username": "testuser",
 			"password": "testpass123",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -783,11 +791,11 @@ func TestHTTPRequest_Send_OAuth2Auth(t *testing.T) {
 			"method":   "POST",
 		},
 		"oauth2",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"tokenUrl":     tokenServer.URL,
 			"clientId":     "test-client-id",
 			"clientSecret": "test-client-secret",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -832,11 +840,11 @@ func TestHTTPRequest_Send_OAuth2Auth_TokenCaching(t *testing.T) {
 			"method":   "POST",
 		},
 		"oauth2",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"tokenUrl":     tokenServer.URL,
 			"clientId":     "test-client-id",
 			"clientSecret": "test-client-secret",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -869,10 +877,10 @@ func TestHTTPRequest_Send_APIKeyAuth_MissingKey(t *testing.T) {
 			"method":   "POST",
 		},
 		"api-key",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"location": "header",
 			// key is missing
-		},
+		}),
 	)
 
 	// With shared auth package, validation happens at creation time
@@ -892,9 +900,9 @@ func TestHTTPRequest_Send_BearerAuth_MissingToken(t *testing.T) {
 			"method":   "POST",
 		},
 		"bearer",
-		map[string]string{
+		toJSON(t, map[string]string{
 			// token is missing
-		},
+		}),
 	)
 
 	// With shared auth package, validation happens at creation time
@@ -914,10 +922,10 @@ func TestHTTPRequest_Send_BasicAuth_MissingCredentials(t *testing.T) {
 			"method":   "POST",
 		},
 		"basic",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"username": "testuser",
 			// password is missing
-		},
+		}),
 	)
 
 	// With shared auth package, validation happens at creation time
@@ -937,11 +945,11 @@ func TestHTTPRequest_Send_OAuth2Auth_MissingCredentials(t *testing.T) {
 			"method":   "POST",
 		},
 		"oauth2",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"tokenUrl": "https://auth.example.com/token",
 			"clientId": "test-client-id",
 			// clientSecret is missing
-		},
+		}),
 	)
 
 	// With shared auth package, validation happens at creation time
@@ -989,9 +997,9 @@ func TestHTTPRequest_Send_UnknownAuthType(t *testing.T) {
 			"method":   "POST",
 		},
 		"unknown-auth-type",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"key": "value",
-		},
+		}),
 	)
 
 	// With shared auth package, unknown auth types return error at creation time
@@ -1743,7 +1751,7 @@ func TestHTTPRequest_Send_ServerError500(t *testing.T) {
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 		"retry": map[string]interface{}{
-			"backoffMs": float64(1), // Minimal backoff for fast tests
+			"delayMs": float64(1), // Minimal backoff for fast tests
 		},
 	})
 
@@ -1775,7 +1783,7 @@ func TestHTTPRequest_Send_ServerError503(t *testing.T) {
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 		"retry": map[string]interface{}{
-			"backoffMs": float64(1), // Minimal backoff for fast tests
+			"delayMs": float64(1), // Minimal backoff for fast tests
 		},
 	})
 
@@ -1949,8 +1957,8 @@ func TestHTTPRequest_Send_RetryOn5xx(t *testing.T) {
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 		"retry": map[string]interface{}{
-			"maxRetries":        float64(3),
-			"backoffMs":         float64(10), // Small for tests
+			"maxAttempts":       float64(3),
+			"delayMs":           float64(10), // Small for tests
 			"backoffMultiplier": float64(1.0),
 		},
 	})
@@ -1984,8 +1992,8 @@ func TestHTTPRequest_Send_RetryExhausted(t *testing.T) {
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 		"retry": map[string]interface{}{
-			"maxRetries":        float64(2),
-			"backoffMs":         float64(10),
+			"maxAttempts":       float64(2),
+			"delayMs":           float64(10),
 			"backoffMultiplier": float64(1.0),
 		},
 	})
@@ -2023,8 +2031,8 @@ func TestHTTPRequest_Send_NoRetryOn4xx(t *testing.T) {
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 		"retry": map[string]interface{}{
-			"maxRetries":        float64(3),
-			"backoffMs":         float64(10),
+			"maxAttempts":       float64(3),
+			"delayMs":           float64(10),
 			"backoffMultiplier": float64(1.0),
 		},
 	})
@@ -2165,7 +2173,8 @@ func TestHTTPRequest_Send_DefaultRetryConfig(t *testing.T) {
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 		"retry": map[string]interface{}{
-			"backoffMs": float64(1), // Minimal backoff for fast tests
+			"maxAttempts": float64(3),
+			"delayMs":     float64(1), // Minimal backoff for fast tests
 		},
 	})
 
@@ -2542,11 +2551,11 @@ func TestHTTPRequest_Deterministic_AuthHeaders(t *testing.T) {
 				"method":   "POST",
 			},
 			"api-key",
-			map[string]string{
+			toJSON(t, map[string]string{
 				"key":        "test-api-key-123",
 				"location":   "header",
 				"headerName": "X-API-Key",
-			},
+			}),
 		)
 
 		module, err := NewHTTPRequestFromConfig(config)
@@ -2944,11 +2953,11 @@ func TestHTTPRequest_PreviewRequest_AuthHeadersMasked_APIKey(t *testing.T) {
 			"method":   "POST",
 		},
 		"api-key",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"key":        "super-secret-api-key-12345",
 			"location":   "header",
 			"headerName": "X-API-Key",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -3004,9 +3013,9 @@ func TestHTTPRequest_PreviewRequest_AuthHeadersMasked_Bearer(t *testing.T) {
 			"method":   "POST",
 		},
 		"bearer",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.super-secret-payload",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -3046,10 +3055,10 @@ func TestHTTPRequest_PreviewRequest_AuthHeadersMasked_Basic(t *testing.T) {
 			"method":   "POST",
 		},
 		"basic",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"username": "testuser",
 			"password": "super-secret-password",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -3091,9 +3100,9 @@ func TestHTTPRequest_PreviewRequest_ShowCredentials_Bearer(t *testing.T) {
 			"method":   "POST",
 		},
 		"bearer",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"token": "my-secret-bearer-token-12345",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -3136,11 +3145,11 @@ func TestHTTPRequest_PreviewRequest_ShowCredentials_APIKey(t *testing.T) {
 			"method":   "POST",
 		},
 		"api-key",
-		map[string]string{
+		toJSON(t, map[string]string{
 			"key":        "secret-api-key-xyz789",
 			"headerName": "X-Api-Key",
 			"location":   "header",
-		},
+		}),
 	)
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -4440,4 +4449,13 @@ func TestHTTPRequest_MetadataExclusion(t *testing.T) {
 			t.Errorf("expected metadata to be excluded in single record mode, got: %s", receivedBody)
 		}
 	})
+}
+
+func toJSON(t *testing.T, v interface{}) json.RawMessage {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("toJSON: %v", err)
+	}
+	return b
 }

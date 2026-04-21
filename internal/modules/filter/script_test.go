@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cannectors/runtime/pkg/connector"
 )
 
 // strPtrScript is a helper to create string pointers for test cases.
@@ -48,8 +50,8 @@ func TestScriptModuleCreation_WithOnError(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			config := ScriptConfig{
-				Script:  `function transform(record) { return record; }`,
-				OnError: tc.onError,
+				Script:     `function transform(record) { return record; }`,
+				ModuleBase: connector.ModuleBase{OnError: tc.onError},
 			}
 
 			module, err := NewScriptFromConfig(config)
@@ -506,7 +508,7 @@ func TestScriptModuleProcess_JavaScriptException(t *testing.T) {
 		Script: `function transform(record) {
 			throw new Error("test error");
 		}`,
-		OnError: OnErrorFail,
+		ModuleBase: connector.ModuleBase{OnError: OnErrorFail},
 	}
 
 	module, err := NewScriptFromConfig(config)
@@ -536,7 +538,7 @@ func TestScriptModuleProcess_OnErrorSkip(t *testing.T) {
 			}
 			return record;
 		}`,
-		OnError: OnErrorSkip,
+		ModuleBase: connector.ModuleBase{OnError: OnErrorSkip},
 	}
 
 	module, err := NewScriptFromConfig(config)
@@ -571,7 +573,7 @@ func TestScriptModuleProcess_OnErrorLog(t *testing.T) {
 			record.processed = true;
 			return record;
 		}`,
-		OnError: OnErrorLog,
+		ModuleBase: connector.ModuleBase{OnError: OnErrorLog},
 	}
 
 	module, err := NewScriptFromConfig(config)
@@ -614,7 +616,7 @@ func TestScriptModuleProcess_RuntimeError(t *testing.T) {
 		Script: `function transform(record) {
 			return record.nonExistent.property; // TypeError: Cannot read property of undefined
 		}`,
-		OnError: OnErrorFail,
+		ModuleBase: connector.ModuleBase{OnError: OnErrorFail},
 	}
 
 	module, err := NewScriptFromConfig(config)
@@ -724,8 +726,8 @@ func TestScriptConfig_Parse(t *testing.T) {
 			},
 			expectError: false,
 			expected: ScriptConfig{
-				Script:  "function transform(r) { return r; }",
-				OnError: "skip",
+				Script:     "function transform(r) { return r; }",
+				ModuleBase: connector.ModuleBase{OnError: "skip"},
 			},
 		},
 		{
@@ -737,7 +739,7 @@ func TestScriptConfig_Parse(t *testing.T) {
 			expectError: false,
 			expected: ScriptConfig{
 				ScriptFile: "/path/to/script.js",
-				OnError:    "fail",
+				ModuleBase: connector.ModuleBase{OnError: "fail"},
 			},
 		},
 		{

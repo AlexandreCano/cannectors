@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
@@ -53,15 +54,15 @@ var (
 
 // SignatureConfig holds webhook signature validation configuration
 type SignatureConfig struct {
-	Type   string // "hmac-sha256"
-	Header string // Header name containing signature
-	Secret string // Secret key for signature validation
+	Type   string `json:"type"`             // "hmac-sha256"
+	Header string `json:"header,omitempty"` // Header name containing signature
+	Secret string `json:"secret,omitempty"` // Secret key for signature validation
 }
 
 // RateLimitConfig holds basic rate limiting configuration
 type RateLimitConfig struct {
-	RequestsPerSecond int
-	Burst             int
+	RequestsPerSecond int `json:"requestsPerSecond,omitempty"`
+	Burst             int `json:"burst,omitempty"`
 }
 
 type rateLimiter struct {
@@ -106,6 +107,18 @@ type Webhook struct {
 	workersOnce  sync.Once
 }
 
+// WebhookInputConfig holds the parsed configuration for the webhook input module.
+type WebhookInputConfig struct {
+	Endpoint      string           `json:"endpoint"`
+	ListenAddress string           `json:"listenAddress,omitempty"`
+	DataField     string           `json:"dataField,omitempty"`
+	TimeoutMs     int              `json:"timeoutMs,omitempty"`
+	Signature     *SignatureConfig `json:"signature,omitempty"`
+	QueueSize     int              `json:"queueSize,omitempty"`
+	MaxConcurrent int              `json:"maxConcurrent,omitempty"`
+	RateLimit     *RateLimitConfig `json:"rateLimit,omitempty"`
+}
+
 // NewWebhookFromConfig creates a new Webhook input module from configuration.
 //
 // Required config fields:
@@ -123,106 +136,61 @@ func NewWebhookFromConfig(config *connector.ModuleConfig) (*Webhook, error) {
 	if config == nil {
 		return nil, ErrNilConfig
 	}
-	cfg := config.Config
 
-	endpoint, err := extractWebhookEndpoint(cfg)
+	cfg, err := moduleconfig.ParseModuleConfig[WebhookInputConfig](*config)
 	if err != nil {
 		return nil, err
 	}
 
-	signature, err := extractAndValidateWebhookSignature(cfg)
-	if err != nil {
-		return nil, err
+	if cfg.Endpoint == "" {
+		return nil, ErrMissingEndpoint
 	}
 
-	queueSize, maxConcurrent, err := extractWebhookQueueConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	w := &Webhook{
-		endpoint:      endpoint,
-		listenAddress: extractWebhookListenAddress(cfg),
-		dataField:     extractWebhookDataField(cfg),
-		timeout:       extractWebhookTimeout(cfg),
-		signature:     signature,
-		queueSize:     queueSize,
-		maxConcurrent: maxConcurrent,
-		rateLimit:     extractWebhookRateLimit(cfg),
-	}
-
-	logWebhookModuleCreated(w)
-	return w, nil
-}
-
-func extractWebhookEndpoint(cfg map[string]interface{}) (string, error) {
-	endpoint, ok := cfg["endpoint"].(string)
-	if !ok || endpoint == "" {
-		return "", ErrMissingEndpoint
-	}
-	return endpoint, nil
-}
-
-func extractWebhookListenAddress(cfg map[string]interface{}) string {
-	if addr, ok := cfg["listenAddress"].(string); ok && addr != "" {
-		return addr
-	}
-	return defaultListenAddress
-}
-
-func extractWebhookTimeout(cfg map[string]interface{}) time.Duration {
-	timeoutMs := 0
-	if ms, ok := cfg["timeoutMs"].(float64); ok && ms > 0 {
-		timeoutMs = int(ms)
-	}
-	return connector.GetTimeoutDuration(timeoutMs, defaultReadTimeout)
-}
-
-func extractWebhookDataField(cfg map[string]interface{}) string {
-	if v, ok := cfg["dataField"].(string); ok {
-		return v
-	}
-	return ""
-}
-
-func extractAndValidateWebhookSignature(cfg map[string]interface{}) (*SignatureConfig, error) {
-	sigConfig, ok := cfg["signature"].(map[string]interface{})
-	if !ok {
-		return nil, nil
-	}
-	signature := parseSignatureConfig(sigConfig)
-	if err := validateSignatureConfig(signature); err != nil {
-		return nil, err
-	}
-	return signature, nil
-}
-
-func extractWebhookQueueConfig(cfg map[string]interface{}) (queueSize, maxConcurrent int, err error) {
-	queueSize = defaultQueueSize
-	if v, ok := cfg["queueSize"].(float64); ok {
-		queueSize = int(v)
-		if queueSize < 0 {
-			return 0, 0, ErrInvalidQueueSize
+	if cfg.Signature != nil {
+		if cfg.Signature.Header == "" {
+			cfg.Signature.Header = defaultSignatureHeader
+		}
+		if err := validateSignatureConfig(cfg.Signature); err != nil {
+			return nil, err
 		}
 	}
-	maxConcurrent = defaultMaxConcurrent
-	if v, ok := cfg["maxConcurrent"].(float64); ok {
-		maxConcurrent = int(v)
-		if maxConcurrent < 0 {
-			return 0, 0, ErrInvalidMaxConcurrent
-		}
+
+	queueSize := cfg.QueueSize
+	maxConcurrent := cfg.MaxConcurrent
+	if queueSize < 0 {
+		return nil, ErrInvalidQueueSize
+	}
+	if maxConcurrent < 0 {
+		return nil, ErrInvalidMaxConcurrent
 	}
 	if queueSize > 0 && maxConcurrent == 0 {
 		maxConcurrent = 1
 	}
-	return queueSize, maxConcurrent, nil
-}
 
-func extractWebhookRateLimit(cfg map[string]interface{}) *RateLimitConfig {
-	if m, ok := cfg["rateLimit"].(map[string]interface{}); ok {
-		return parseRateLimitConfig(m)
+	listenAddress := cfg.ListenAddress
+	if listenAddress == "" {
+		listenAddress = defaultListenAddress
 	}
-	return nil
+
+	timeout := connector.GetTimeoutDuration(cfg.TimeoutMs, defaultReadTimeout)
+
+	if cfg.RateLimit != nil && cfg.RateLimit.RequestsPerSecond > 0 && cfg.RateLimit.Burst <= 0 {
+		cfg.RateLimit.Burst = cfg.RateLimit.RequestsPerSecond
+	}
+
+	w := &Webhook{
+		endpoint:      cfg.Endpoint,
+		listenAddress: listenAddress,
+		dataField:     cfg.DataField,
+		timeout:       timeout,
+		signature:     cfg.Signature,
+		queueSize:     queueSize,
+		maxConcurrent: maxConcurrent,
+		rateLimit:     cfg.RateLimit,
+	}
+
+	logWebhookModuleCreated(w)
+	return w, nil
 }
 
 func logWebhookModuleCreated(w *Webhook) {
@@ -234,27 +202,6 @@ func logWebhookModuleCreated(w *Webhook) {
 		"maxConcurrent", w.maxConcurrent,
 		"rateLimit", w.rateLimit != nil,
 	)
-}
-
-// parseSignatureConfig extracts signature configuration from map
-func parseSignatureConfig(config map[string]interface{}) *SignatureConfig {
-	sig := &SignatureConfig{
-		Header: defaultSignatureHeader,
-	}
-
-	if t, ok := config["type"].(string); ok {
-		sig.Type = t
-	}
-
-	if header, ok := config["header"].(string); ok && header != "" {
-		sig.Header = header
-	}
-
-	if secret, ok := config["secret"].(string); ok {
-		sig.Secret = secret
-	}
-
-	return sig
 }
 
 func validateSignatureConfig(signature *SignatureConfig) error {
@@ -271,20 +218,6 @@ func validateSignatureConfig(signature *SignatureConfig) error {
 		signature.Header = defaultSignatureHeader
 	}
 	return nil
-}
-
-func parseRateLimitConfig(config map[string]interface{}) *RateLimitConfig {
-	rateLimit := &RateLimitConfig{}
-	if rps, ok := config["requestsPerSecond"].(float64); ok {
-		rateLimit.RequestsPerSecond = int(rps)
-	}
-	if burst, ok := config["burst"].(float64); ok {
-		rateLimit.Burst = int(burst)
-	}
-	if rateLimit.RequestsPerSecond > 0 && rateLimit.Burst <= 0 {
-		rateLimit.Burst = rateLimit.RequestsPerSecond
-	}
-	return rateLimit
 }
 
 // newRateLimiter creates a token bucket rate limiter with the specified rate and burst.

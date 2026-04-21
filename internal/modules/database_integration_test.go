@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/modules/filter"
 	"github.com/cannectors/runtime/internal/modules/input"
 	"github.com/cannectors/runtime/internal/modules/output"
@@ -278,10 +279,12 @@ func TestSQLCallFilterEnrichment(t *testing.T) {
 	db.Close()
 
 	cfg := filter.SQLCallConfig{
-		ConnectionString: "file:" + tmpFile,
-		Driver:           "sqlite",
-		Query:            "SELECT department, manager FROM user_details WHERE user_id = {{record.user_id}}",
-		MergeStrategy:    "merge",
+		SQLRequestBase: moduleconfig.SQLRequestBase{
+			ConnectionString: "file:" + tmpFile,
+			Driver:           "sqlite",
+			Query:            "SELECT department, manager FROM user_details WHERE user_id = {{record.user_id}}",
+		},
+		MergeStrategy: "merge",
 	}
 
 	sqlFilter, err := filter.NewSQLCallFromConfig(cfg)
@@ -337,10 +340,12 @@ func TestSQLCallFilterWithQueryFile(t *testing.T) {
 	sqlFile := createTempSQLFile(t, "SELECT quantity FROM inventory WHERE sku = {{record.sku}}")
 
 	cfg := filter.SQLCallConfig{
-		ConnectionString: "file:" + tmpFile,
-		Driver:           "sqlite",
-		QueryFile:        sqlFile,
-		MergeStrategy:    "merge",
+		SQLRequestBase: moduleconfig.SQLRequestBase{
+			ConnectionString: "file:" + tmpFile,
+			Driver:           "sqlite",
+			QueryFile:        sqlFile,
+		},
+		MergeStrategy: "merge",
 	}
 
 	sqlFilter, err := filter.NewSQLCallFromConfig(cfg)

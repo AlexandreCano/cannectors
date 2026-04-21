@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/cannectors/runtime/pkg/connector"
 )
 
 // strPtr is a helper to create string pointers for test cases.
@@ -1528,7 +1530,7 @@ func TestConditionOnErrorFail(t *testing.T) {
 	// by using a method on a nil value
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "data.unknownMethod()",
-		OnError:    "fail",
+		ModuleBase: connector.ModuleBase{OnError: "fail"},
 	})
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -1550,7 +1552,7 @@ func TestConditionOnErrorSkip(t *testing.T) {
 	// Using a method call that doesn't exist will cause an evaluation error
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "value.invalidMethod() > 0",
-		OnError:    "skip",
+		ModuleBase: connector.ModuleBase{OnError: "skip"},
 	})
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -1578,7 +1580,7 @@ func TestConditionOnErrorLog(t *testing.T) {
 	// Create a condition that will cause an error when evaluating invalid operations
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "value.invalidMethod() > 0",
-		OnError:    "log",
+		ModuleBase: connector.ModuleBase{OnError: "log"},
 	})
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -1605,7 +1607,7 @@ func TestConditionOnErrorLog(t *testing.T) {
 func TestConditionInvalidOnErrorDefaultsToFail(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "data.unknownMethod()",
-		OnError:    "invalid",
+		ModuleBase: connector.ModuleBase{OnError: "invalid"},
 	})
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -1654,7 +1656,7 @@ func TestConditionErrorDetails(t *testing.T) {
 	// Calling a method on a non-object type will cause an error
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "value.invalidMethod() > 100",
-		OnError:    "fail",
+		ModuleBase: connector.ModuleBase{OnError: "fail"},
 	})
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)

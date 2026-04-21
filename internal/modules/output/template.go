@@ -19,9 +19,6 @@ const (
 	ErrMsgEmptyVariablePath     = template.ErrMsgEmptyVariablePath
 )
 
-// TemplateVariable represents a parsed template variable (alias for template.Variable)
-type TemplateVariable = template.Variable
-
 // TemplateEvaluator wraps the shared template.Evaluator with backward-compatible method names.
 type TemplateEvaluator struct {
 	*template.Evaluator
@@ -48,7 +45,7 @@ func (e *TemplateEvaluator) EvaluateTemplateForURL(templateStr string, record ma
 
 // ParseTemplateVariables extracts all template variables from a template string.
 // Backward-compatible wrapper for template.Evaluator.ParseVariables.
-func (e *TemplateEvaluator) ParseTemplateVariables(templateStr string) []TemplateVariable {
+func (e *TemplateEvaluator) ParseTemplateVariables(templateStr string) []template.Variable {
 	return e.ParseVariables(templateStr)
 }
 

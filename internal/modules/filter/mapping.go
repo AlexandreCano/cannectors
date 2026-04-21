@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/internal/moduleconfig"
+	"github.com/cannectors/runtime/pkg/connector"
 )
 
 // Error codes for mapping module
@@ -76,6 +78,13 @@ type TransformOp struct {
 	Pattern     string `json:"pattern,omitempty"`
 	Replacement string `json:"replacement,omitempty"`
 	Separator   string `json:"separator,omitempty"`
+}
+
+// MappingModuleConfig is the top-level config struct for the mapping filter module.
+// Used by moduleconfig.ParseModuleConfig to deserialize from JSON.
+type MappingModuleConfig struct {
+	connector.ModuleBase
+	Mappings []FieldMapping `json:"mappings"`
 }
 
 // MappingConfig represents the parsed and validated mapping configuration.
@@ -472,7 +481,7 @@ func (m *MappingModule) processRecord(record map[string]interface{}, recordIdx i
 	for mappingIdx, mapping := range m.mappings {
 		// Empty source means delete the target field
 		if mapping.Source == "" {
-			DeleteNestedValue(record, mapping.Target)
+			moduleconfig.DeleteNestedValue(record, mapping.Target)
 			continue
 		}
 
@@ -489,7 +498,7 @@ func (m *MappingModule) processRecord(record map[string]interface{}, recordIdx i
 			return m.handleTransformError(err, mapping, recordIdx, mappingIdx, value, record)
 		}
 
-		if err := SetNestedValue(record, mapping.Target, transformedValue); err != nil {
+		if err := moduleconfig.SetNestedValue(record, mapping.Target, transformedValue); err != nil {
 			return m.handleSetValueError(err, mapping, recordIdx, mappingIdx, transformedValue, record)
 		}
 	}
@@ -499,7 +508,7 @@ func (m *MappingModule) processRecord(record map[string]interface{}, recordIdx i
 
 // getSourceValue retrieves the source value for a mapping, handling missing field cases.
 func (m *MappingModule) getSourceValue(record map[string]interface{}, mapping MappingConfig, recordIdx, mappingIdx int) (interface{}, bool, error) {
-	value, found := GetNestedValue(record, mapping.Source)
+	value, found := moduleconfig.GetNestedValue(record, mapping.Source)
 
 	if !found {
 		switch mapping.OnMissing {

@@ -18,6 +18,7 @@ import (
 
 // TestExecutor_StatePersistence_Timestamp tests end-to-end state persistence with timestamp.
 // Verifies that state is persisted after first execution and used in subsequent executions.
+
 func TestExecutor_StatePersistence_Timestamp(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateStore := persistence.NewStateStore(tmpDir)
@@ -38,7 +39,7 @@ func TestExecutor_StatePersistence_Timestamp(t *testing.T) {
 	// Create HTTP polling input with timestamp persistence
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
 			"statePersistence": map[string]interface{}{
 				"timestamp": map[string]interface{}{
@@ -46,7 +47,7 @@ func TestExecutor_StatePersistence_Timestamp(t *testing.T) {
 					"queryParam": "since",
 				},
 			},
-		},
+		}),
 	}
 
 	inputModule, err := input.NewHTTPPollingFromConfig(config)
@@ -142,7 +143,7 @@ func TestExecutor_StatePersistence_ID(t *testing.T) {
 	// Create HTTP polling input with ID persistence
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
 			"statePersistence": map[string]interface{}{
 				"id": map[string]interface{}{
@@ -151,7 +152,7 @@ func TestExecutor_StatePersistence_ID(t *testing.T) {
 					"queryParam": "after_id",
 				},
 			},
-		},
+		}),
 	}
 
 	inputModule, err := input.NewHTTPPollingFromConfig(config)
@@ -243,7 +244,7 @@ func TestExecutor_StatePersistence_AfterRestart(t *testing.T) {
 	// Create HTTP polling input with timestamp persistence
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
 			"statePersistence": map[string]interface{}{
 				"timestamp": map[string]interface{}{
@@ -251,7 +252,7 @@ func TestExecutor_StatePersistence_AfterRestart(t *testing.T) {
 					"queryParam": "since",
 				},
 			},
-		},
+		}),
 	}
 
 	pipeline := &connector.Pipeline{
@@ -328,7 +329,7 @@ func TestExecutor_StatePersistence_NoStateStore(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
 			"statePersistence": map[string]interface{}{
 				"timestamp": map[string]interface{}{
@@ -336,7 +337,7 @@ func TestExecutor_StatePersistence_NoStateStore(t *testing.T) {
 					"queryParam": "since",
 				},
 			},
-		},
+		}),
 	}
 
 	inputModule, err := input.NewHTTPPollingFromConfig(config)
@@ -381,7 +382,7 @@ func TestExecutor_StatePersistence_FailedExecution(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Config: map[string]interface{}{
+		Raw: mustJSON(map[string]interface{}{
 			"endpoint": server.URL,
 			"statePersistence": map[string]interface{}{
 				"timestamp": map[string]interface{}{
@@ -389,7 +390,7 @@ func TestExecutor_StatePersistence_FailedExecution(t *testing.T) {
 					"queryParam": "since",
 				},
 			},
-		},
+		}),
 	}
 
 	inputModule, err := input.NewHTTPPollingFromConfig(config)

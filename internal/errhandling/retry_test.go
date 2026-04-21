@@ -137,91 +137,6 @@ func TestRetryConfig_Validate(t *testing.T) {
 }
 
 // TestRetryConfig_ParseFromMap tests parsing retry config from map.
-func TestRetryConfig_ParseFromMap(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    map[string]interface{}
-		expected RetryConfig
-	}{
-		{
-			name:     "Nil map returns defaults",
-			input:    nil,
-			expected: DefaultRetryConfig(),
-		},
-		{
-			name:     "Empty map returns defaults",
-			input:    map[string]interface{}{},
-			expected: DefaultRetryConfig(),
-		},
-		{
-			name: "Full custom config",
-			input: map[string]interface{}{
-				"maxAttempts":          float64(5),
-				"delayMs":              float64(500),
-				"backoffMultiplier":    float64(1.5),
-				"maxDelayMs":           float64(60000),
-				"retryableStatusCodes": []interface{}{float64(429), float64(503)},
-			},
-			expected: RetryConfig{
-				MaxAttempts:          5,
-				DelayMs:              500,
-				BackoffMultiplier:    1.5,
-				MaxDelayMs:           60000,
-				RetryableStatusCodes: []int{429, 503},
-			},
-		},
-		{
-			name: "Partial config uses defaults for missing",
-			input: map[string]interface{}{
-				"maxAttempts": float64(5),
-			},
-			expected: RetryConfig{
-				MaxAttempts:          5,
-				DelayMs:              1000,
-				BackoffMultiplier:    2.0,
-				MaxDelayMs:           30000,
-				RetryableStatusCodes: []int{429, 500, 502, 503, 504},
-			},
-		},
-		{
-			name: "Integer types work too",
-			input: map[string]interface{}{
-				"maxAttempts": 5, // int instead of float64
-				"delayMs":     500,
-			},
-			expected: RetryConfig{
-				MaxAttempts:          5,
-				DelayMs:              500,
-				BackoffMultiplier:    2.0,
-				MaxDelayMs:           30000,
-				RetryableStatusCodes: []int{429, 500, 502, 503, 504},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := ParseRetryConfig(tt.input)
-
-			if result.MaxAttempts != tt.expected.MaxAttempts {
-				t.Errorf("MaxAttempts = %d, want %d", result.MaxAttempts, tt.expected.MaxAttempts)
-			}
-			if result.DelayMs != tt.expected.DelayMs {
-				t.Errorf("DelayMs = %d, want %d", result.DelayMs, tt.expected.DelayMs)
-			}
-			if result.BackoffMultiplier != tt.expected.BackoffMultiplier {
-				t.Errorf("BackoffMultiplier = %f, want %f", result.BackoffMultiplier, tt.expected.BackoffMultiplier)
-			}
-			if result.MaxDelayMs != tt.expected.MaxDelayMs {
-				t.Errorf("MaxDelayMs = %d, want %d", result.MaxDelayMs, tt.expected.MaxDelayMs)
-			}
-			if len(result.RetryableStatusCodes) != len(tt.expected.RetryableStatusCodes) {
-				t.Errorf("RetryableStatusCodes length = %d, want %d", len(result.RetryableStatusCodes), len(tt.expected.RetryableStatusCodes))
-			}
-		})
-	}
-}
-
 // TestRetryConfig_CalculateDelay tests exponential backoff calculation.
 func TestRetryConfig_CalculateDelay(t *testing.T) {
 	config := RetryConfig{
@@ -335,7 +250,7 @@ func TestRetryConfig_ShouldRetry(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := config.ShouldRetry(tt.attempt, tt.err)
+			result := ShouldRetry(config, tt.attempt, tt.err)
 			if result != tt.shouldRetry {
 				t.Errorf("ShouldRetry(%d, %v) = %v, want %v", tt.attempt, tt.err, result, tt.shouldRetry)
 			}
@@ -417,7 +332,7 @@ func TestRetryConfig_Disabled(t *testing.T) {
 	// Should never retry when maxAttempts is 0
 	err := NewServerError(500, "server error", nil)
 
-	if config.ShouldRetry(0, err) {
+	if ShouldRetry(config, 0, err) {
 		t.Error("ShouldRetry should return false when maxAttempts is 0")
 	}
 }
@@ -716,85 +631,6 @@ func TestResolveErrorHandlingConfig(t *testing.T) {
 }
 
 // TestErrorHandlingConfig tests error handling configuration.
-func TestErrorHandlingConfig(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    map[string]interface{}
-		expected ErrorHandlingConfig
-	}{
-		{
-			name:  "Nil map returns defaults",
-			input: nil,
-			expected: ErrorHandlingConfig{
-				OnError:   "fail",
-				TimeoutMs: 30000,
-				Retry:     DefaultRetryConfig(),
-			},
-		},
-		{
-			name: "Custom onError",
-			input: map[string]interface{}{
-				"onError": "skip",
-			},
-			expected: ErrorHandlingConfig{
-				OnError:   "skip",
-				TimeoutMs: 30000,
-				Retry:     DefaultRetryConfig(),
-			},
-		},
-		{
-			name: "Custom timeout",
-			input: map[string]interface{}{
-				"timeoutMs": float64(60000),
-			},
-			expected: ErrorHandlingConfig{
-				OnError:   "fail",
-				TimeoutMs: 60000,
-				Retry:     DefaultRetryConfig(),
-			},
-		},
-		{
-			name: "Full custom config",
-			input: map[string]interface{}{
-				"onError":   "log",
-				"timeoutMs": float64(45000),
-				"retry": map[string]interface{}{
-					"maxAttempts": float64(5),
-					"delayMs":     float64(500),
-				},
-			},
-			expected: ErrorHandlingConfig{
-				OnError:   "log",
-				TimeoutMs: 45000,
-				Retry: RetryConfig{
-					MaxAttempts:          5,
-					DelayMs:              500,
-					BackoffMultiplier:    2.0,
-					MaxDelayMs:           30000,
-					RetryableStatusCodes: []int{429, 500, 502, 503, 504},
-				},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := ParseErrorHandlingConfig(tt.input)
-
-			if result.OnError != tt.expected.OnError {
-				t.Errorf("OnError = %s, want %s", result.OnError, tt.expected.OnError)
-			}
-			if result.TimeoutMs != tt.expected.TimeoutMs {
-				t.Errorf("TimeoutMs = %d, want %d", result.TimeoutMs, tt.expected.TimeoutMs)
-			}
-			if result.Retry.MaxAttempts != tt.expected.Retry.MaxAttempts {
-				t.Errorf("Retry.MaxAttempts = %d, want %d", result.Retry.MaxAttempts, tt.expected.Retry.MaxAttempts)
-			}
-		})
-	}
-}
-
-// TestOnErrorStrategy tests the OnError strategy type.
 func TestOnErrorStrategy(t *testing.T) {
 	tests := []struct {
 		strategy OnErrorStrategy

@@ -599,7 +599,7 @@ func TestNewHTTPRequestFromConfig_CustomTimeout(t *testing.T) {
 func newModuleConfigWithAuth(configMap map[string]interface{}, authType string, creds json.RawMessage) *connector.ModuleConfig {
 	configMap["authentication"] = map[string]interface{}{
 		"type":        authType,
-		"credentials": json.RawMessage(creds),
+		"credentials": creds,
 	}
 	raw, err := json.Marshal(configMap)
 	if err != nil {

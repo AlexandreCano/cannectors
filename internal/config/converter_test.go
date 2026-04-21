@@ -617,7 +617,11 @@ func TestResolveRetry_GranularMerge(t *testing.T) {
 				},
 			}
 			if tt.moduleRetry != nil {
-				data["input"].(map[string]interface{})["retry"] = tt.moduleRetry
+				inputMap, ok := data["input"].(map[string]interface{})
+				if !ok {
+					t.Fatalf("data[\"input\"] is not map[string]interface{}")
+				}
+				inputMap["retry"] = tt.moduleRetry
 			}
 			if tt.defaults != nil {
 				data["defaults"] = map[string]interface{}{"retry": tt.defaults}

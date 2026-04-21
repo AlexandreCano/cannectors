@@ -92,8 +92,8 @@ func NewDatabaseInputFromConfig(cfg *connector.ModuleConfig) (*DatabaseInput, er
 
 	// Load query from file if queryFile is specified
 	if config.QueryFile != "" && config.Query == "" {
-		if err := pathutil.ValidateFilePath(config.QueryFile); err != nil {
-			return nil, fmt.Errorf("query file path: %w", err)
+		if validateErr := pathutil.ValidateFilePath(config.QueryFile); validateErr != nil {
+			return nil, fmt.Errorf("query file path: %w", validateErr)
 		}
 		queryBytes, readErr := os.ReadFile(config.QueryFile)
 		if readErr != nil {

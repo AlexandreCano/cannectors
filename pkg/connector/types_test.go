@@ -198,12 +198,3 @@ func TestExecutionResultWithError(t *testing.T) {
 		t.Errorf("Expected module 'http-polling', got %q", decoded.Error.Module)
 	}
 }
-
-func toJSON(t *testing.T, v interface{}) json.RawMessage {
-	t.Helper()
-	b, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("toJSON: %v", err)
-	}
-	return b
-}

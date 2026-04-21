@@ -102,7 +102,10 @@ func TestDeleteNestedValue_Nested(t *testing.T) {
 		},
 	}
 	moduleconfig.DeleteNestedValue(obj, "user.name")
-	user := obj["user"].(map[string]interface{})
+	user, ok := obj["user"].(map[string]interface{})
+	if !ok {
+		t.Fatal("obj[\"user\"] is not map[string]interface{}")
+	}
 	if _, ok := user["name"]; ok {
 		t.Error("Expected user.name to be deleted")
 	}

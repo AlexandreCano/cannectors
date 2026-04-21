@@ -90,6 +90,8 @@ type keyEntry struct {
 	paramName string
 }
 
+// HTTPCallModule is a filter module that enriches records with data fetched from HTTP endpoints.
+// It supports configurable authentication, caching, and field merging strategies.
 type HTTPCallModule struct {
 	endpoint          string
 	method            string     // HTTP method (GET, POST, PUT)
@@ -375,6 +377,9 @@ func validateKeysConfig(keys []moduleconfig.KeyConfig) error {
 	}
 	return nil
 }
+
+// Process enriches each input record by performing an HTTP call and merging the response data.
+// Returns the records with merged enrichment data according to the configured merge strategy.
 func (m *HTTPCallModule) Process(ctx context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
 	if records == nil {
 		return []map[string]interface{}{}, nil

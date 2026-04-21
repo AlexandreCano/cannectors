@@ -48,9 +48,9 @@ func (e ParseError) Error() string {
 		sb.WriteString(": ")
 	}
 	if e.Line > 0 {
-		sb.WriteString(fmt.Sprintf("line %d", e.Line))
+		fmt.Fprintf(&sb, "line %d", e.Line)
 		if e.Column > 0 {
-			sb.WriteString(fmt.Sprintf(", column %d", e.Column))
+			fmt.Fprintf(&sb, ", column %d", e.Column)
 		}
 		sb.WriteString(": ")
 	}

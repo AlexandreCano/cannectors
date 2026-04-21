@@ -73,8 +73,8 @@ func NewDatabaseOutputFromConfig(cfg *connector.ModuleConfig) (*DatabaseOutput, 
 
 	// Load query from file if queryFile is specified
 	if config.QueryFile != "" && config.Query == "" {
-		if err := pathutil.ValidateFilePath(config.QueryFile); err != nil {
-			return nil, fmt.Errorf("query file path: %w", err)
+		if validateErr := pathutil.ValidateFilePath(config.QueryFile); validateErr != nil {
+			return nil, fmt.Errorf("query file path: %w", validateErr)
 		}
 		queryBytes, readErr := os.ReadFile(config.QueryFile)
 		if readErr != nil {
@@ -89,8 +89,8 @@ func NewDatabaseOutputFromConfig(cfg *connector.ModuleConfig) (*DatabaseOutput, 
 	}
 
 	// Validate template syntax in query
-	if err := template.ValidateSyntax(config.Query); err != nil {
-		return nil, fmt.Errorf("invalid template syntax in database output query: %w", err)
+	if syntaxErr := template.ValidateSyntax(config.Query); syntaxErr != nil {
+		return nil, fmt.Errorf("invalid template syntax in database output query: %w", syntaxErr)
 	}
 
 	// Set defaults

@@ -1334,12 +1334,3 @@ func TestHTTPPolling_Close_ReleasesConnections(t *testing.T) {
 		t.Errorf("Close() returned error on second call: %v", err)
 	}
 }
-
-func toJSON(t *testing.T, v interface{}) json.RawMessage {
-	t.Helper()
-	b, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("toJSON: %v", err)
-	}
-	return b
-}

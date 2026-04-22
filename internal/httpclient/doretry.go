@@ -81,6 +81,10 @@ func (c *Client) DoWithRetry(ctx context.Context, req *http.Request, cfg errhand
 
 	fn := func(ctx context.Context) (any, error) {
 		attempt++
+		// Reset per-attempt so a previously-successful response isn't
+		// reported alongside a later network error.
+		lastResp = nil
+
 		reqClone := req.Clone(ctx)
 		if req.GetBody != nil {
 			body, err := req.GetBody()
@@ -101,7 +105,8 @@ func (c *Client) DoWithRetry(ctx context.Context, req *http.Request, cfg errhand
 		body, readErr := io.ReadAll(bodyReader)
 		_ = resp.Body.Close()
 		if readErr != nil {
-			return resp, errhandling.NewNetworkError("reading response body", readErr)
+			// Body read failed mid-stream: resp is unusable, don't expose it.
+			return nil, errhandling.NewNetworkError("reading response body", readErr)
 		}
 		resp.Body = io.NopCloser(bytes.NewReader(body))
 		lastResp = resp

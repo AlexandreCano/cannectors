@@ -2,25 +2,18 @@ package httpclient
 
 import (
 	"errors"
+	"net/http"
 	"strconv"
 	"time"
 )
-
-// httpDateFormats lists the date formats accepted for an HTTP-date
-// (RFC 7231 §7.1.1). Order follows the RFC: RFC1123 (plus numeric-TZ
-// variant), RFC850, ANSI C asctime.
-var httpDateFormats = []string{
-	time.RFC1123,
-	time.RFC1123Z,
-	time.RFC850,
-	"Mon Jan _2 15:04:05 2006", // ANSI C asctime format
-}
 
 // ParseRetryAfter parses a raw Retry-After header value.
 //
 // Two formats are accepted (RFC 7231 §7.1.3):
 //   - delta-seconds: integer >= 0 (e.g. "0", "120")
-//   - HTTP-date   : RFC1123 / RFC850 / ANSI C asctime
+//   - HTTP-date   : delegated to net/http.ParseTime, which handles the three
+//     formats allowed by RFC 7231 §7.1.1 (RFC1123, RFC850, ANSI C asctime)
+//     with the same strictness as net/http itself.
 //
 // For HTTP-date the returned duration is `time.Until(date)` and may be
 // negative (date in the past). The caller is responsible for clamping the
@@ -37,10 +30,8 @@ func ParseRetryAfter(value string) (time.Duration, bool) {
 		return time.Duration(seconds) * time.Second, true
 	}
 
-	for _, format := range httpDateFormats {
-		if t, err := time.Parse(format, value); err == nil {
-			return time.Until(t), true
-		}
+	if t, err := http.ParseTime(value); err == nil {
+		return time.Until(t), true
 	}
 
 	return 0, false

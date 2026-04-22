@@ -20,6 +20,11 @@ func TestValidateHeaderName(t *testing.T) {
 		{"contains control", "X\x01Y", true},
 		{"contains DEL", "X\x7fY", true},
 		{"contains UTF-8", "Xé", true},
+		{"contains slash", "X/Y", true},
+		{"contains paren", "X(Y", true},
+		{"contains comma", "X,Y", true},
+		{"contains at", "X@Y", true},
+		{"contains equals", "X=Y", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -48,6 +53,8 @@ func TestValidateHeaderValue(t *testing.T) {
 		{"with CRLF injection", "foo\r\nX-Injected: yes", true},
 		{"with NUL", "foo\x00bar", true},
 		{"with control 0x1F", "foo\x1fbar", true},
+		{"with DEL 0x7F", "foo\x7fbar", true},
+		{"with SP only", "foo bar", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

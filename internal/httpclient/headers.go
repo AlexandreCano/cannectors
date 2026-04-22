@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"golang.org/x/net/http/httpguts"
+
 	"github.com/cannectors/runtime/internal/logger"
 )
 
@@ -13,35 +15,31 @@ const (
 	msgInvalidHeaderValueSkipping = "invalid header value, skipping"
 )
 
-// ValidateHeaderName validates an HTTP header name per RFC 7230.
+// ValidateHeaderName validates an HTTP header name per RFC 7230 §3.2.6.
 //
-// Header names are tokens: visible ASCII characters (0x21..0x7E) excluding
-// control characters, whitespace, and ':'. Returns a descriptive error when
-// the name is invalid.
+// Delegates to httpguts.ValidHeaderFieldName, the exact validator used by
+// net/http when writing headers on the wire. Anything this function accepts
+// will be accepted by net/http; anything rejected here would have been
+// rejected at send-time, so TryAddValidHeader can never produce a header
+// that breaks the outbound request.
 func ValidateHeaderName(name string) error {
 	if name == "" {
 		return fmt.Errorf("header name cannot be empty")
 	}
-	for _, r := range name {
-		if r < 0x21 || r > 0x7E || r == ':' {
-			return fmt.Errorf("header name contains invalid character: %q", r)
-		}
+	if !httpguts.ValidHeaderFieldName(name) {
+		return fmt.Errorf("header name is not a valid RFC 7230 token: %q", name)
 	}
 	return nil
 }
 
-// ValidateHeaderValue validates an HTTP header value per RFC 7230.
+// ValidateHeaderValue validates an HTTP header value per RFC 7230 §3.2.6.
 //
-// Values may contain VCHAR, obs-text, and HTAB. Control characters (other
-// than HTAB) and CR/LF (header injection risk) are forbidden.
+// Delegates to httpguts.ValidHeaderFieldValue (the same check net/http runs
+// internally), which permits VCHAR, obs-text, SP, and HTAB, and rejects CTLs
+// (including DEL 0x7F) and CR/LF.
 func ValidateHeaderValue(value string) error {
-	for _, r := range value {
-		if r < 0x20 && r != '\t' {
-			return fmt.Errorf("header value contains invalid control character: %q", r)
-		}
-		if r == '\r' || r == '\n' {
-			return fmt.Errorf("header value contains invalid character: %q", r)
-		}
+	if !httpguts.ValidHeaderFieldValue(value) {
+		return fmt.Errorf("header value is not a valid RFC 7230 field-value")
 	}
 	return nil
 }

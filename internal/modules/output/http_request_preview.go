@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
+
+	"github.com/cannectors/runtime/internal/logger"
 )
 
 // Maximum size for body preview (1MB) to prevent memory issues with very
@@ -32,12 +35,16 @@ func (h *HTTPRequestModule) PreviewRequest(records []map[string]interface{}, opt
 }
 
 func (h *HTTPRequestModule) previewBatchMode(records []map[string]interface{}, opts PreviewOptions) ([]RequestPreview, error) {
-	endpoint := h.resolveEndpointWithStaticQuery(h.endpoint)
+	endpoint := h.resolveEndpointForBatch(h.endpoint, records)
 	bodyPreview, err := formatJSONPreview(records)
 	if err != nil {
 		return nil, fmt.Errorf("formatting body preview: %w", err)
 	}
-	headers := h.buildPreviewHeaders(nil, opts)
+	var batchHeaders map[string]string
+	if len(records) > 0 {
+		batchHeaders = h.extractHeadersFromRecord(records[0])
+	}
+	headers := h.buildPreviewHeaders(batchHeaders, opts)
 	return []RequestPreview{{
 		Endpoint:    endpoint,
 		Method:      h.method,
@@ -102,6 +109,9 @@ func (h *HTTPRequestModule) addMaskedAuthHeaders(headers map[string]string) {
 
 // addUnmaskedAuthHeaders adds authentication headers with real values by
 // running a dry apply through the auth handler. WARNING: exposes credentials.
+// If the dry apply fails (mock request construction or auth handler error),
+// the function falls back to addMaskedAuthHeaders so the preview still shows
+// the auth intent rather than silently omitting the header.
 func (h *HTTPRequestModule) addUnmaskedAuthHeaders(headers map[string]string) {
 	if h.authHandler == nil {
 		return
@@ -109,9 +119,17 @@ func (h *HTTPRequestModule) addUnmaskedAuthHeaders(headers map[string]string) {
 	ctx := context.Background()
 	mockReq, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://example.com", nil)
 	if err != nil {
+		logger.Warn("failed to build mock request for credential preview, falling back to masked headers",
+			slog.String("error", err.Error()),
+		)
+		h.addMaskedAuthHeaders(headers)
 		return
 	}
 	if err := h.authHandler.ApplyAuth(ctx, mockReq); err != nil {
+		logger.Warn("failed to apply auth for credential preview, falling back to masked headers",
+			slog.String("error", err.Error()),
+		)
+		h.addMaskedAuthHeaders(headers)
 		return
 	}
 	for key, values := range mockReq.Header {

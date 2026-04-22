@@ -33,6 +33,7 @@ func (h *HTTPPolling) fetchWithPagination(ctx context.Context) ([]map[string]int
 func (h *HTTPPolling) fetchPageBased(ctx context.Context, baseEndpoint string) ([]map[string]interface{}, error) {
 	var allRecords []map[string]interface{}
 	page := 1
+	pagesFetched := 0
 
 	logger.Debug(logMsgPaginationStarted,
 		"module_type", "httpPolling",
@@ -49,6 +50,7 @@ func (h *HTTPPolling) fetchPageBased(ctx context.Context, baseEndpoint string) (
 		if err != nil {
 			return nil, err
 		}
+		pagesFetched++
 
 		logger.Debug(logMsgPaginationPageFetched,
 			"module_type", "httpPolling",
@@ -72,7 +74,7 @@ func (h *HTTPPolling) fetchPageBased(ctx context.Context, baseEndpoint string) (
 	logger.Info(logMsgPaginationCompleted,
 		"module_type", "httpPolling",
 		"pagination_type", "page",
-		"pages_fetched", page,
+		"pages_fetched", pagesFetched,
 		"total_records", len(allRecords),
 	)
 	return allRecords, nil
@@ -141,7 +143,7 @@ func (h *HTTPPolling) fetchOffsetBased(ctx context.Context, baseEndpoint string)
 func (h *HTTPPolling) fetchCursorBased(ctx context.Context, baseEndpoint string) ([]map[string]interface{}, error) {
 	var allRecords []map[string]interface{}
 	cursor := ""
-	iterations := 0
+	iterationsFetched := 0
 
 	logger.Debug(logMsgPaginationStarted,
 		"module_type", "httpPolling",
@@ -149,7 +151,7 @@ func (h *HTTPPolling) fetchCursorBased(ctx context.Context, baseEndpoint string)
 		"cursor_param", h.pagination.CursorParam,
 	)
 
-	for iterations < maxPaginationPages {
+	for iterationsFetched < maxPaginationPages {
 		var fetchURL string
 		var err error
 		if cursor == "" {
@@ -164,11 +166,12 @@ func (h *HTTPPolling) fetchCursorBased(ctx context.Context, baseEndpoint string)
 		if err != nil {
 			return nil, err
 		}
+		iterationsFetched++
 
 		logger.Debug(logMsgPaginationPageFetched,
 			"module_type", "httpPolling",
 			"pagination_type", "cursor",
-			"iteration", iterations+1,
+			"iteration", iterationsFetched,
 			"has_next_cursor", nextCursor != "",
 			"records_in_page", len(records),
 			"total_records_so_far", len(allRecords)+len(records),
@@ -179,13 +182,12 @@ func (h *HTTPPolling) fetchCursorBased(ctx context.Context, baseEndpoint string)
 			break
 		}
 		cursor = nextCursor
-		iterations++
 	}
 
 	logger.Info(logMsgPaginationCompleted,
 		"module_type", "httpPolling",
 		"pagination_type", "cursor",
-		"iterations", iterations+1,
+		"iterations", iterationsFetched,
 		"total_records", len(allRecords),
 	)
 	return allRecords, nil

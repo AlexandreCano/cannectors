@@ -10,9 +10,12 @@ import (
 )
 
 // resolveEndpointWithStaticQuery appends the module's static query params to
-// an endpoint URL. Templates are left untouched (callers apply them first).
+// an endpoint URL. Templates are left untouched (callers apply them first):
+// when there are no static query params to append, the endpoint is returned
+// verbatim so that template markers like `{{record.id}}` are not
+// percent-encoded by url.Parse / url.String round-tripping.
 func (h *HTTPRequestModule) resolveEndpointWithStaticQuery(endpoint string) string {
-	if len(h.request.QueryParams) == 0 && !HasTemplateVariables(endpoint) {
+	if len(h.request.QueryParams) == 0 {
 		return endpoint
 	}
 	parsedURL, err := url.Parse(endpoint)

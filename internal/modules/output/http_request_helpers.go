@@ -3,6 +3,7 @@ package output
 import (
 	"encoding/json"
 	"fmt"
+	"mime"
 	"strings"
 )
 
@@ -53,14 +54,18 @@ func validateJSON(data []byte) error {
 }
 
 // isJSONContentType checks whether the module's Content-Type header
-// indicates JSON payloads.
+// indicates a JSON payload. It uses mime.ParseMediaType so charset and other
+// parameters (e.g. "application/json; charset=utf-8") are handled correctly.
 func (h *HTTPRequestModule) isJSONContentType() bool {
 	contentType := h.headers[headerContentType]
 	if contentType == "" {
 		contentType = defaultContentType
 	}
-	lower := strings.ToLower(contentType)
-	return strings.HasPrefix(lower, "application/json") || strings.Contains(lower, "+json")
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	return mediaType == "application/json" || strings.HasSuffix(mediaType, "+json")
 }
 
 // truncateString truncates s to maxLen characters, appending "..." when the
@@ -92,6 +97,8 @@ func getFieldValue(record map[string]interface{}, path string) string {
 	}
 
 	switch v := current.(type) {
+	case nil:
+		return ""
 	case string:
 		return v
 	case float64:

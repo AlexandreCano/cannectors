@@ -3854,9 +3854,10 @@ func TestHTTPRequest_RetryAfter_ZeroSeconds_ImmediateRetry(t *testing.T) {
 }
 
 func TestHTTPRequest_RetryAfter_HTTPDate_RFC1123(t *testing.T) {
-	// Server returns 503 with Retry-After: HTTP-date (RFC1123 format), then succeeds
-	futureTime := time.Now().Add(2 * time.Second)
-	retryAfterDate := futureTime.Format(time.RFC1123)
+	// Server returns 503 with Retry-After: IMF-fixdate (RFC 7231 §7.1.1.1),
+	// then succeeds. http.TimeFormat enforces the mandated "GMT" suffix.
+	futureTime := time.Now().Add(2 * time.Second).UTC()
+	retryAfterDate := futureTime.Format(http.TimeFormat)
 	ts := newTestServerWithRetryAfter([]int{503, 200}, retryAfterDate)
 	defer ts.Close()
 
@@ -3945,9 +3946,10 @@ func TestHTTPRequest_RetryAfter_HTTPDate_RFC850(t *testing.T) {
 }
 
 func TestHTTPRequest_RetryAfter_HTTPDate_Past_ImmediateRetry(t *testing.T) {
-	// Server returns 503 with Retry-After: HTTP-date in the past, should retry immediately
-	pastTime := time.Now().Add(-5 * time.Second)
-	retryAfterDate := pastTime.Format(time.RFC1123)
+	// Server returns 503 with Retry-After: IMF-fixdate in the past, should
+	// retry immediately (clamped to 0).
+	pastTime := time.Now().Add(-5 * time.Second).UTC()
+	retryAfterDate := pastTime.Format(http.TimeFormat)
 	ts := newTestServerWithRetryAfter([]int{503, 200}, retryAfterDate)
 	defer ts.Close()
 

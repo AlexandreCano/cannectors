@@ -310,6 +310,29 @@ func (e *RetryExecutor) ExecuteWithCallback(
 	fn RetryFunc,
 	callback func(attempt int, err error, nextDelay time.Duration),
 ) (interface{}, error) {
+	return e.ExecuteWithHooks(ctx, fn, Hooks{}, callback)
+}
+
+// Hooks carry optional overrides that influence the RetryExecutor decisions
+// without binding errhandling to HTTP-specific types.
+type Hooks struct {
+	// ExtractRetryAfter, when non-nil, is consulted on every failed attempt.
+	// If it returns (d, true), d replaces the exponential-backoff delay for
+	// the next retry (capped by config.MaxDelayMs and clamped to 0 when
+	// negative). If it returns (_, false), the delay falls back to the
+	// computed backoff.
+	ExtractRetryAfter func(err error) (time.Duration, bool)
+}
+
+// ExecuteWithHooks behaves like ExecuteWithCallback but also honors the
+// provided Hooks. It is the primary entrypoint for callers that need to
+// override delay computation (e.g. Retry-After header).
+func (e *RetryExecutor) ExecuteWithHooks(
+	ctx context.Context,
+	fn RetryFunc,
+	hooks Hooks,
+	callback func(attempt int, err error, nextDelay time.Duration),
+) (interface{}, error) {
 	startTime := time.Now()
 	e.retryInfo = RetryInfo{
 		Delays: make([]time.Duration, 0),
@@ -322,7 +345,6 @@ func (e *RetryExecutor) ExecuteWithCallback(
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		e.retryInfo.TotalAttempts = attempt + 1
 
-		// Check context before attempt
 		select {
 		case <-ctx.Done():
 			e.retryInfo.TotalDuration = time.Since(startTime)
@@ -330,10 +352,8 @@ func (e *RetryExecutor) ExecuteWithCallback(
 		default:
 		}
 
-		// Execute function
 		result, err := fn(ctx)
 
-		// Success
 		if err == nil {
 			if callback != nil {
 				callback(attempt, nil, 0)
@@ -344,47 +364,59 @@ func (e *RetryExecutor) ExecuteWithCallback(
 			return result, nil
 		}
 
-		// Record error
 		lastErr = err
 		e.retryInfo.Errors = append(e.retryInfo.Errors, err)
 
-		// Classify error
 		classified := ClassifyError(err)
 
-		// Calculate delay (even if we won't use it, for callback)
 		var delay time.Duration
 		if attempt < e.config.MaxAttempts && classified.Retryable {
 			delay = e.config.CalculateDelay(attempt)
+			if hooks.ExtractRetryAfter != nil {
+				if override, ok := hooks.ExtractRetryAfter(err); ok {
+					delay = clampDelay(override, e.config.MaxDelayMs)
+				}
+			}
 			e.retryInfo.Delays = append(e.retryInfo.Delays, delay)
 		}
 
-		// Call callback
 		if callback != nil {
 			callback(attempt, err, delay)
 		}
 
-		// Don't retry fatal errors
 		if !classified.Retryable {
 			e.retryInfo.TotalDuration = time.Since(startTime)
 			return nil, err
 		}
 
-		// Don't retry if we've exhausted attempts
 		if attempt >= e.config.MaxAttempts {
 			break
 		}
 
-		// Wait before retry
 		select {
 		case <-ctx.Done():
 			e.retryInfo.TotalDuration = time.Since(startTime)
 			return nil, ClassifyNetworkError(ctx.Err())
 		case <-time.After(delay):
-			// Continue to next attempt
 		}
 	}
 
 	e.retryInfo.RetryCount = e.retryInfo.TotalAttempts - 1
 	e.retryInfo.TotalDuration = time.Since(startTime)
 	return nil, lastErr
+}
+
+// clampDelay constrains a Retry-After-derived delay to [0, maxDelayMs].
+func clampDelay(d time.Duration, maxDelayMs int) time.Duration {
+	if d < 0 {
+		return 0
+	}
+	if maxDelayMs <= 0 {
+		return d
+	}
+	maxDelay := time.Duration(maxDelayMs) * time.Millisecond
+	if d > maxDelay {
+		return maxDelay
+	}
+	return d
 }

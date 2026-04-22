@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cannectors/runtime/internal/errhandling"
+	"github.com/cannectors/runtime/internal/httpclient"
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
@@ -146,10 +147,10 @@ func TestNewHTTPRequestFromConfig_InvalidMethod(t *testing.T) {
 }
 
 func TestNewHTTPRequestFromConfig_RetryHintFromBody_TooLong(t *testing.T) {
-	// Create an expression that exceeds MaxRetryHintExpressionLength
+	// Create an expression that exceeds httpclient.MaxRetryHintExpressionLength
 	longExpression := strings.Repeat("body.field == true && ", 1000) + "body.field == true"
-	if len(longExpression) <= MaxRetryHintExpressionLength {
-		t.Fatalf("test expression too short: %d (need > %d)", len(longExpression), MaxRetryHintExpressionLength)
+	if len(longExpression) <= httpclient.MaxRetryHintExpressionLength {
+		t.Fatalf("test expression too short: %d (need > %d)", len(longExpression), httpclient.MaxRetryHintExpressionLength)
 	}
 
 	config := newModuleConfig(map[string]interface{}{
@@ -1643,9 +1644,9 @@ func TestHTTPRequest_Send_ClientError400(t *testing.T) {
 	}
 
 	// Check error type
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 	if httpErr.StatusCode != 400 {
 		t.Errorf("expected status 400, got %d", httpErr.StatusCode)
@@ -1672,9 +1673,9 @@ func TestHTTPRequest_Send_ClientError401(t *testing.T) {
 		t.Fatal("expected error for 401 status")
 	}
 
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 	if httpErr.StatusCode != 401 {
 		t.Errorf("expected status 401, got %d", httpErr.StatusCode)
@@ -1701,9 +1702,9 @@ func TestHTTPRequest_Send_ClientError404(t *testing.T) {
 		t.Fatal("expected error for 404 status")
 	}
 
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 	if httpErr.StatusCode != 404 {
 		t.Errorf("expected status 404, got %d", httpErr.StatusCode)
@@ -1730,9 +1731,9 @@ func TestHTTPRequest_Send_ClientError422(t *testing.T) {
 		t.Fatal("expected error for 422 status")
 	}
 
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 	if httpErr.StatusCode != 422 {
 		t.Errorf("expected status 422, got %d", httpErr.StatusCode)
@@ -1766,9 +1767,9 @@ func TestHTTPRequest_Send_ServerError500(t *testing.T) {
 		t.Fatal("expected error for 500 status")
 	}
 
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 	if httpErr.StatusCode != 500 {
 		t.Errorf("expected status 500, got %d", httpErr.StatusCode)
@@ -1798,9 +1799,9 @@ func TestHTTPRequest_Send_ServerError503(t *testing.T) {
 		t.Fatal("expected error for 503 status")
 	}
 
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 	if httpErr.StatusCode != 503 {
 		t.Errorf("expected status 503, got %d", httpErr.StatusCode)
@@ -1880,9 +1881,9 @@ func TestHTTPRequest_Send_HTTPErrorDetails(t *testing.T) {
 		t.Fatal("expected error for 400 status")
 	}
 
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 
 	// Verify error contains all context
@@ -2009,9 +2010,9 @@ func TestHTTPRequest_Send_RetryExhausted(t *testing.T) {
 		t.Fatal("expected error after exhausting retries")
 	}
 
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 	if httpErr.StatusCode != 503 {
 		t.Errorf("expected status 503, got %d", httpErr.StatusCode)
@@ -2354,9 +2355,9 @@ func TestHTTPRequest_Send_ErrorContainsResponseDetails(t *testing.T) {
 		t.Fatal("expected error")
 	}
 
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 
 	// Verify response body is captured for debugging

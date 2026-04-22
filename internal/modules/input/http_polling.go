@@ -10,11 +10,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"time"
+
+	"github.com/expr-lang/expr/vm"
 
 	"github.com/cannectors/runtime/internal/auth"
 	"github.com/cannectors/runtime/internal/errhandling"
+	"github.com/cannectors/runtime/internal/httpclient"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/persistence"
@@ -49,18 +51,6 @@ var (
 	ErrInvalidDataField = errors.New("dataField does not contain an array")
 )
 
-// HTTPError represents an HTTP error with status code and context
-type HTTPError struct {
-	StatusCode int
-	Status     string
-	Endpoint   string
-	Message    string
-}
-
-func (e *HTTPError) Error() string {
-	return fmt.Sprintf("http error %d (%s) from %s: %s", e.StatusCode, e.Status, e.Endpoint, e.Message)
-}
-
 // HTTPPollingInputConfig holds typed configuration for the HTTP polling module.
 type HTTPPollingInputConfig struct {
 	connector.ModuleBase
@@ -76,15 +66,16 @@ type HTTPPollingInputConfig struct {
 // State persistence can be configured to track last timestamp and/or last ID
 // for reliable resumption after restarts.
 type HTTPPolling struct {
-	endpoint      string
-	headers       map[string]string
-	timeout       time.Duration
-	dataField     string
-	pagination    *moduleconfig.PaginationConfig
-	authHandler   auth.Handler
-	client        *http.Client
-	retryConfig   connector.RetryConfig
-	lastRetryInfo *connector.RetryInfo
+	endpoint         string
+	headers          map[string]string
+	timeout          time.Duration
+	dataField        string
+	pagination       *moduleconfig.PaginationConfig
+	authHandler      auth.Handler
+	client           *httpclient.Client
+	retryConfig      connector.RetryConfig
+	retryHintProgram *vm.Program // Compiled retryHintFromBody expression (may be nil).
+	lastRetryInfo    *connector.RetryInfo
 
 	// OAuth2 token invalidation tracking
 	oauth2Invalidated bool
@@ -123,10 +114,15 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 	timeout := connector.GetTimeoutDuration(cfg.TimeoutMs, defaultTimeout)
 	retryConfig := moduleconfig.ToRetryConfig(cfg.Retry)
 
-	client := createHTTPClient(timeout)
-	authHandler, err := auth.NewHandler(cfg.Authentication, client)
+	client := httpclient.NewClient(timeout)
+	authHandler, err := auth.NewHandler(cfg.Authentication, client.Client)
 	if err != nil {
 		return nil, fmt.Errorf("creating auth handler: %w", err)
+	}
+
+	retryHintProgram, err := httpclient.CompileRetryHint(retryConfig.RetryHintFromBody)
+	if err != nil {
+		return nil, err
 	}
 
 	h := &HTTPPolling{
@@ -138,6 +134,7 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 		authHandler:       authHandler,
 		client:            client,
 		retryConfig:       retryConfig,
+		retryHintProgram:  retryHintProgram,
 		persistenceConfig: cfg.StatePersistence,
 	}
 
@@ -162,14 +159,6 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 	return h, nil
 }
 
-// createHTTPClient creates an HTTP client with the configured timeout.
-func createHTTPClient(timeout time.Duration) *http.Client {
-	return &http.Client{
-		Timeout: timeout,
-	}
-}
-
-// createAuthHandler creates an authentication handler if configured.
 // logModuleCreation logs module creation details.
 func logModuleCreation(endpoint string, timeout time.Duration, authHandler auth.Handler, pagination *moduleconfig.PaginationConfig, retryConfig connector.RetryConfig) {
 	logger.Debug("http polling module created",
@@ -255,36 +244,7 @@ func (h *HTTPPolling) Fetch(ctx context.Context) ([]map[string]interface{}, erro
 	return records, nil
 }
 
-// doRequest executes an HTTP GET request and returns the raw response body
-func (h *HTTPPolling) doRequest(ctx context.Context, endpoint string) ([]byte, error) {
-	requestStart := time.Now()
-	logRequestStart(endpoint)
-
-	req, err := h.buildRequest(ctx, endpoint)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := h.executeRequest(req, endpoint, requestStart)
-	if err != nil {
-		return nil, err
-	}
-	defer closeResponseBody(resp, endpoint)
-
-	body, err := readResponseBody(resp, endpoint)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := h.handleHTTPError(resp, body, endpoint, requestStart); err != nil {
-		return nil, err
-	}
-
-	logRequestSuccess(endpoint, resp.StatusCode, requestStart, len(body))
-	return body, nil
-}
-
-// buildRequest creates and configures the HTTP request.
+// buildRequest creates and configures the HTTP GET request.
 func (h *HTTPPolling) buildRequest(ctx context.Context, endpoint string) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -296,8 +256,12 @@ func (h *HTTPPolling) buildRequest(ctx context.Context, endpoint string) (*http.
 		return nil, fmt.Errorf("creating http request: %w", err)
 	}
 
-	setRequestHeaders(req)
+	req.Header.Set("User-Agent", defaultUserAgent)
+	validated := make(map[string]string, len(h.headers))
 	for key, value := range h.headers {
+		httpclient.TryAddValidHeader(validated, key, value)
+	}
+	for key, value := range validated {
 		req.Header.Set(key, value)
 	}
 
@@ -309,220 +273,134 @@ func (h *HTTPPolling) buildRequest(ctx context.Context, endpoint string) (*http.
 		)
 		return nil, fmt.Errorf("applying authentication: %w", err)
 	}
-
 	return req, nil
 }
 
-// setRequestHeaders sets default headers on the request.
-func setRequestHeaders(req *http.Request) {
-	req.Header.Set("User-Agent", defaultUserAgent)
-}
-
-// executeRequest executes the HTTP request and handles network errors.
-func (h *HTTPPolling) executeRequest(req *http.Request, endpoint string, startTime time.Time) (*http.Response, error) {
-	resp, err := h.client.Do(req)
-	requestDuration := time.Since(startTime)
-
-	if err != nil {
-		logger.Error("http request failed",
-			"module_type", "httpPolling",
-			"endpoint", endpoint,
-			"method", http.MethodGet,
-			"duration", requestDuration,
-			"error", err.Error(),
-		)
-		return nil, errhandling.ClassifyNetworkError(err)
-	}
-
-	return resp, nil
-}
-
-// closeResponseBody safely closes the response body.
-func closeResponseBody(resp *http.Response, endpoint string) {
-	if closeErr := resp.Body.Close(); closeErr != nil {
-		logger.Warn("failed to close response body",
-			"endpoint", endpoint,
-			"error", closeErr.Error(),
-		)
-	}
-}
-
-// readResponseBody reads the response body.
-func readResponseBody(resp *http.Response, endpoint string) ([]byte, error) {
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		logger.Error("response body read failed",
-			"module_type", "httpPolling",
-			"endpoint", endpoint,
-			"status_code", resp.StatusCode,
-			"error", err.Error(),
-		)
-		return nil, fmt.Errorf("reading response body: %w", err)
-	}
-	return body, nil
-}
-
-// handleHTTPError handles HTTP error responses (status >= 400).
-func (h *HTTPPolling) handleHTTPError(resp *http.Response, body []byte, endpoint string, startTime time.Time) error {
-	if resp.StatusCode < 400 {
-		return nil
-	}
-
-	bodySnippet := truncateBodyForLogging(body)
-	requestDuration := time.Since(startTime)
-
-	logger.Error("http error response",
-		"module_type", "httpPolling",
-		"endpoint", endpoint,
-		"method", http.MethodGet,
-		"status_code", resp.StatusCode,
-		"status", resp.Status,
-		"duration", requestDuration,
-		"response_body", bodySnippet,
-	)
-
-	h.handleOAuth2Unauthorized(resp, endpoint)
-
-	classifiedErr := errhandling.ClassifyHTTPStatus(resp.StatusCode, bodySnippet)
-	classifiedErr.OriginalErr = &HTTPError{
-		StatusCode: resp.StatusCode,
-		Status:     resp.Status,
-		Endpoint:   endpoint,
-		Message:    string(body),
-	}
-	return classifiedErr
-}
-
-// truncateBodyForLogging truncates response body to max 500 chars for logging.
-func truncateBodyForLogging(body []byte) string {
-	bodySnippet := string(body)
-	if len(bodySnippet) > 500 {
-		return bodySnippet[:500] + "..."
-	}
-	return bodySnippet
-}
-
-// handleOAuth2Unauthorized handles 401 with OAuth2 by invalidating the token.
-// Only invalidates once per Fetch call to prevent infinite retry loops
-// when credentials are permanently invalid.
-func (h *HTTPPolling) handleOAuth2Unauthorized(resp *http.Response, endpoint string) {
-	if resp.StatusCode != http.StatusUnauthorized || h.authHandler == nil {
-		return
-	}
-
-	invalidator, ok := h.authHandler.(interface{ InvalidateToken() })
-	if !ok {
-		return
-	}
-
-	if h.oauth2Invalidated {
-		logger.Warn("401 Unauthorized persists after OAuth2 token refresh, likely invalid credentials",
-			"endpoint", endpoint,
-		)
-		return
-	}
-
-	logger.Debug("401 Unauthorized with OAuth2, invalidating cached token",
-		"endpoint", endpoint,
-	)
-	invalidator.InvalidateToken()
-	h.oauth2Invalidated = true
-}
-
-// logRequestStart logs the start of an HTTP request.
-func logRequestStart(endpoint string) {
-	logger.Debug("http request started",
-		"module_type", "httpPolling",
-		"endpoint", endpoint,
-		"method", http.MethodGet,
-	)
-}
-
-// logRequestSuccess logs a successful HTTP request.
-func logRequestSuccess(endpoint string, statusCode int, startTime time.Time, bodySize int) {
-	logger.Debug("http request completed",
-		"module_type", "httpPolling",
-		"endpoint", endpoint,
-		"method", http.MethodGet,
-		"status_code", statusCode,
-		"duration", time.Since(startTime),
-		"response_size", bodySize,
-	)
-}
-
-// doRequestWithRetry executes an HTTP request with retry logic.
-// It uses the RetryExecutor to retry transient errors.
+// doRequestWithRetry performs an HTTP GET with the module's retry policy via
+// httpclient.DoWithRetry. Honors Retry-After (when UseRetryAfterHeader is
+// enabled) and retryHintFromBody (when configured).
 func (h *HTTPPolling) doRequestWithRetry(ctx context.Context, endpoint string) ([]byte, error) {
-	executor := errhandling.NewRetryExecutor(h.retryConfig)
+	startTime := time.Now()
+	req, err := h.buildRequest(ctx, endpoint)
+	if err != nil {
+		return nil, err
+	}
 
-	result, err := executor.ExecuteWithCallback(ctx,
-		func(ctx context.Context) (interface{}, error) {
-			return h.doRequest(ctx, endpoint)
-		},
-		func(attempt int, err error, nextDelay time.Duration) {
-			if err != nil && nextDelay > 0 {
+	var delaysMs []int64
+	hooks := httpclient.RetryHooks{
+		OnRetry: func(attempt int, retryErr error, nextDelay time.Duration) {
+			if retryErr == nil {
+				return
+			}
+			if nextDelay > 0 {
+				delaysMs = append(delaysMs, nextDelay.Milliseconds())
 				logger.Info("retrying http request",
 					"module_type", "httpPolling",
 					"endpoint", endpoint,
 					"attempt", attempt+1,
 					"max_attempts", h.retryConfig.MaxAttempts+1,
 					"next_delay", nextDelay.String(),
-					"error", err.Error(),
-					"error_category", errhandling.GetErrorCategory(err),
-					"retryable", errhandling.IsRetryable(err),
+					"error", retryErr.Error(),
+					"error_category", errhandling.GetErrorCategory(retryErr),
 				)
 			}
 		},
-	)
+		ShouldRetryBody: func(body []byte) (bool, bool) {
+			return httpclient.EvalRetryHint(h.retryHintProgram, body)
+		},
+		OnAttemptFailure: func(_ int, resp *http.Response, _ error) bool {
+			return h.handleOAuth2Unauthorized(resp, endpoint)
+		},
+	}
 
-	info := executor.GetRetryInfo()
-	h.lastRetryInfo = retryInfoFromErrhandling(info)
+	resp, err := h.client.DoWithRetry(ctx, req, h.retryConfig, hooks)
+	if resp != nil {
+		defer func() {
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				logger.Warn("failed to close response body",
+					"endpoint", endpoint,
+					"error", closeErr.Error(),
+				)
+			}
+		}()
+	}
+	if len(delaysMs) > 0 {
+		h.lastRetryInfo = &connector.RetryInfo{
+			TotalAttempts: len(delaysMs) + 1,
+			RetryCount:    len(delaysMs),
+			RetryDelaysMs: delaysMs,
+		}
+	} else {
+		h.lastRetryInfo = nil
+	}
 
 	if err != nil {
-		if info.RetryCount > 0 {
+		if len(delaysMs) > 0 {
 			logger.Error("http request failed after retries",
 				"module_type", "httpPolling",
 				"endpoint", endpoint,
-				"total_attempts", info.TotalAttempts,
-				"total_duration", info.TotalDuration.String(),
+				"total_attempts", len(delaysMs)+1,
+				"total_duration", time.Since(startTime).String(),
 				"error", err.Error(),
 			)
 		}
 		return nil, err
 	}
 
-	body, ok := result.([]byte)
-	if !ok {
-		return nil, fmt.Errorf("unexpected result type from retry executor")
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, fmt.Errorf("reading response body: %w", readErr)
 	}
 
-	if info.RetryCount > 0 {
+	if len(delaysMs) > 0 {
 		logger.Info("http request succeeded after retries",
 			"module_type", "httpPolling",
 			"endpoint", endpoint,
-			"total_attempts", info.TotalAttempts,
-			"retry_count", info.RetryCount,
-			"total_duration", info.TotalDuration.String(),
+			"total_attempts", len(delaysMs)+1,
+			"retry_count", len(delaysMs),
+			"total_duration", time.Since(startTime).String(),
 		)
 	}
-
+	logger.Debug("http request completed",
+		"module_type", "httpPolling",
+		"endpoint", endpoint,
+		"method", http.MethodGet,
+		"status_code", resp.StatusCode,
+		"response_size", len(body),
+	)
 	return body, nil
 }
 
-// GetRetryInfo returns retry information from the last Fetch request (RetryInfoProvider).
-func (h *HTTPPolling) GetRetryInfo() *connector.RetryInfo {
-	return h.lastRetryInfo
+// handleOAuth2Unauthorized invalidates the cached OAuth2 token on 401 the
+// first time it is seen during a Fetch cycle and signals the retry loop to
+// retry once with a fresh token. Subsequent 401s return false to prevent
+// infinite loops when credentials are actually invalid.
+func (h *HTTPPolling) handleOAuth2Unauthorized(resp *http.Response, endpoint string) bool {
+	if resp == nil || resp.StatusCode != http.StatusUnauthorized || h.authHandler == nil {
+		return false
+	}
+	invalidator, ok := h.authHandler.(interface{ InvalidateToken() })
+	if !ok {
+		return false
+	}
+	if h.oauth2Invalidated {
+		logger.Warn("401 Unauthorized persists after OAuth2 token refresh, likely invalid credentials",
+			"endpoint", endpoint,
+		)
+		return false
+	}
+	logger.Debug("401 Unauthorized with OAuth2, invalidating cached token",
+		"endpoint", endpoint,
+	)
+	invalidator.InvalidateToken()
+	h.oauth2Invalidated = true
+	return true
 }
 
-func retryInfoFromErrhandling(info errhandling.RetryInfo) *connector.RetryInfo {
-	out := &connector.RetryInfo{
-		TotalAttempts: info.TotalAttempts,
-		RetryCount:    info.RetryCount,
-	}
-	for _, d := range info.Delays {
-		out.RetryDelaysMs = append(out.RetryDelaysMs, d.Milliseconds())
-	}
-	return out
+// GetRetryInfo returns retry information from the last Fetch request
+// (RetryInfoProvider).
+func (h *HTTPPolling) GetRetryInfo() *connector.RetryInfo {
+	return h.lastRetryInfo
 }
 
 // fetchSingle executes a single HTTP GET request and returns the records
@@ -602,363 +480,10 @@ func (h *HTTPPolling) applyAuthentication(ctx context.Context, req *http.Request
 	return h.authHandler.ApplyAuth(ctx, req)
 }
 
-// fetchWithPagination handles paginated requests
-func (h *HTTPPolling) fetchWithPagination(ctx context.Context) ([]map[string]interface{}, error) {
-	// Get base endpoint with state params
-	baseEndpoint, err := h.buildEndpointWithState(h.endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("building endpoint with state: %w", err)
-	}
-
-	switch h.pagination.Type {
-	case "page":
-		return h.fetchPageBased(ctx, baseEndpoint)
-	case "offset":
-		return h.fetchOffsetBased(ctx, baseEndpoint)
-	case "cursor":
-		return h.fetchCursorBased(ctx, baseEndpoint)
-	default:
-		return h.fetchSingle(ctx, baseEndpoint)
-	}
-}
-
-// fetchPageBased handles page-based pagination
-func (h *HTTPPolling) fetchPageBased(ctx context.Context, baseEndpoint string) ([]map[string]interface{}, error) {
-	var allRecords []map[string]interface{}
-	page := 1
-
-	logger.Debug(logMsgPaginationStarted,
-		"module_type", "httpPolling",
-		"pagination_type", "page",
-		"page_param", h.pagination.PageParam,
-	)
-
-	for page <= maxPaginationPages {
-		// Build URL with page parameter
-		pageURL, err := h.buildPaginatedURLFrom(baseEndpoint, h.pagination.PageParam, strconv.Itoa(page))
-		if err != nil {
-			return nil, err
-		}
-
-		// Fetch page
-		records, totalPages, err := h.fetchPageWithMeta(ctx, pageURL, h.pagination.TotalPagesField)
-		if err != nil {
-			return nil, err
-		}
-
-		logger.Debug(logMsgPaginationPageFetched,
-			"module_type", "httpPolling",
-			"pagination_type", "page",
-			"current_page", page,
-			"total_pages", totalPages,
-			"records_in_page", len(records),
-			"total_records_so_far", len(allRecords)+len(records),
-		)
-
-		allRecords = append(allRecords, records...)
-
-		// Check if we've reached the last page
-		if totalPages > 0 && page >= totalPages {
-			break
-		}
-		if len(records) == 0 {
-			break
-		}
-
-		page++
-	}
-
-	logger.Info(logMsgPaginationCompleted,
-		"module_type", "httpPolling",
-		"pagination_type", "page",
-		"pages_fetched", page,
-		"total_records", len(allRecords),
-	)
-
-	return allRecords, nil
-}
-
-// fetchAndParseObject fetches an endpoint and parses response as JSON object.
-// Returns the parsed JSON object or an error if parsing fails.
-func (h *HTTPPolling) fetchAndParseObject(ctx context.Context, endpoint string) (map[string]interface{}, error) {
-	body, err := h.doRequest(ctx, endpoint)
-	if err != nil {
-		return nil, err
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrJSONParse, err)
-	}
-	return result, nil
-}
-
-// extractIntField extracts an integer value from a JSON object field.
-// Returns 0 if the field is missing, empty, or not a numeric type.
-func extractIntField(obj map[string]interface{}, field string) int {
-	if field == "" {
-		return 0
-	}
-	if val, ok := obj[field].(float64); ok {
-		return int(val)
-	}
-	return 0
-}
-
-// extractStringField extracts a string value from a JSON object field.
-// Returns empty string if the field is missing or not a string type.
-func extractStringField(obj map[string]interface{}, field string) string {
-	if field == "" {
-		return ""
-	}
-	if val, ok := obj[field].(string); ok {
-		return val
-	}
-	return ""
-}
-
-// extractRecordsFromObject extracts records from a JSON object using dataField or common field names
-func (h *HTTPPolling) extractRecordsFromObject(obj map[string]interface{}) ([]map[string]interface{}, error) {
-	if h.dataField != "" {
-		return h.extractDataFromField(obj, h.dataField)
-	}
-
-	// Try common field names
-	commonFields := []string{"data", "items", "results", "records"}
-	for _, field := range commonFields {
-		if data, ok := obj[field]; ok {
-			if converted, err := h.convertToRecords(data); err == nil {
-				return converted, nil
-			}
-		}
-	}
-
-	// No field found - pagination requires dataField when response is object
-	// Include attempted field names in error message for better debugging
-	return nil, fmt.Errorf("%w: pagination requires dataField when response is object (tried common fields: %v)", ErrInvalidDataField, commonFields)
-}
-
-// fetchPageWithMeta fetches a page and extracts metadata
-func (h *HTTPPolling) fetchPageWithMeta(ctx context.Context, endpoint, totalPagesField string) ([]map[string]interface{}, int, error) {
-	obj, err := h.fetchAndParseObject(ctx, endpoint)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	records, err := h.extractRecordsFromObject(obj)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return records, extractIntField(obj, totalPagesField), nil
-}
-
-// fetchOffsetBased handles offset-based pagination
-func (h *HTTPPolling) fetchOffsetBased(ctx context.Context, baseEndpoint string) ([]map[string]interface{}, error) {
-	var allRecords []map[string]interface{}
-	offset := 0
-	limit := h.pagination.Limit
-	if limit == 0 {
-		limit = 100 // Default limit
-	}
-	pageNum := 0
-
-	logger.Debug(logMsgPaginationStarted,
-		"module_type", "httpPolling",
-		"pagination_type", "offset",
-		"offset_param", h.pagination.OffsetParam,
-		"limit_param", h.pagination.LimitParam,
-		"limit", limit,
-	)
-
-	for offset < maxPaginationPages*limit {
-		pageNum++
-		// Build URL with offset and limit parameters
-		offsetURL, err := h.buildPaginatedURLMultiFrom(baseEndpoint, map[string]string{
-			h.pagination.OffsetParam: strconv.Itoa(offset),
-			h.pagination.LimitParam:  strconv.Itoa(limit),
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		// Fetch page
-		records, total, err := h.fetchOffsetWithMeta(ctx, offsetURL, h.pagination.TotalField)
-		if err != nil {
-			return nil, err
-		}
-
-		logger.Debug(logMsgPaginationPageFetched,
-			"module_type", "httpPolling",
-			"pagination_type", "offset",
-			"current_offset", offset,
-			"limit", limit,
-			"total_available", total,
-			"records_in_page", len(records),
-			"total_records_so_far", len(allRecords)+len(records),
-		)
-
-		allRecords = append(allRecords, records...)
-
-		// Check if we've fetched all records
-		if total > 0 && len(allRecords) >= total {
-			break
-		}
-		if len(records) == 0 || len(records) < limit {
-			break
-		}
-
-		offset += limit
-	}
-
-	logger.Info(logMsgPaginationCompleted,
-		"module_type", "httpPolling",
-		"pagination_type", "offset",
-		"pages_fetched", pageNum,
-		"total_records", len(allRecords),
-	)
-
-	return allRecords, nil
-}
-
-// fetchOffsetWithMeta fetches with offset pagination and extracts metadata
-func (h *HTTPPolling) fetchOffsetWithMeta(ctx context.Context, endpoint, totalField string) ([]map[string]interface{}, int, error) {
-	obj, err := h.fetchAndParseObject(ctx, endpoint)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	records, err := h.extractRecordsFromObject(obj)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return records, extractIntField(obj, totalField), nil
-}
-
-// fetchCursorBased handles cursor-based pagination
-func (h *HTTPPolling) fetchCursorBased(ctx context.Context, baseEndpoint string) ([]map[string]interface{}, error) {
-	var allRecords []map[string]interface{}
-	cursor := ""
-	iterations := 0
-
-	logger.Debug(logMsgPaginationStarted,
-		"module_type", "httpPolling",
-		"pagination_type", "cursor",
-		"cursor_param", h.pagination.CursorParam,
-	)
-
-	for iterations < maxPaginationPages {
-		// Build URL with cursor parameter (only if we have a cursor)
-		var fetchURL string
-		var err error
-		if cursor == "" {
-			fetchURL = baseEndpoint
-		} else {
-			fetchURL, err = h.buildPaginatedURLFrom(baseEndpoint, h.pagination.CursorParam, cursor)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		// Fetch page
-		records, nextCursor, err := h.fetchCursorWithMeta(ctx, fetchURL, h.pagination.NextCursorField)
-		if err != nil {
-			return nil, err
-		}
-
-		logger.Debug(logMsgPaginationPageFetched,
-			"module_type", "httpPolling",
-			"pagination_type", "cursor",
-			"iteration", iterations+1,
-			"has_next_cursor", nextCursor != "",
-			"records_in_page", len(records),
-			"total_records_so_far", len(allRecords)+len(records),
-		)
-
-		allRecords = append(allRecords, records...)
-
-		// Check if we've reached the end
-		if nextCursor == "" {
-			break
-		}
-
-		cursor = nextCursor
-		iterations++
-	}
-
-	logger.Info(logMsgPaginationCompleted,
-		"module_type", "httpPolling",
-		"pagination_type", "cursor",
-		"iterations", iterations+1,
-		"total_records", len(allRecords),
-	)
-
-	return allRecords, nil
-}
-
-// fetchCursorWithMeta fetches with cursor pagination and extracts next cursor
-func (h *HTTPPolling) fetchCursorWithMeta(ctx context.Context, endpoint, nextCursorField string) ([]map[string]interface{}, string, error) {
-	obj, err := h.fetchAndParseObject(ctx, endpoint)
-	if err != nil {
-		return nil, "", err
-	}
-
-	records, err := h.extractRecordsFromObject(obj)
-	if err != nil {
-		return nil, "", err
-	}
-
-	return records, extractStringField(obj, nextCursorField), nil
-}
-
-// buildPaginatedURLFrom adds a query parameter to the given base URL.
-// Returns the modified URL or an error if the URL cannot be parsed.
-func (h *HTTPPolling) buildPaginatedURLFrom(baseURL, param, value string) (string, error) {
-	parsedURL, err := url.Parse(baseURL)
-	if err != nil {
-		return "", fmt.Errorf(errMsgParsingEndpointURL, err)
-	}
-
-	q := parsedURL.Query()
-	q.Set(param, value)
-	parsedURL.RawQuery = q.Encode()
-
-	return parsedURL.String(), nil
-}
-
-// buildPaginatedURLMultiFrom adds multiple query parameters to the given base URL.
-// Returns the modified URL or an error if the URL cannot be parsed.
-func (h *HTTPPolling) buildPaginatedURLMultiFrom(baseURL string, params map[string]string) (string, error) {
-	parsedURL, err := url.Parse(baseURL)
-	if err != nil {
-		return "", fmt.Errorf(errMsgParsingEndpointURL, err)
-	}
-
-	q := parsedURL.Query()
-	for param, value := range params {
-		q.Set(param, value)
-	}
-	parsedURL.RawQuery = q.Encode()
-
-	return parsedURL.String(), nil
-}
-
-// Close releases any resources held by the HTTP polling module.
-// Closes idle connections in the HTTP client's connection pool to release network resources.
+// Close releases any resources held by the HTTP polling module, closing
+// idle connections in the connection pool.
 func (h *HTTPPolling) Close() error {
-	if h.client != nil {
-		// When h.client.Transport is nil, http.Client uses http.DefaultTransport internally.
-		// To ensure we still close idle connections, fall back to http.DefaultTransport.
-		rt := h.client.Transport
-		if rt == nil {
-			rt = http.DefaultTransport
-		}
-
-		if transport, ok := rt.(*http.Transport); ok {
-			transport.CloseIdleConnections()
-		}
-	}
+	h.client.CloseIdleConnections()
 	return nil
 }
 

@@ -119,24 +119,10 @@ func (e *HTTPCallError) Error() string {
 	return e.Message
 }
 
-// sanitizeURL removes sensitive information from URLs for error messages.
-// Masks query parameters and fragments to prevent exposing credentials or tokens.
-func sanitizeURL(urlStr string) string {
-	parsed, err := url.Parse(urlStr)
-	if err != nil {
-		// If parsing fails, return a safe placeholder
-		return "[invalid URL]"
-	}
-	// Remove query parameters and fragments
-	parsed.RawQuery = ""
-	parsed.Fragment = ""
-	return parsed.String()
-}
-
 // newHTTPCallError creates an HTTPCallError with context.
 func newHTTPCallError(code, message string, recordIdx int, endpoint string, statusCode int, keyValue string) *HTTPCallError {
 	// Sanitize endpoint URL in error message to avoid exposing sensitive data
-	sanitizedEndpoint := sanitizeURL(endpoint)
+	sanitizedEndpoint := httpclient.SanitizeURL(endpoint)
 	return &HTTPCallError{
 		Code:        code,
 		Message:     message,

@@ -3192,6 +3192,117 @@ func TestHTTPRequest_PreviewRequest_ShowCredentials_APIKey(t *testing.T) {
 	}
 }
 
+func TestHTTPRequest_PreviewRequest_ShowCredentials_OAuth2_NoNetworkWhenNoCachedToken(t *testing.T) {
+	// Previews must never trigger a real token fetch, even with ShowCredentials=true.
+	// When no token is cached we fall back to masked headers rather than hitting
+	// tokenUrl (which could leak to a real server, have rate-limit cost, etc.).
+	tokenRequestCount := 0
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		tokenRequestCount++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token": "should-not-be-fetched", "token_type": "Bearer", "expires_in": 3600}`))
+	}))
+	defer tokenServer.Close()
+
+	config := newModuleConfigWithAuth(
+		map[string]interface{}{
+			"endpoint": "https://api.example.com/data",
+			"method":   "POST",
+		},
+		"oauth2",
+		toJSON(t, map[string]string{
+			"tokenUrl":     tokenServer.URL,
+			"clientId":     "test-client-id",
+			"clientSecret": "test-client-secret",
+		}),
+	)
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{{"test": "data"}}
+
+	previews, err := module.PreviewRequest(records, PreviewOptions{ShowCredentials: true})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if tokenRequestCount != 0 {
+		t.Errorf("preview with ShowCredentials=true must not fetch OAuth2 token, but %d requests hit tokenUrl", tokenRequestCount)
+	}
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+
+	authHeader := previews[0].Headers["Authorization"]
+	if authHeader == "" {
+		t.Fatal("Authorization header should be present (masked fallback)")
+	}
+	if !strings.Contains(authHeader, "[MASKED") {
+		t.Errorf("Authorization should fall back to masked when OAuth2 has no cached token, got: %s", authHeader)
+	}
+	if strings.Contains(authHeader, "should-not-be-fetched") {
+		t.Errorf("Authorization must NOT contain fetched token, got: %s", authHeader)
+	}
+}
+
+func TestHTTPRequest_PreviewRequest_ShowCredentials_OAuth2_UsesCachedToken(t *testing.T) {
+	// After a real Send() has primed the OAuth2 handler's token cache, previews
+	// can show the cached token without triggering network I/O.
+	tokenRequestCount := 0
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		tokenRequestCount++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token": "cached-oauth2-token", "token_type": "Bearer", "expires_in": 3600}`))
+	}))
+	defer tokenServer.Close()
+
+	apiServer := newTestServer()
+	defer apiServer.Close()
+
+	config := newModuleConfigWithAuth(
+		map[string]interface{}{
+			"endpoint": apiServer.URL + "/api/data",
+			"method":   "POST",
+		},
+		"oauth2",
+		toJSON(t, map[string]string{
+			"tokenUrl":     tokenServer.URL,
+			"clientId":     "test-client-id",
+			"clientSecret": "test-client-secret",
+		}),
+	)
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	// Prime the OAuth2 cache with a real Send.
+	if _, sendErr := module.Send(context.Background(), []map[string]interface{}{{"test": "data"}}); sendErr != nil {
+		t.Fatalf("priming Send() failed: %v", sendErr)
+	}
+	if tokenRequestCount != 1 {
+		t.Fatalf("expected 1 token fetch from priming Send, got %d", tokenRequestCount)
+	}
+
+	// Preview must now use the cached token without re-fetching.
+	previews, err := module.PreviewRequest([]map[string]interface{}{{"test": "data"}}, PreviewOptions{ShowCredentials: true})
+	if err != nil {
+		t.Fatalf("preview failed: %v", err)
+	}
+	if tokenRequestCount != 1 {
+		t.Errorf("preview must not refetch token; tokenRequestCount=%d", tokenRequestCount)
+	}
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+	if got := previews[0].Headers["Authorization"]; got != "Bearer cached-oauth2-token" {
+		t.Errorf("expected cached token in preview, got: %s", got)
+	}
+}
+
 func TestHTTPRequest_PreviewRequest_EmptyRecords(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
 		"endpoint": "https://api.example.com/data",

@@ -3,11 +3,13 @@ package output
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/cannectors/runtime/internal/auth"
 	"github.com/cannectors/runtime/internal/logger"
 )
 
@@ -109,9 +111,13 @@ func (h *HTTPRequestModule) addMaskedAuthHeaders(headers map[string]string) {
 
 // addUnmaskedAuthHeaders adds authentication headers with real values by
 // running a dry apply through the auth handler. WARNING: exposes credentials.
-// If the dry apply fails (mock request construction or auth handler error),
-// the function falls back to addMaskedAuthHeaders so the preview still shows
-// the auth intent rather than silently omitting the header.
+//
+// To keep previews side-effect-free, handlers that implement
+// auth.PreviewAuthHandler are preferred. That interface guarantees no network
+// I/O (e.g., OAuth2 returns ErrPreviewUnavailable if no token is cached, in
+// which case we fall back to masked headers rather than fetching a fresh token
+// from tokenUrl). Handlers without PreviewAuth (api-key, bearer, basic) have
+// stateless ApplyAuth implementations and are safe to call directly.
 func (h *HTTPRequestModule) addUnmaskedAuthHeaders(headers map[string]string) {
 	if h.authHandler == nil {
 		return
@@ -125,13 +131,25 @@ func (h *HTTPRequestModule) addUnmaskedAuthHeaders(headers map[string]string) {
 		h.addMaskedAuthHeaders(headers)
 		return
 	}
-	if err := h.authHandler.ApplyAuth(ctx, mockReq); err != nil {
+
+	if previewer, ok := h.authHandler.(auth.PreviewAuthHandler); ok {
+		if err := previewer.PreviewAuth(ctx, mockReq); err != nil {
+			if !errors.Is(err, auth.ErrPreviewUnavailable) {
+				logger.Warn("failed to apply auth preview for credential preview, falling back to masked headers",
+					slog.String("error", err.Error()),
+				)
+			}
+			h.addMaskedAuthHeaders(headers)
+			return
+		}
+	} else if err := h.authHandler.ApplyAuth(ctx, mockReq); err != nil {
 		logger.Warn("failed to apply auth for credential preview, falling back to masked headers",
 			slog.String("error", err.Error()),
 		)
 		h.addMaskedAuthHeaders(headers)
 		return
 	}
+
 	for key, values := range mockReq.Header {
 		if len(values) > 0 {
 			headers[key] = values[0]

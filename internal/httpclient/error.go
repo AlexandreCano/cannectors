@@ -3,6 +3,7 @@ package httpclient
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 )
 
 // Error represents an HTTP error (status >= 400) emitted by a module.
@@ -40,11 +41,34 @@ type Error struct {
 }
 
 // Error implements the error interface.
+//
+// The endpoint is sanitized (query + fragment stripped) before being
+// formatted to prevent credentials embedded in query parameters (e.g.
+// `?api_key=...`, `?access_token=...`) from leaking into error strings
+// that may be logged or surfaced to users.
 func (e *Error) Error() string {
+	endpoint := SanitizeURL(e.Endpoint)
 	if e.Method != "" {
-		return fmt.Sprintf("http error %d (%s) %s %s: %s", e.StatusCode, e.Status, e.Method, e.Endpoint, e.Message)
+		return fmt.Sprintf("http error %d (%s) %s %s: %s", e.StatusCode, e.Status, e.Method, endpoint, e.Message)
 	}
-	return fmt.Sprintf("http error %d (%s) from %s: %s", e.StatusCode, e.Status, e.Endpoint, e.Message)
+	return fmt.Sprintf("http error %d (%s) from %s: %s", e.StatusCode, e.Status, endpoint, e.Message)
+}
+
+// SanitizeURL returns the URL with query parameters and fragment stripped.
+// Used to avoid leaking credentials embedded in query params into error
+// messages and logs. If the URL cannot be parsed, returns a safe placeholder
+// rather than the raw (potentially sensitive) value.
+func SanitizeURL(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "[invalid URL]"
+	}
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
 }
 
 // GetRetryAfter returns the raw Retry-After header value when present, or an

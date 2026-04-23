@@ -11,6 +11,22 @@
 - ✅ Renommer, supprimer, et refactorer librement — corriger les callers plutôt que de maintenir l'ancienne surface
 - Les seules limites restent : correction fonctionnelle, tests qui passent, et lint propre
 
+## Validation systématique après modification de code
+
+**Dès que tu modifies du code Go (impl ou tests), tu DOIS exécuter localement, avant d'annoncer la tâche comme terminée :**
+
+1. **Tests** — cible le(s) package(s) modifié(s) par défaut (ex: `go test ./internal/auth/...`) pour garder un feedback loop rapide. Passe à `go test ./...` dès que le changement peut affecter des callers ailleurs : modification de signature/comportement d'une API exportée, renommage de type/fonction, changement de format d'erreur ou de contrat d'interface, retrait ou ajout d'un champ public, refacto de package partagé (`internal/httpclient`, `internal/auth`, `pkg/connector`, etc.).
+2. **Lint** — `golangci-lint run ./...` (0 issues attendues). Le lint tourne vite sur tout le repo, pas de raison de cibler un package.
+
+Règles :
+
+- ❌ Ne jamais considérer une tâche comme `completed` sans avoir fait tourner les deux commandes et constaté qu'elles passent
+- ❌ Ne pas se contenter de `go build ./...` — le build ne détecte ni les tests cassés ni les lints
+- ✅ Dans le doute sur l'impact, élargis à `go test ./...` — coût minime comparé à casser silencieusement un caller
+- ✅ Si un test échoue ou qu'un lint remonte, corrige avant de rendre la main
+- ✅ Si un diagnostic lint pré-existant est remonté sur du code non touché par la tâche, ignore-le (ne nettoie pas opportunément) sauf si le user le demande
+- ✅ En cas d'échec irréductible (ex: test flaky connu, lint qui demande un refacto hors-scope), remonte-le explicitement au user avant de marquer la tâche finie
+
 ## Library Usage (override project-context)
 
 **Override de la règle `Library Usage` du `project-context.md`** : sur ce projet, tu **n'as pas besoin de demander l'autorisation** avant d'ajouter ou d'utiliser une librairie.

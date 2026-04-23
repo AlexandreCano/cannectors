@@ -65,6 +65,65 @@ func TestError_GetRetryAfter_NilReceiver(t *testing.T) {
 	}
 }
 
+func TestError_Error_SanitizesEndpointQueryParams(t *testing.T) {
+	// Secrets embedded in query params (api_key, access_token, ...) must never
+	// reach the formatted error string — it may be logged or surfaced to users.
+	e := &Error{
+		StatusCode: 500,
+		Status:     "500 Internal Server Error",
+		Endpoint:   "https://api.example.com/users?api_key=super-secret-xyz&access_token=token-123",
+		Method:     "GET",
+		Message:    "boom",
+	}
+	got := e.Error()
+	for _, secret := range []string{"super-secret-xyz", "token-123", "api_key=", "access_token="} {
+		if strings.Contains(got, secret) {
+			t.Errorf("Error() leaked sensitive query param %q: %s", secret, got)
+		}
+	}
+	if !strings.Contains(got, "https://api.example.com/users") {
+		t.Errorf("Error() should still contain sanitized endpoint path, got: %s", got)
+	}
+}
+
+func TestError_Error_SanitizesEndpointFragment(t *testing.T) {
+	e := &Error{
+		StatusCode: 404,
+		Status:     "404 Not Found",
+		Endpoint:   "https://api.example.com/resource#access_token=frag-secret",
+		Message:    "nope",
+	}
+	got := e.Error()
+	if strings.Contains(got, "frag-secret") {
+		t.Errorf("Error() leaked fragment secret: %s", got)
+	}
+	if strings.Contains(got, "#") {
+		t.Errorf("Error() should strip fragment, got: %s", got)
+	}
+}
+
+func TestSanitizeURL(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"no query", "https://api.example.com/x", "https://api.example.com/x"},
+		{"with query", "https://api.example.com/x?api_key=secret", "https://api.example.com/x"},
+		{"with fragment", "https://api.example.com/x#token=abc", "https://api.example.com/x"},
+		{"with both", "https://api.example.com/x?k=v#f=1", "https://api.example.com/x"},
+		{"invalid", "://not a url", "[invalid URL]"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := SanitizeURL(tc.in); got != tc.want {
+				t.Errorf("SanitizeURL(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestError_ErrorsAs(t *testing.T) {
 	orig := &Error{
 		StatusCode: 429,

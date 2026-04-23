@@ -91,6 +91,23 @@ func (h *oauth2Handler) ApplyAuth(ctx context.Context, req *http.Request) error 
 	return nil
 }
 
+// PreviewAuth applies OAuth2 auth for preview/dry-run flows without performing
+// any network I/O. If a valid token is cached, it is used; otherwise
+// ErrPreviewUnavailable is returned so the caller can fall back to masking
+// rather than silently fetching a fresh token from tokenUrl.
+func (h *oauth2Handler) PreviewAuth(_ context.Context, req *http.Request) error {
+	h.mu.RLock()
+	token := h.cachedToken
+	expiry := h.tokenExpiry
+	h.mu.RUnlock()
+
+	if token == "" || !time.Now().Before(expiry) {
+		return ErrPreviewUnavailable
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	return nil
+}
+
 // Type returns the authentication type identifier.
 func (h *oauth2Handler) Type() string {
 	return "oauth2"

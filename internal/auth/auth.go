@@ -44,6 +44,26 @@ type OAuth2Invalidator interface {
 	InvalidateToken()
 }
 
+// ErrPreviewUnavailable indicates that a handler cannot produce unmasked preview
+// headers without performing network I/O (e.g., OAuth2 with no cached token).
+// Callers should fall back to masked headers in this case.
+var ErrPreviewUnavailable = errors.New("auth preview unavailable without network I/O")
+
+// PreviewAuthHandler is an optional interface for handlers that can apply
+// authentication without any network side effects. It is used by dry-run /
+// preview flows that must not emit real HTTP requests.
+//
+// Handlers whose ApplyAuth is already side-effect-free (api-key, bearer, basic)
+// do not need to implement this interface — the preview code falls back to
+// ApplyAuth for them. OAuth2 implements it to expose the cached token without
+// triggering a token fetch against the tokenUrl.
+type PreviewAuthHandler interface {
+	// PreviewAuth applies authentication without performing network I/O.
+	// Returns ErrPreviewUnavailable if preview is not possible without side
+	// effects (e.g., no cached OAuth2 token).
+	PreviewAuth(ctx context.Context, req *http.Request) error
+}
+
 // NewHandler creates an appropriate authentication handler based on configuration.
 // Returns nil, nil if config is nil (no authentication required).
 // Returns an error if the authentication type is unknown or configuration is invalid.

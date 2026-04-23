@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cannectors/runtime/internal/errhandling"
+	"github.com/cannectors/runtime/internal/httpclient"
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
@@ -146,10 +147,10 @@ func TestNewHTTPRequestFromConfig_InvalidMethod(t *testing.T) {
 }
 
 func TestNewHTTPRequestFromConfig_RetryHintFromBody_TooLong(t *testing.T) {
-	// Create an expression that exceeds MaxRetryHintExpressionLength
+	// Create an expression that exceeds httpclient.MaxRetryHintExpressionLength
 	longExpression := strings.Repeat("body.field == true && ", 1000) + "body.field == true"
-	if len(longExpression) <= MaxRetryHintExpressionLength {
-		t.Fatalf("test expression too short: %d (need > %d)", len(longExpression), MaxRetryHintExpressionLength)
+	if len(longExpression) <= httpclient.MaxRetryHintExpressionLength {
+		t.Fatalf("test expression too short: %d (need > %d)", len(longExpression), httpclient.MaxRetryHintExpressionLength)
 	}
 
 	config := newModuleConfig(map[string]interface{}{
@@ -1643,9 +1644,9 @@ func TestHTTPRequest_Send_ClientError400(t *testing.T) {
 	}
 
 	// Check error type
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 	if httpErr.StatusCode != 400 {
 		t.Errorf("expected status 400, got %d", httpErr.StatusCode)
@@ -1672,9 +1673,9 @@ func TestHTTPRequest_Send_ClientError401(t *testing.T) {
 		t.Fatal("expected error for 401 status")
 	}
 
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 	if httpErr.StatusCode != 401 {
 		t.Errorf("expected status 401, got %d", httpErr.StatusCode)
@@ -1701,9 +1702,9 @@ func TestHTTPRequest_Send_ClientError404(t *testing.T) {
 		t.Fatal("expected error for 404 status")
 	}
 
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 	if httpErr.StatusCode != 404 {
 		t.Errorf("expected status 404, got %d", httpErr.StatusCode)
@@ -1730,9 +1731,9 @@ func TestHTTPRequest_Send_ClientError422(t *testing.T) {
 		t.Fatal("expected error for 422 status")
 	}
 
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 	if httpErr.StatusCode != 422 {
 		t.Errorf("expected status 422, got %d", httpErr.StatusCode)
@@ -1766,9 +1767,9 @@ func TestHTTPRequest_Send_ServerError500(t *testing.T) {
 		t.Fatal("expected error for 500 status")
 	}
 
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 	if httpErr.StatusCode != 500 {
 		t.Errorf("expected status 500, got %d", httpErr.StatusCode)
@@ -1798,9 +1799,9 @@ func TestHTTPRequest_Send_ServerError503(t *testing.T) {
 		t.Fatal("expected error for 503 status")
 	}
 
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 	if httpErr.StatusCode != 503 {
 		t.Errorf("expected status 503, got %d", httpErr.StatusCode)
@@ -1880,9 +1881,9 @@ func TestHTTPRequest_Send_HTTPErrorDetails(t *testing.T) {
 		t.Fatal("expected error for 400 status")
 	}
 
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 
 	// Verify error contains all context
@@ -2009,9 +2010,9 @@ func TestHTTPRequest_Send_RetryExhausted(t *testing.T) {
 		t.Fatal("expected error after exhausting retries")
 	}
 
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 	if httpErr.StatusCode != 503 {
 		t.Errorf("expected status 503, got %d", httpErr.StatusCode)
@@ -2354,9 +2355,9 @@ func TestHTTPRequest_Send_ErrorContainsResponseDetails(t *testing.T) {
 		t.Fatal("expected error")
 	}
 
-	var httpErr *HTTPError
+	var httpErr *httpclient.Error
 	if !errors.As(err, &httpErr) {
-		t.Fatalf("expected HTTPError, got %T", err)
+		t.Fatalf("expected *httpclient.Error, got %T", err)
 	}
 
 	// Verify response body is captured for debugging
@@ -3191,6 +3192,117 @@ func TestHTTPRequest_PreviewRequest_ShowCredentials_APIKey(t *testing.T) {
 	}
 }
 
+func TestHTTPRequest_PreviewRequest_ShowCredentials_OAuth2_NoNetworkWhenNoCachedToken(t *testing.T) {
+	// Previews must never trigger a real token fetch, even with ShowCredentials=true.
+	// When no token is cached we fall back to masked headers rather than hitting
+	// tokenUrl (which could leak to a real server, have rate-limit cost, etc.).
+	tokenRequestCount := 0
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		tokenRequestCount++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token": "should-not-be-fetched", "token_type": "Bearer", "expires_in": 3600}`))
+	}))
+	defer tokenServer.Close()
+
+	config := newModuleConfigWithAuth(
+		map[string]interface{}{
+			"endpoint": "https://api.example.com/data",
+			"method":   "POST",
+		},
+		"oauth2",
+		toJSON(t, map[string]string{
+			"tokenUrl":     tokenServer.URL,
+			"clientId":     "test-client-id",
+			"clientSecret": "test-client-secret",
+		}),
+	)
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	records := []map[string]interface{}{{"test": "data"}}
+
+	previews, err := module.PreviewRequest(records, PreviewOptions{ShowCredentials: true})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if tokenRequestCount != 0 {
+		t.Errorf("preview with ShowCredentials=true must not fetch OAuth2 token, but %d requests hit tokenUrl", tokenRequestCount)
+	}
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+
+	authHeader := previews[0].Headers["Authorization"]
+	if authHeader == "" {
+		t.Fatal("Authorization header should be present (masked fallback)")
+	}
+	if !strings.Contains(authHeader, "[MASKED") {
+		t.Errorf("Authorization should fall back to masked when OAuth2 has no cached token, got: %s", authHeader)
+	}
+	if strings.Contains(authHeader, "should-not-be-fetched") {
+		t.Errorf("Authorization must NOT contain fetched token, got: %s", authHeader)
+	}
+}
+
+func TestHTTPRequest_PreviewRequest_ShowCredentials_OAuth2_UsesCachedToken(t *testing.T) {
+	// After a real Send() has primed the OAuth2 handler's token cache, previews
+	// can show the cached token without triggering network I/O.
+	tokenRequestCount := 0
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		tokenRequestCount++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token": "cached-oauth2-token", "token_type": "Bearer", "expires_in": 3600}`))
+	}))
+	defer tokenServer.Close()
+
+	apiServer := newTestServer()
+	defer apiServer.Close()
+
+	config := newModuleConfigWithAuth(
+		map[string]interface{}{
+			"endpoint": apiServer.URL + "/api/data",
+			"method":   "POST",
+		},
+		"oauth2",
+		toJSON(t, map[string]string{
+			"tokenUrl":     tokenServer.URL,
+			"clientId":     "test-client-id",
+			"clientSecret": "test-client-secret",
+		}),
+	)
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create module: %v", err)
+	}
+
+	// Prime the OAuth2 cache with a real Send.
+	if _, sendErr := module.Send(context.Background(), []map[string]interface{}{{"test": "data"}}); sendErr != nil {
+		t.Fatalf("priming Send() failed: %v", sendErr)
+	}
+	if tokenRequestCount != 1 {
+		t.Fatalf("expected 1 token fetch from priming Send, got %d", tokenRequestCount)
+	}
+
+	// Preview must now use the cached token without re-fetching.
+	previews, err := module.PreviewRequest([]map[string]interface{}{{"test": "data"}}, PreviewOptions{ShowCredentials: true})
+	if err != nil {
+		t.Fatalf("preview failed: %v", err)
+	}
+	if tokenRequestCount != 1 {
+		t.Errorf("preview must not refetch token; tokenRequestCount=%d", tokenRequestCount)
+	}
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+	if got := previews[0].Headers["Authorization"]; got != "Bearer cached-oauth2-token" {
+		t.Errorf("expected cached token in preview, got: %s", got)
+	}
+}
+
 func TestHTTPRequest_PreviewRequest_EmptyRecords(t *testing.T) {
 	config := newModuleConfig(map[string]interface{}{
 		"endpoint": "https://api.example.com/data",
@@ -3853,9 +3965,10 @@ func TestHTTPRequest_RetryAfter_ZeroSeconds_ImmediateRetry(t *testing.T) {
 }
 
 func TestHTTPRequest_RetryAfter_HTTPDate_RFC1123(t *testing.T) {
-	// Server returns 503 with Retry-After: HTTP-date (RFC1123 format), then succeeds
-	futureTime := time.Now().Add(2 * time.Second)
-	retryAfterDate := futureTime.Format(time.RFC1123)
+	// Server returns 503 with Retry-After: IMF-fixdate (RFC 7231 §7.1.1.1),
+	// then succeeds. http.TimeFormat enforces the mandated "GMT" suffix.
+	futureTime := time.Now().Add(2 * time.Second).UTC()
+	retryAfterDate := futureTime.Format(http.TimeFormat)
 	ts := newTestServerWithRetryAfter([]int{503, 200}, retryAfterDate)
 	defer ts.Close()
 
@@ -3944,9 +4057,10 @@ func TestHTTPRequest_RetryAfter_HTTPDate_RFC850(t *testing.T) {
 }
 
 func TestHTTPRequest_RetryAfter_HTTPDate_Past_ImmediateRetry(t *testing.T) {
-	// Server returns 503 with Retry-After: HTTP-date in the past, should retry immediately
-	pastTime := time.Now().Add(-5 * time.Second)
-	retryAfterDate := pastTime.Format(time.RFC1123)
+	// Server returns 503 with Retry-After: IMF-fixdate in the past, should
+	// retry immediately (clamped to 0).
+	pastTime := time.Now().Add(-5 * time.Second).UTC()
+	retryAfterDate := pastTime.Format(http.TimeFormat)
 	ts := newTestServerWithRetryAfter([]int{503, 200}, retryAfterDate)
 	defer ts.Close()
 

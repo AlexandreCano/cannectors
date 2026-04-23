@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -539,5 +540,137 @@ func TestOAuth2Handler_InvalidateTokenOn401(t *testing.T) {
 	// Should have made two token requests
 	if count := atomic.LoadInt32(&tokenRequestCount); count != 2 {
 		t.Errorf("expected 2 token requests after invalidation, got %d", count)
+	}
+}
+
+func TestOAuth2Handler_PreviewAuth_NoCachedToken(t *testing.T) {
+	// PreviewAuth must never trigger a token fetch. If no token is cached,
+	// it must return ErrPreviewUnavailable so callers can fall back to masking
+	// instead of silently hitting tokenUrl.
+	var tokenRequestCount int32
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&tokenRequestCount, 1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"should-not-be-fetched","token_type":"Bearer","expires_in":3600}`))
+	}))
+	defer tokenServer.Close()
+
+	config := &connector.AuthConfig{
+		Type: "oauth2",
+		Credentials: toJSON(t, map[string]string{
+			"tokenUrl":     tokenServer.URL,
+			"clientId":     "test-client-id",
+			"clientSecret": "test-client-secret",
+		}),
+	}
+	handler, err := NewHandler(config, nil)
+	if err != nil {
+		t.Fatalf("failed to create handler: %v", err)
+	}
+
+	previewer, ok := handler.(PreviewAuthHandler)
+	if !ok {
+		t.Fatal("oauth2 handler must implement PreviewAuthHandler")
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "https://example.com/api", nil)
+	err = previewer.PreviewAuth(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected ErrPreviewUnavailable with no cached token")
+	}
+	if !errors.Is(err, ErrPreviewUnavailable) {
+		t.Errorf("expected ErrPreviewUnavailable, got %v", err)
+	}
+	if got := atomic.LoadInt32(&tokenRequestCount); got != 0 {
+		t.Errorf("PreviewAuth must not trigger network I/O, tokenRequestCount=%d", got)
+	}
+	if req.Header.Get("Authorization") != "" {
+		t.Errorf("no Authorization header should be set when preview is unavailable")
+	}
+}
+
+func TestOAuth2Handler_PreviewAuth_UsesCachedToken(t *testing.T) {
+	// After ApplyAuth primes the cache, PreviewAuth uses it without network I/O.
+	var tokenRequestCount int32
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&tokenRequestCount, 1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"cached-token","token_type":"Bearer","expires_in":3600}`))
+	}))
+	defer tokenServer.Close()
+
+	config := &connector.AuthConfig{
+		Type: "oauth2",
+		Credentials: toJSON(t, map[string]string{
+			"tokenUrl":     tokenServer.URL,
+			"clientId":     "test-client-id",
+			"clientSecret": "test-client-secret",
+		}),
+	}
+	handler, err := NewHandler(config, nil)
+	if err != nil {
+		t.Fatalf("failed to create handler: %v", err)
+	}
+
+	// Prime the cache with a real ApplyAuth.
+	priming := httptest.NewRequest(http.MethodGet, "https://example.com/api", nil)
+	if err := handler.ApplyAuth(context.Background(), priming); err != nil {
+		t.Fatalf("priming ApplyAuth failed: %v", err)
+	}
+	if got := atomic.LoadInt32(&tokenRequestCount); got != 1 {
+		t.Fatalf("expected 1 token fetch from priming ApplyAuth, got %d", got)
+	}
+
+	previewer, ok := handler.(PreviewAuthHandler)
+	if !ok {
+		t.Fatal("oauth2 handler must implement PreviewAuthHandler")
+	}
+	req := httptest.NewRequest(http.MethodGet, "https://example.com/api", nil)
+	if err := previewer.PreviewAuth(context.Background(), req); err != nil {
+		t.Fatalf("PreviewAuth should succeed with cached token, got %v", err)
+	}
+	if got := atomic.LoadInt32(&tokenRequestCount); got != 1 {
+		t.Errorf("PreviewAuth must not refetch token, tokenRequestCount=%d", got)
+	}
+	if got := req.Header.Get("Authorization"); got != "Bearer cached-token" {
+		t.Errorf("expected Bearer cached-token, got %q", got)
+	}
+}
+
+func TestOAuth2Handler_PreviewAuth_ExpiredToken(t *testing.T) {
+	// An expired cached token must be treated as absent by PreviewAuth (no refetch).
+	config := &connector.AuthConfig{
+		Type: "oauth2",
+		Credentials: toJSON(t, map[string]string{
+			"tokenUrl":     "https://example.com/token",
+			"clientId":     "test-client-id",
+			"clientSecret": "test-client-secret",
+		}),
+	}
+	handler, err := NewHandler(config, nil)
+	if err != nil {
+		t.Fatalf("failed to create handler: %v", err)
+	}
+
+	oauth, ok := handler.(*oauth2Handler)
+	if !ok {
+		t.Fatalf("expected *oauth2Handler, got %T", handler)
+	}
+	oauth.mu.Lock()
+	oauth.cachedToken = "stale-token"
+	oauth.tokenExpiry = time.Now().Add(-1 * time.Minute)
+	oauth.mu.Unlock()
+
+	previewer, ok := handler.(PreviewAuthHandler)
+	if !ok {
+		t.Fatal("oauth2 handler must implement PreviewAuthHandler")
+	}
+	req := httptest.NewRequest(http.MethodGet, "https://example.com/api", nil)
+	err = previewer.PreviewAuth(context.Background(), req)
+	if !errors.Is(err, ErrPreviewUnavailable) {
+		t.Errorf("expected ErrPreviewUnavailable for expired token, got %v", err)
+	}
+	if req.Header.Get("Authorization") != "" {
+		t.Errorf("no Authorization header should be set when cached token expired")
 	}
 }

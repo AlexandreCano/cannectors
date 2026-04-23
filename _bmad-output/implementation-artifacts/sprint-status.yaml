@@ -103,6 +103,74 @@ development_status:
   14-11-distributed-scheduler-support: backlog
   epic-14-retrospective: optional
 
+  # Epic 15: HTTP Client Consolidation (from audit 2026-04-21)
+  # Factorise les 3 modules HTTP (polling, request, http_call) via un package partagé
+  # Source: docs/AUDIT_TECHNIQUE_2026-04-21.md §5 P1.1
+  epic-15: in-progress
+  15-1-create-internal-httpclient-package: review
+  15-2-enhance-retry-executor-retry-after-and-body-hints: review
+  15-3-migrate-http-output-to-httpclient: review
+  15-4-migrate-http-polling-to-httpclient: review
+  15-5-migrate-http-call-to-httpclient: review
+  epic-15-retrospective: optional
+
+  # Epic 16: Code Duplication Cleanup (from audit 2026-04-21)
+  # Unifie les duplications non-HTTP (path navigation, RetryInfo, onError, metadata, etc.)
+  # Source: docs/AUDIT_TECHNIQUE_2026-04-21.md §5 P1.3, P1.4, P2.2, P2.3, P2.4, §2.2
+  epic-16: backlog
+  16-1-unify-record-path-navigation: backlog
+  16-2-unify-retry-info-type: backlog
+  16-3-unify-onerror-strategy-parsing: backlog
+  16-4-extract-metadata-package: backlog
+  16-5-remove-template-wrapper-and-duplicate-retry-codes: backlog
+  16-6-consolidate-condition-filter-registration: backlog
+  epic-16-retrospective: optional
+
+  # Epic 17: Schema/Runtime Alignment & Bug Fixes (from audit 2026-04-21)
+  # Corrige les bugs critiques documentés dans docs/plan.md §3 et ajoute un garde-fou
+  # Source: docs/AUDIT_TECHNIQUE_2026-04-21.md §5 P1.2, P2.6, P3.4
+  epic-17: backlog
+  17-1-fix-webhook-path-endpoint-mismatch: backlog
+  17-2-fix-oauth2-scope-parsing: backlog
+  17-3-fix-sql-call-cache-key-determinism: backlog
+  17-4-fix-script-filter-cancellation-race: backlog
+  17-5-fix-http-401-retry-loop-protection: backlog
+  17-6-fix-sql-placeholder-conversion: backlog
+  17-7-add-schema-compliance-test: backlog
+  epic-17-retrospective: optional
+
+  # Epic 18: God File Split & Module Error Harmonization (from audit 2026-04-21)
+  # Découpe les fichiers > 800 LOC en fichiers ciblés par concern
+  # Source: docs/AUDIT_TECHNIQUE_2026-04-21.md §5 P2.1, P2.5, §2.1
+  epic-18: backlog
+  18-1-split-http-request-output-file: backlog
+  18-2-split-http-polling-input-file: backlog
+  18-3-split-mapping-filter-file: backlog
+  18-4-harmonize-module-error-types: backlog
+  18-5-split-moduleconfig-package: backlog
+  epic-18-retrospective: optional
+
+  # Epic 19: Observability & Developer Experience (from audit 2026-04-21)
+  # Trace ID, secrets sanitization, dégraissage logger, any vs interface{}, code mort
+  # Source: docs/AUDIT_TECHNIQUE_2026-04-21.md §5 P3.1, P3.2, P3.3, P3.5, P3.7
+  epic-19: backlog
+  19-1-add-trace-id-to-execution-logs: backlog
+  19-2-audit-secrets-leakage-in-logs: backlog
+  19-3-trim-logger-package: backlog
+  19-4-replace-interface-with-any: backlog
+  19-5-remove-dead-code: backlog
+  epic-19-retrospective: optional
+
+  # Epic 20: Test Hygiene & Coverage (from audit 2026-04-21)
+  # Couverture des modules sous-testés (sql_call 29%, database 55-68%) + E2E
+  # Source: docs/AUDIT_TECHNIQUE_2026-04-21.md §4.1, §4.3, §5 P2.6
+  epic-20: backlog
+  20-1-raise-sql-call-test-coverage: backlog
+  20-2-raise-database-modules-test-coverage: backlog
+  20-3-refactor-mapping-test-fixtures: backlog
+  20-4-e2e-tests-per-module-combination: backlog
+  epic-20-retrospective: optional
+
   # Epic 4: Advanced Runtime Features (remaining stories - after Epic 14)
   4-5-create-cli-commands-interface: backlog
   4-6-support-cross-platform-cli-windows-mac-linux: backlog

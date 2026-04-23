@@ -6,18 +6,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/cannectors/runtime/internal/auth"
 	"github.com/cannectors/runtime/internal/cache"
-	"github.com/cannectors/runtime/internal/errhandling"
+	"github.com/cannectors/runtime/internal/httpclient"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/template"
@@ -72,6 +72,8 @@ type HTTPCallConfig struct {
 	Cache moduleconfig.CacheConfig `json:"cache"`
 	// MergeStrategy defines how to merge response data: "merge" (default), "replace", "append"
 	MergeStrategy string `json:"mergeStrategy"`
+	// Retry defines the retry policy for the HTTP call (optional).
+	Retry *connector.RetryConfig `json:"retry,omitempty"`
 }
 
 // HTTPCallModule implements a filter that makes HTTP requests and can enrich records with response data.
@@ -84,20 +86,13 @@ type HTTPCallConfig struct {
 // Error Handling:
 //   - HTTP errors are not cached (only successful responses are cached)
 //   - onError mode controls behavior: fail (stop pipeline), skip (drop record), log (continue)
-type keyEntry struct {
-	field     string
-	paramType string
-	paramName string
-}
-
-// HTTPCallModule is a filter module that enriches records with data fetched from HTTP endpoints.
-// It supports configurable authentication, caching, and field merging strategies.
 type HTTPCallModule struct {
 	endpoint          string
-	method            string     // HTTP method (GET, POST, PUT)
-	keys              []keyEntry // key configurations for request building
+	method            string                   // HTTP method (GET, POST, PUT)
+	keys              []moduleconfig.KeyConfig // key configurations for request building
 	authHandler       auth.Handler
-	httpClient        *http.Client
+	httpClient        *httpclient.Client
+	retry             connector.RetryConfig
 	cache             cache.Cache
 	mergeStrategy     string
 	dataField         string
@@ -124,24 +119,10 @@ func (e *HTTPCallError) Error() string {
 	return e.Message
 }
 
-// sanitizeURL removes sensitive information from URLs for error messages.
-// Masks query parameters and fragments to prevent exposing credentials or tokens.
-func sanitizeURL(urlStr string) string {
-	parsed, err := url.Parse(urlStr)
-	if err != nil {
-		// If parsing fails, return a safe placeholder
-		return "[invalid URL]"
-	}
-	// Remove query parameters and fragments
-	parsed.RawQuery = ""
-	parsed.Fragment = ""
-	return parsed.String()
-}
-
 // newHTTPCallError creates an HTTPCallError with context.
 func newHTTPCallError(code, message string, recordIdx int, endpoint string, statusCode int, keyValue string) *HTTPCallError {
 	// Sanitize endpoint URL in error message to avoid exposing sensitive data
-	sanitizedEndpoint := sanitizeURL(endpoint)
+	sanitizedEndpoint := httpclient.SanitizeURL(endpoint)
 	return &HTTPCallError{
 		Code:        code,
 		Message:     message,
@@ -191,10 +172,18 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 	onError := normalizeHTTPCallOnError(config.OnError)
 	timeout := connector.GetTimeoutDuration(config.TimeoutMs, defaultHTTPCallTimeout)
 
-	httpClient := &http.Client{Timeout: timeout}
-	authHandler, err := buildHTTPCallAuth(config.Authentication, httpClient)
+	httpClient := httpclient.NewClient(timeout)
+	authHandler, err := buildHTTPCallAuth(config.Authentication, httpClient.Client)
 	if err != nil {
 		return nil, err
+	}
+	// Retry is opt-in on the filter: callers must explicitly set it in the
+	// module config. When absent, the zero-valued RetryConfig disables
+	// retries (MaxAttempts=0), preserving the historical behavior of
+	// http_call.
+	var retryConfig connector.RetryConfig
+	if config.Retry != nil {
+		retryConfig = moduleconfig.ToRetryConfig(config.Retry)
 	}
 
 	lruCache, cacheTTL := buildHTTPCallCache(config.Cache.MaxSize, config.Cache.DefaultTTL)
@@ -232,10 +221,8 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 		slog.String("body_template_file", config.BodyTemplateFile),
 	)
 
-	keyEntries := make([]keyEntry, len(config.Keys))
-	for i, k := range config.Keys {
-		keyEntries[i] = keyEntry{field: k.Field, paramType: k.ParamType, paramName: k.ParamName}
-	}
+	keyEntries := make([]moduleconfig.KeyConfig, len(config.Keys))
+	copy(keyEntries, config.Keys)
 
 	return &HTTPCallModule{
 		endpoint:          config.Endpoint,
@@ -243,6 +230,7 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 		keys:              keyEntries,
 		authHandler:       authHandler,
 		httpClient:        httpClient,
+		retry:             retryConfig,
 		cache:             lruCache,
 		mergeStrategy:     mergeStrategy,
 		dataField:         config.DataField,
@@ -253,129 +241,6 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 		bodyTemplateRaw:   bodyTemplateRaw,
 		templateEvaluator: template.NewEvaluator(),
 	}, nil
-}
-
-func normalizeHTTPCallMethod(method string) (string, error) {
-	m := strings.ToUpper(method)
-	if m == "" {
-		m = http.MethodGet
-	}
-	if m != http.MethodGet && m != http.MethodPost && m != http.MethodPut {
-		return "", fmt.Errorf("http_call method must be GET, POST, or PUT, got: %s", method)
-	}
-	return m, nil
-}
-
-func normalizeHTTPCallMergeStrategy(s string) string {
-	if s == "" {
-		return defaultHTTPCallStrategy
-	}
-	if s != "merge" && s != "replace" && s != "append" {
-		logger.Warn("invalid mergeStrategy for http_call module; defaulting to merge",
-			slog.String("merge_strategy", s),
-		)
-		return defaultHTTPCallStrategy
-	}
-	return s
-}
-
-func normalizeHTTPCallOnError(s string) string {
-	if s == "" {
-		return OnErrorFail
-	}
-	if s != OnErrorFail && s != OnErrorSkip && s != OnErrorLog {
-		logger.Warn("invalid onError value for http_call module; defaulting to fail",
-			slog.String("on_error", s),
-		)
-		return OnErrorFail
-	}
-	return s
-}
-
-func buildHTTPCallAuth(authCfg *connector.AuthConfig, client *http.Client) (auth.Handler, error) {
-	if authCfg == nil {
-		return nil, nil
-	}
-	h, err := auth.NewHandler(authCfg, client)
-	if err != nil {
-		return nil, fmt.Errorf("creating http_call auth handler: %w", err)
-	}
-	return h, nil
-}
-
-func buildHTTPCallCache(maxSize, ttlSeconds int) (*cache.LRUCache, time.Duration) {
-	if maxSize <= 0 {
-		maxSize = defaultCacheMaxSize
-	}
-	if ttlSeconds <= 0 {
-		ttlSeconds = defaultCacheTTLSeconds
-	}
-	return cache.NewLRUCache(maxSize, time.Duration(ttlSeconds)*time.Second), time.Duration(ttlSeconds) * time.Second
-}
-
-func loadHTTPCallBodyTemplate(path string) (string, error) {
-	if path == "" {
-		return "", nil
-	}
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("loading http_call body template file %q: %w", path, err)
-	}
-	raw := string(content)
-	if err := template.ValidateSyntax(raw); err != nil {
-		return "", fmt.Errorf("invalid template syntax in %q: %w", path, err)
-	}
-	logger.Debug("loaded http_call body template file",
-		slog.String("file", path),
-		slog.Int("size", len(content)),
-	)
-	return raw, nil
-}
-
-func validateHTTPCallTemplates(endpoint string, headers map[string]string) error {
-	if err := template.ValidateSyntax(endpoint); err != nil {
-		return fmt.Errorf("invalid template syntax in endpoint: %w", err)
-	}
-	for name, v := range headers {
-		if err := template.ValidateSyntax(v); err != nil {
-			return fmt.Errorf("invalid template syntax in header %q: %w", name, err)
-		}
-	}
-	return nil
-}
-
-func httpCallHasTemplating(endpoint string, headers map[string]string, hasBodyTemplate bool) bool {
-	if template.HasVariables(endpoint) || hasBodyTemplate {
-		return true
-	}
-	for _, v := range headers {
-		if template.HasVariables(v) {
-			return true
-		}
-	}
-	return false
-}
-
-// validateKeysConfig validates the keys extraction configuration.
-func validateKeysConfig(keys []moduleconfig.KeyConfig) error {
-	if len(keys) == 0 {
-		return newHTTPCallError(ErrCodeHTTPCallKeyMissing, "http_call keys is required (at least one key config)", -1, "", 0, "")
-	}
-	for i, key := range keys {
-		if key.Field == "" {
-			return newHTTPCallError(ErrCodeHTTPCallKeyMissing, fmt.Sprintf("http_call keys[%d] field is required", i), -1, "", 0, "")
-		}
-		if key.ParamType == "" {
-			return newHTTPCallError(ErrCodeHTTPCallKeyMissing, fmt.Sprintf("http_call keys[%d] paramType is required", i), -1, "", 0, "")
-		}
-		if key.ParamType != "query" && key.ParamType != "path" && key.ParamType != "header" {
-			return newHTTPCallError(ErrCodeHTTPCallKeyInvalid, "http_call key paramType must be 'query', 'path', or 'header'", -1, "", 0, "")
-		}
-		if key.ParamName == "" {
-			return newHTTPCallError(ErrCodeHTTPCallKeyMissing, fmt.Sprintf("http_call keys[%d] paramName is required", i), -1, "", 0, "")
-		}
-	}
-	return nil
 }
 
 // Process enriches each input record by performing an HTTP call and merging the response data.
@@ -521,11 +386,11 @@ func (m *HTTPCallModule) processRecord(ctx context.Context, record map[string]in
 func (m *HTTPCallModule) extractKeyValues(record map[string]interface{}, recordIdx int) (map[string]string, error) {
 	result := make(map[string]string, len(m.keys))
 	for _, k := range m.keys {
-		value, found := moduleconfig.GetNestedValue(record, k.field)
+		value, found := moduleconfig.GetNestedValue(record, k.Field)
 		if !found {
 			return nil, newHTTPCallError(
 				ErrCodeHTTPCallKeyExtract,
-				fmt.Sprintf("http_call failed to extract key from record %d: field '%s' not found", recordIdx, k.field),
+				fmt.Sprintf("http_call failed to extract key from record %d: field '%s' not found", recordIdx, k.Field),
 				recordIdx, m.endpoint, 0, "",
 			)
 		}
@@ -537,7 +402,7 @@ func (m *HTTPCallModule) extractKeyValues(record map[string]interface{}, recordI
 		case nil:
 			return nil, newHTTPCallError(
 				ErrCodeHTTPCallKeyExtract,
-				fmt.Sprintf("http_call failed to extract key from record %d: field '%s' is null", recordIdx, k.field),
+				fmt.Sprintf("http_call failed to extract key from record %d: field '%s' is null", recordIdx, k.Field),
 				recordIdx, m.endpoint, 0, "",
 			)
 		default:
@@ -547,11 +412,11 @@ func (m *HTTPCallModule) extractKeyValues(record map[string]interface{}, recordI
 		if keyValue == "" {
 			return nil, newHTTPCallError(
 				ErrCodeHTTPCallKeyExtract,
-				fmt.Sprintf("http_call failed to extract key from record %d: field '%s' is empty", recordIdx, k.field),
+				fmt.Sprintf("http_call failed to extract key from record %d: field '%s' is empty", recordIdx, k.Field),
 				recordIdx, m.endpoint, 0, "",
 			)
 		}
-		result[k.paramName] = keyValue
+		result[k.ParamName] = keyValue
 	}
 	return result, nil
 }
@@ -580,7 +445,7 @@ func (m *HTTPCallModule) compositeKeyString(keyValues map[string]string) string 
 	}
 	parts := make([]string, len(m.keys))
 	for i, k := range m.keys {
-		parts[i] = keyValues[k.paramName]
+		parts[i] = keyValues[k.ParamName]
 	}
 	return strings.Join(parts, "::")
 }
@@ -597,9 +462,10 @@ func (m *HTTPCallModule) fetchResponseData(ctx context.Context, keyValues map[st
 	return m.parseResponseData(body, statusCode, recordIdx)
 }
 
-// executeHTTPRequest builds the HTTP request, executes it, and returns the response body and status code.
+// executeHTTPRequest builds the HTTP request, executes it with retry via
+// httpclient.DoWithRetry, and returns the response body and status code.
+// Story 15.5 introduces retry support (previously absent from this filter).
 func (m *HTTPCallModule) executeHTTPRequest(ctx context.Context, keyValues map[string]string, recordIdx int, record map[string]interface{}) ([]byte, int, error) {
-	// Build request URL with template evaluation
 	requestURL, err := m.buildRequestURL(keyValues, record)
 	if err != nil {
 		return nil, 0, newHTTPCallError(
@@ -609,53 +475,74 @@ func (m *HTTPCallModule) executeHTTPRequest(ctx context.Context, keyValues map[s
 		)
 	}
 
-	// Create and configure HTTP request
 	req, err := m.buildHTTPRequest(ctx, requestURL, keyValues, recordIdx, record)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// Execute request
-	resp, err := m.httpClient.Do(req)
-	if err != nil {
-		classifiedErr := errhandling.ClassifyNetworkError(err)
-		return nil, 0, newHTTPCallError(
-			ErrCodeHTTPCallHTTPError,
-			fmt.Sprintf("http_call HTTP request failed: %v", classifiedErr),
-			recordIdx, m.endpoint, 0, m.compositeKeyString(keyValues),
-		)
+	hooks := httpclient.RetryHooks{
+		OnRetry: func(attempt int, retryErr error, nextDelay time.Duration) {
+			if retryErr != nil && nextDelay > 0 {
+				logger.Info("retrying http_call request",
+					slog.String("module_type", "http_call"),
+					slog.String("endpoint", m.endpoint),
+					slog.Int("attempt", attempt+1),
+					slog.Int("max_attempts", m.retry.MaxAttempts+1),
+					slog.Duration("next_delay", nextDelay),
+					slog.String("error", retryErr.Error()),
+				)
+			}
+		},
 	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			logger.Warn("failed to close http_call response body",
-				slog.String("error", closeErr.Error()),
+
+	resp, err := m.httpClient.DoWithRetry(ctx, req, m.retry, hooks)
+	if resp != nil {
+		defer func() {
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				logger.Warn("failed to close http_call response body",
+					slog.String("error", closeErr.Error()),
+				)
+			}
+		}()
+	}
+	if err != nil {
+		statusCode := 0
+		var httpErr *httpclient.Error
+		if errors.As(err, &httpErr) {
+			statusCode = httpErr.StatusCode
+		}
+		if resp != nil && statusCode == 0 {
+			statusCode = resp.StatusCode
+		}
+		if statusCode >= 400 {
+			var bodySnippet string
+			if httpErr != nil {
+				bodySnippet = httpErr.ResponseBody
+				if len(bodySnippet) > 200 {
+					bodySnippet = bodySnippet[:200] + "..."
+				}
+			}
+			return nil, statusCode, newHTTPCallError(
+				ErrCodeHTTPCallHTTPError,
+				fmt.Sprintf("http_call HTTP error %d: %s", statusCode, bodySnippet),
+				recordIdx, m.endpoint, statusCode, m.compositeKeyString(keyValues),
 			)
 		}
-	}()
-
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, resp.StatusCode, newHTTPCallError(
+		return nil, statusCode, newHTTPCallError(
 			ErrCodeHTTPCallHTTPError,
-			fmt.Sprintf("http_call failed to read response: %v", err),
-			recordIdx, m.endpoint, resp.StatusCode, m.compositeKeyString(keyValues),
+			fmt.Sprintf("http_call HTTP request failed: %v", err),
+			recordIdx, m.endpoint, statusCode, m.compositeKeyString(keyValues),
 		)
 	}
 
-	// Check for HTTP errors
-	if resp.StatusCode >= 400 {
-		bodySnippet := string(body)
-		if len(bodySnippet) > 200 {
-			bodySnippet = bodySnippet[:200] + "..."
-		}
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
 		return nil, resp.StatusCode, newHTTPCallError(
 			ErrCodeHTTPCallHTTPError,
-			fmt.Sprintf("http_call HTTP error %d: %s", resp.StatusCode, bodySnippet),
+			fmt.Sprintf("http_call failed to read response: %v", readErr),
 			recordIdx, m.endpoint, resp.StatusCode, m.compositeKeyString(keyValues),
 		)
 	}
-
 	return body, resp.StatusCode, nil
 }
 
@@ -690,22 +577,25 @@ func (m *HTTPCallModule) buildHTTPRequest(ctx context.Context, requestURL string
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	// Set custom headers with template evaluation
+	// Validate custom headers and key-based headers per RFC 7230 before
+	// attaching them to the request (mirrors the output module's safeguard).
+	validated := make(map[string]string, len(m.headers)+len(m.keys))
 	for key, value := range m.headers {
 		evaluatedValue := value
 		if template.HasVariables(value) {
 			evaluatedValue = m.templateEvaluator.Evaluate(value, record)
 		}
-		req.Header.Set(key, evaluatedValue)
+		httpclient.TryAddValidHeader(validated, key, evaluatedValue)
 	}
-
-	// Apply keys as headers if configured
 	for _, k := range m.keys {
-		if k.paramType == "header" {
-			if v := keyValues[k.paramName]; v != "" {
-				req.Header.Set(k.paramName, v)
+		if k.ParamType == "header" {
+			if v := keyValues[k.ParamName]; v != "" {
+				httpclient.TryAddValidHeader(validated, k.ParamName, v)
 			}
 		}
+	}
+	for key, value := range validated {
+		req.Header.Set(key, value)
 	}
 
 	// Apply authentication
@@ -790,16 +680,16 @@ func (m *HTTPCallModule) buildRequestURL(keyValues map[string]string, record map
 
 	// Apply path replacements first
 	for _, k := range m.keys {
-		if k.paramType == "path" {
-			placeholder := "{" + k.paramName + "}"
-			endpoint = strings.Replace(endpoint, placeholder, url.PathEscape(keyValues[k.paramName]), 1)
+		if k.ParamType == "path" {
+			placeholder := "{" + k.ParamName + "}"
+			endpoint = strings.Replace(endpoint, placeholder, url.PathEscape(keyValues[k.ParamName]), 1)
 		}
 	}
 
 	// Apply query parameters
 	hasQuery := false
 	for _, k := range m.keys {
-		if k.paramType == "query" {
+		if k.ParamType == "query" {
 			hasQuery = true
 			break
 		}
@@ -811,8 +701,8 @@ func (m *HTTPCallModule) buildRequestURL(keyValues map[string]string, record map
 		}
 		q := parsedURL.Query()
 		for _, k := range m.keys {
-			if k.paramType == "query" {
-				q.Set(k.paramName, keyValues[k.paramName])
+			if k.ParamType == "query" {
+				q.Set(k.ParamName, keyValues[k.ParamName])
 			}
 		}
 		parsedURL.RawQuery = q.Encode()
@@ -821,74 +711,4 @@ func (m *HTTPCallModule) buildRequestURL(keyValues map[string]string, record map
 
 	// Path-only or header-only: return endpoint after path replacements
 	return endpoint, nil
-}
-
-// mergeData merges response data into the record based on the merge strategy.
-func (m *HTTPCallModule) mergeData(record, responseData map[string]interface{}) map[string]interface{} {
-	switch m.mergeStrategy {
-	case "merge":
-		return m.deepMerge(record, responseData)
-
-	case "replace":
-		// Replace the entire record with response data
-		// Keep original fields that aren't in response data
-		result := make(map[string]interface{})
-		for k, v := range record {
-			result[k] = v
-		}
-		for k, v := range responseData {
-			result[k] = v
-		}
-		return result
-
-	case "append":
-		// Append response data under a special key
-		result := make(map[string]interface{})
-		for k, v := range record {
-			result[k] = v
-		}
-		result["_response"] = responseData
-		return result
-
-	default:
-		return m.deepMerge(record, responseData)
-	}
-}
-
-// deepMerge performs a deep merge of two maps.
-// Values from b override values from a, except for nested maps which are merged recursively.
-func (m *HTTPCallModule) deepMerge(a, b map[string]interface{}) map[string]interface{} {
-	result := make(map[string]interface{})
-
-	// Copy all from a
-	for k, v := range a {
-		result[k] = v
-	}
-
-	// Merge/override from b
-	for k, vb := range b {
-		if va, exists := result[k]; exists {
-			// If both are maps, merge recursively
-			if mapA, okA := va.(map[string]interface{}); okA {
-				if mapB, okB := vb.(map[string]interface{}); okB {
-					result[k] = m.deepMerge(mapA, mapB)
-					continue
-				}
-			}
-		}
-		// Otherwise, b overrides
-		result[k] = vb
-	}
-
-	return result
-}
-
-// GetCacheStats returns the current cache statistics.
-func (m *HTTPCallModule) GetCacheStats() cache.Stats {
-	return m.cache.Stats()
-}
-
-// ClearCache clears all entries from the cache.
-func (m *HTTPCallModule) ClearCache() {
-	m.cache.Clear()
 }

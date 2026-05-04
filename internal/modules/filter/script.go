@@ -15,6 +15,7 @@ import (
 
 	"github.com/dop251/goja"
 
+	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/pathutil"
 	"github.com/cannectors/runtime/pkg/connector"
@@ -73,7 +74,7 @@ type ScriptConfig struct {
 //   - A goroutine monitors context cancellation and interrupts JavaScript execution
 type ScriptModule struct {
 	scriptSource string
-	onError      string
+	onError      errhandling.OnErrorStrategy
 	runtime      *goja.Runtime // Not goroutine-safe - one runtime per module instance
 	transformFn  goja.Callable
 	console      *jsConsole // JavaScript console for logging
@@ -134,7 +135,7 @@ func NewScriptFromConfig(config ScriptConfig) (*ScriptModule, error) {
 	}
 
 	// Normalize onError
-	onError := normalizeScriptOnError(config.OnError)
+	onError := errhandling.ParseOnErrorStrategy(config.OnError)
 
 	moduleID := "inline"
 	if config.ScriptFile != "" {
@@ -161,7 +162,7 @@ func NewScriptFromConfig(config ScriptConfig) (*ScriptModule, error) {
 
 	logger.Debug("script module initialized",
 		slog.Int("script_length", len(scriptSource)),
-		slog.String("on_error", onError),
+		slog.String("on_error", string(onError)),
 		slog.Bool("from_file", config.ScriptFile != ""),
 	)
 
@@ -282,20 +283,6 @@ func isScriptWhitespaceOnly(s string) bool {
 	return true
 }
 
-// normalizeScriptOnError normalizes the onError configuration value.
-func normalizeScriptOnError(onError string) string {
-	if onError == "" {
-		return OnErrorFail
-	}
-	if onError != OnErrorFail && onError != OnErrorSkip && onError != OnErrorLog {
-		logger.Warn("invalid onError value for script module; defaulting to fail",
-			slog.String("on_error", onError),
-		)
-		return OnErrorFail
-	}
-	return onError
-}
-
 // getTransformFunction retrieves and validates the transform function from the runtime.
 func getTransformFunction(vm *goja.Runtime) (goja.Callable, error) {
 	transformVal := vm.Get("transform")
@@ -378,7 +365,7 @@ func (m *ScriptModule) Process(ctx context.Context, records []map[string]interfa
 	logger.Debug("filter processing started",
 		slog.String("module_type", "script"),
 		slog.Int("input_records", inputCount),
-		slog.String("on_error", m.onError),
+		slog.String("on_error", string(m.onError)),
 	)
 
 	// Set up a single cancellation watcher for the entire Process() call
@@ -417,7 +404,7 @@ func (m *ScriptModule) Process(ctx context.Context, records []map[string]interfa
 		if err != nil {
 			errorCount++
 			switch m.onError {
-			case OnErrorFail:
+			case errhandling.OnErrorFail:
 				duration := time.Since(startTime)
 				logger.Error("filter processing failed",
 					slog.String("module_type", "script"),
@@ -426,7 +413,7 @@ func (m *ScriptModule) Process(ctx context.Context, records []map[string]interfa
 					slog.String("error", err.Error()),
 				)
 				return nil, err
-			case OnErrorSkip:
+			case errhandling.OnErrorSkip:
 				skippedCount++
 				logger.Warn("skipping record due to script error",
 					slog.String("module_type", "script"),
@@ -434,7 +421,7 @@ func (m *ScriptModule) Process(ctx context.Context, records []map[string]interfa
 					slog.String("error", err.Error()),
 				)
 				continue
-			case OnErrorLog:
+			case errhandling.OnErrorLog:
 				logger.Error("script error (continuing)",
 					slog.String("module_type", "script"),
 					slog.Int("record_index", recordIdx),

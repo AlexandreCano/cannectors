@@ -59,6 +59,7 @@ func TestExecutor_StatePersistence_ID_WithFilterRenaming(t *testing.T) {
 	inputModule, err := input.NewHTTPPollingFromConfig(config)
 	if err != nil {
 		t.Fatalf("NewHTTPPollingFromConfig() error = %v", err)
+		return
 	}
 
 	// Create mapping filter that renames "id" to "transactionId" and deletes the original "id"
@@ -82,9 +83,11 @@ func TestExecutor_StatePersistence_ID_WithFilterRenaming(t *testing.T) {
 	filterModules, err := factory.CreateFilterModules([]connector.ModuleConfig{*mappingConfig})
 	if err != nil {
 		t.Fatalf("CreateFilterModules() error = %v", err)
+		return
 	}
 	if len(filterModules) != 1 {
 		t.Fatalf("Expected 1 filter module, got %d", len(filterModules))
+		return
 	}
 
 	outputModule := NewMockOutputModule(nil)
@@ -102,6 +105,7 @@ func TestExecutor_StatePersistence_ID_WithFilterRenaming(t *testing.T) {
 	result1, err := executor.Execute(pipeline)
 	if err != nil {
 		t.Fatalf("First execution failed: %v", err)
+		return
 	}
 	if result1.Status != "success" {
 		t.Errorf("First execution status = %s, want success", result1.Status)
@@ -112,9 +116,11 @@ func TestExecutor_StatePersistence_ID_WithFilterRenaming(t *testing.T) {
 	state, err := stateStore.Load(pipeline.ID)
 	if err != nil {
 		t.Fatalf("Failed to load state: %v", err)
+		return
 	}
 	if state == nil {
 		t.Fatal("State should be persisted after first execution")
+		return
 	}
 	if state.LastID == nil {
 		t.Error("State should have LastID")
@@ -127,6 +133,7 @@ func TestExecutor_StatePersistence_ID_WithFilterRenaming(t *testing.T) {
 	// This confirms the filter renamed the field
 	if len(outputModule.sentRecords) != 2 {
 		t.Fatalf("Expected 2 records sent to output, got %d", len(outputModule.sentRecords))
+		return
 	}
 	if _, hasID := outputModule.sentRecords[0]["id"]; hasID {
 		t.Error("Filtered records should not have 'id' field (was renamed to 'transactionId')")
@@ -171,6 +178,7 @@ func TestExecutor_StatePersistence_ID_WithFilterRemoving(t *testing.T) {
 	inputModule, err := input.NewHTTPPollingFromConfig(config)
 	if err != nil {
 		t.Fatalf("NewHTTPPollingFromConfig() error = %v", err)
+		return
 	}
 
 	// Create mapping filter that explicitly removes "id" field
@@ -190,9 +198,11 @@ func TestExecutor_StatePersistence_ID_WithFilterRemoving(t *testing.T) {
 	filterModules, err := factory.CreateFilterModules([]connector.ModuleConfig{*mappingConfig})
 	if err != nil {
 		t.Fatalf("CreateFilterModules() error = %v", err)
+		return
 	}
 	if len(filterModules) != 1 {
 		t.Fatalf("Expected 1 filter module, got %d", len(filterModules))
+		return
 	}
 
 	outputModule := NewMockOutputModule(nil)
@@ -210,6 +220,7 @@ func TestExecutor_StatePersistence_ID_WithFilterRemoving(t *testing.T) {
 	result1, err := executor.Execute(pipeline)
 	if err != nil {
 		t.Fatalf("First execution failed: %v", err)
+		return
 	}
 	if result1.Status != "success" {
 		t.Errorf("First execution status = %s, want success", result1.Status)
@@ -219,9 +230,11 @@ func TestExecutor_StatePersistence_ID_WithFilterRemoving(t *testing.T) {
 	state, err := stateStore.Load(pipeline.ID)
 	if err != nil {
 		t.Fatalf("Failed to load state: %v", err)
+		return
 	}
 	if state == nil {
 		t.Fatal("State should be persisted after first execution")
+		return
 	}
 	if state.LastID == nil {
 		t.Error("State should have LastID extracted from raw records")
@@ -233,6 +246,7 @@ func TestExecutor_StatePersistence_ID_WithFilterRemoving(t *testing.T) {
 	// Verify that filtered records don't have "id" field (was removed by filter)
 	if len(outputModule.sentRecords) != 2 {
 		t.Fatalf("Expected 2 records sent to output, got %d", len(outputModule.sentRecords))
+		return
 	}
 	if _, hasID := outputModule.sentRecords[0]["id"]; hasID {
 		t.Error("Filtered records should not have 'id' field (was removed by filter)")

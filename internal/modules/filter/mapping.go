@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/pkg/connector"
@@ -34,13 +35,6 @@ const (
 	OnMissingSkipField  = "skipField"
 	OnMissingUseDefault = "useDefault"
 	OnMissingFail       = "fail"
-)
-
-// OnError behavior constants
-const (
-	OnErrorFail = "fail"
-	OnErrorSkip = "skip"
-	OnErrorLog  = "log"
 )
 
 // typeConversionOps is the set of transform operations that perform type conversion.
@@ -110,7 +104,7 @@ type TransformConfig struct {
 // It transforms input records by applying field-to-field mappings.
 type MappingModule struct {
 	mappings []MappingConfig
-	onError  string
+	onError  errhandling.OnErrorStrategy
 }
 
 // NewMappingFromConfig creates a new mapping filter module from configuration.
@@ -120,13 +114,7 @@ type MappingModule struct {
 //   - mappings: Array of field mappings (source/target format)
 //   - onError: Error handling mode ("fail", "skip", "log")
 func NewMappingFromConfig(mappings []FieldMapping, onError string) (*MappingModule, error) {
-	// Validate onError mode
-	if onError == "" {
-		onError = OnErrorFail
-	}
-	if onError != OnErrorFail && onError != OnErrorSkip && onError != OnErrorLog {
-		onError = OnErrorFail
-	}
+	strategy := errhandling.ParseOnErrorStrategy(onError)
 
 	// Parse and validate mappings
 	configs := make([]MappingConfig, 0, len(mappings))
@@ -140,12 +128,12 @@ func NewMappingFromConfig(mappings []FieldMapping, onError string) (*MappingModu
 
 	logger.Debug("mapping module initialized",
 		slog.Int("mapping_count", len(configs)),
-		slog.String("on_error", onError),
+		slog.String("on_error", string(strategy)),
 	)
 
 	return &MappingModule{
 		mappings: configs,
-		onError:  onError,
+		onError:  strategy,
 	}, nil
 }
 
@@ -391,7 +379,7 @@ func (m *MappingModule) Process(_ context.Context, records []map[string]interfac
 		slog.String("module_type", "mapping"),
 		slog.Int("mapping_count", len(m.mappings)),
 		slog.Int("input_records", inputCount),
-		slog.String("on_error", m.onError),
+		slog.String("on_error", string(m.onError)),
 	)
 
 	result := make([]map[string]interface{}, 0, len(records))
@@ -403,7 +391,7 @@ func (m *MappingModule) Process(_ context.Context, records []map[string]interfac
 			var mappingErr *MappingError
 			hasContext := errors.As(err, &mappingErr)
 			switch m.onError {
-			case OnErrorFail:
+			case errhandling.OnErrorFail:
 				duration := time.Since(startTime)
 				logger.Error("filter processing failed",
 					slog.String("module_type", "mapping"),
@@ -412,7 +400,7 @@ func (m *MappingModule) Process(_ context.Context, records []map[string]interfac
 					slog.String("error", err.Error()),
 				)
 				return nil, err
-			case OnErrorSkip:
+			case errhandling.OnErrorSkip:
 				skippedCount++
 				if hasContext {
 					logger.Warn("skipping record due to mapping error",
@@ -434,7 +422,7 @@ func (m *MappingModule) Process(_ context.Context, records []map[string]interfac
 					)
 				}
 				continue
-			case OnErrorLog:
+			case errhandling.OnErrorLog:
 				if hasContext {
 					logger.Error("mapping error (continuing)",
 						slog.String("module_type", "mapping"),

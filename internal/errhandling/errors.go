@@ -405,17 +405,6 @@ func GetErrorCategory(err error) ErrorCategory {
 	return CategoryUnknown
 }
 
-// defaultRetryableStatusCodes is the list of HTTP status codes that are retryable by default.
-var defaultRetryableStatusCodes = []int{429, 500, 502, 503, 504}
-
-// DefaultRetryableStatusCodes returns the default list of retryable HTTP status codes.
-func DefaultRetryableStatusCodes() []int {
-	// Return a copy to prevent modification
-	result := make([]int, len(defaultRetryableStatusCodes))
-	copy(result, defaultRetryableStatusCodes)
-	return result
-}
-
 // IsRetryableStatusCode checks if a status code is in the list of retryable codes.
 func IsRetryableStatusCode(statusCode int, retryableCodes []int) bool {
 	for _, code := range retryableCodes {

@@ -33,6 +33,7 @@ func TestNewHTTPCallFromConfig(t *testing.T) {
 		}
 		if module == nil {
 			t.Fatal("expected module, got nil")
+			return
 		}
 		if module.endpoint != config.Endpoint {
 			t.Errorf("expected endpoint %s, got %s", config.Endpoint, module.endpoint)

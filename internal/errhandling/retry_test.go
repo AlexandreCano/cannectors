@@ -970,8 +970,8 @@ func TestRetryExecutor_RetryInfo(t *testing.T) {
 	if info.TotalAttempts != 3 {
 		t.Errorf("TotalAttempts = %d, want 3", info.TotalAttempts)
 	}
-	if info.SuccessfulAttempt != 3 {
-		t.Errorf("SuccessfulAttempt = %d, want 3", info.SuccessfulAttempt)
+	if executor.SuccessfulAttempt() != 3 {
+		t.Errorf("SuccessfulAttempt = %d, want 3", executor.SuccessfulAttempt())
 	}
 	if info.RetryCount != 2 {
 		t.Errorf("RetryCount = %d, want 2", info.RetryCount)

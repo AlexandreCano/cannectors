@@ -12,6 +12,7 @@ import (
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
 
+	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/pkg/connector"
 )
@@ -49,23 +50,14 @@ var (
 	ErrNestingTooDeep = errors.New("nested module depth exceeds maximum")
 )
 
-// NestedModuleCreator is a function type that creates a filter module from a NestedModuleConfig.
+// NestedModuleCreator is a function type that creates a filter module from a
+// NestedModuleConfig. It is injected by the caller (typically the registry's
+// "condition" entry) so the filter package does not need to import the
+// registry, avoiding a circular dependency.
 //
-// This package-level variable is initialized by the factory package in its init() function
-// to enable registry-based module creation in nested condition blocks (then/else).
-//
-// IMPORTANT: This creates an implicit dependency on the factory package. If factory is not
-// imported, NestedModuleCreator will be nil and nested modules will fall back to hardcoded
-// behavior for built-in types only (mapping, condition). Custom filter types registered
-// in the registry will NOT work in nested contexts if factory is not imported.
-//
-// This design avoids a circular dependency (factory -> filter -> registry, but filter needs
-// factory for nested modules). The dependency is explicit through this variable assignment.
-//
-// For testing or alternative usage patterns where factory is not imported, nested modules
-// will only support built-in types. To enable full registry support for nested modules,
-// ensure the factory package is imported (which happens automatically in normal usage).
-var NestedModuleCreator func(config *NestedModuleConfig, index int) (Module, error)
+// When nil, nested module creation falls back to hardcoded support for the
+// built-in types parsed inline in this package.
+type NestedModuleCreator func(config *NestedModuleConfig, index int) (Module, error)
 
 // Supported expression languages
 const (
@@ -120,7 +112,7 @@ type ConditionModule struct {
 	lang        string
 	onTrue      string
 	onFalse     string
-	onError     string
+	onError     errhandling.OnErrorStrategy
 	program     *vm.Program
 	thenModules []Module
 	elseModules []Module
@@ -168,21 +160,24 @@ func newConditionError(code, message, expression string, recordIdx int, fieldPat
 // NewConditionFromConfig creates a new condition filter module from configuration.
 // It validates the configuration and returns an error if invalid.
 //
+// nestedCreator is invoked to construct each nested then/else module by type;
+// pass nil to fall back to the built-in inline parsing for "mapping" and
+// "condition" only. The registry's "condition" entry injects a creator that
+// resolves the full set of registered filter types.
+//
 // Security considerations:
 //   - Expressions are compiled once during module creation using expr.Compile with
 //     AllowUndefinedVariables(). This is efficient for pipelines processing many records.
 //   - However, expressions from untrusted sources could potentially cause denial-of-service
-//     through expensive operations. Consider adding limits on expression complexity
-//     (e.g., maximum expression length, maximum nesting depth) if processing user-provided
-//     expressions in production environments.
+//     through expensive operations.
 //   - The expr library does not execute arbitrary code, but complex expressions may still
 //     consume significant CPU time during evaluation.
-func NewConditionFromConfig(config ConditionConfig) (*ConditionModule, error) {
-	return newConditionFromConfigWithDepth(config, 0)
+func NewConditionFromConfig(config ConditionConfig, nestedCreator NestedModuleCreator) (*ConditionModule, error) {
+	return newConditionFromConfigWithDepth(config, nestedCreator, 0)
 }
 
 // newConditionFromConfigWithDepth creates a condition module with depth tracking for nested modules.
-func newConditionFromConfigWithDepth(config ConditionConfig, depth int) (*ConditionModule, error) {
+func newConditionFromConfigWithDepth(config ConditionConfig, nestedCreator NestedModuleCreator, depth int) (*ConditionModule, error) {
 	// Validate and normalize expression
 	expression, err := validateExpression(config.Expression)
 	if err != nil {
@@ -197,7 +192,7 @@ func newConditionFromConfigWithDepth(config ConditionConfig, depth int) (*Condit
 
 	onTrue := normalizeOnCondition(config.OnTrue, OnConditionContinue)
 	onFalse := normalizeOnCondition(config.OnFalse, OnConditionSkip)
-	onError := normalizeOnError(config.OnError)
+	onError := errhandling.ParseOnErrorStrategy(config.OnError)
 
 	// Compile expression
 	program, err := compileExpression(expression)
@@ -206,7 +201,7 @@ func newConditionFromConfigWithDepth(config ConditionConfig, depth int) (*Condit
 	}
 
 	// Create nested modules
-	thenModules, elseModules, err := createNestedModules(config.Then, config.Else, depth+1)
+	thenModules, elseModules, err := createNestedModules(config.Then, config.Else, nestedCreator, depth+1)
 	if err != nil {
 		return nil, fmt.Errorf("creating nested modules: %w", err)
 	}
@@ -266,20 +261,6 @@ func normalizeOnCondition(value, defaultValue string) string {
 	return value
 }
 
-// normalizeOnError normalizes and validates onError value.
-func normalizeOnError(onError string) string {
-	if onError == "" {
-		return OnErrorFail
-	}
-	if onError != OnErrorFail && onError != OnErrorSkip && onError != OnErrorLog {
-		logger.Warn("invalid onError value for condition module; defaulting to fail",
-			slog.String("on_error", onError),
-		)
-		return OnErrorFail
-	}
-	return onError
-}
-
 // compileExpression compiles the expression using the expr library.
 func compileExpression(expression string) (*vm.Program, error) {
 	// AllowUndefinedVariables() handles missing fields gracefully by treating
@@ -292,14 +273,14 @@ func compileExpression(expression string) (*vm.Program, error) {
 }
 
 // createNestedModules creates then and else nested modules with depth tracking.
-func createNestedModules(thenConfigs, elseConfigs []*NestedModuleConfig, depth int) ([]Module, []Module, error) {
+func createNestedModules(thenConfigs, elseConfigs []*NestedModuleConfig, nestedCreator NestedModuleCreator, depth int) ([]Module, []Module, error) {
 	var thenModules, elseModules []Module
 
 	for i, cfg := range thenConfigs {
 		if cfg == nil {
 			continue
 		}
-		m, err := createNestedModuleWithDepth(cfg, depth)
+		m, err := createNestedModuleWithDepth(cfg, nestedCreator, depth)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create 'then' module at index %d: %w", i, err)
 		}
@@ -310,7 +291,7 @@ func createNestedModules(thenConfigs, elseConfigs []*NestedModuleConfig, depth i
 		if cfg == nil {
 			continue
 		}
-		m, err := createNestedModuleWithDepth(cfg, depth)
+		m, err := createNestedModuleWithDepth(cfg, nestedCreator, depth)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create 'else' module at index %d: %w", i, err)
 		}
@@ -321,13 +302,13 @@ func createNestedModules(thenConfigs, elseConfigs []*NestedModuleConfig, depth i
 }
 
 // logModuleInitialization logs the initialization of a condition module.
-func logModuleInitialization(expression, lang, onTrue, onFalse, onError string, thenModules, elseModules []Module) {
+func logModuleInitialization(expression, lang, onTrue, onFalse string, onError errhandling.OnErrorStrategy, thenModules, elseModules []Module) {
 	logger.Debug("condition module initialized",
 		slog.String("expression", expression),
 		slog.String("lang", lang),
 		slog.String("on_true", onTrue),
 		slog.String("on_false", onFalse),
-		slog.String("on_error", onError),
+		slog.String("on_error", string(onError)),
 		slog.Int("then_count", len(thenModules)),
 		slog.Int("else_count", len(elseModules)),
 	)
@@ -344,8 +325,10 @@ func isWhitespaceOnly(s string) bool {
 }
 
 // createNestedModuleWithDepth creates a filter module with depth tracking.
-// Uses the registry to support custom filter types in nested configurations.
-func createNestedModuleWithDepth(config *NestedModuleConfig, depth int) (Module, error) {
+// Delegates type resolution to the injected nestedCreator (which typically
+// uses the registry); falls back to hardcoded built-in support when no
+// creator is provided (e.g. unit tests of condition module in isolation).
+func createNestedModuleWithDepth(config *NestedModuleConfig, nestedCreator NestedModuleCreator, depth int) (Module, error) {
 	if config == nil {
 		return nil, nil
 	}
@@ -355,15 +338,12 @@ func createNestedModuleWithDepth(config *NestedModuleConfig, depth int) (Module,
 		return nil, fmt.Errorf("%w: depth %d exceeds maximum %d", ErrNestingTooDeep, depth, MaxNestingDepth)
 	}
 
-	// Special handling for condition modules due to nested config structure
+	// Nested condition modules are constructed inline so depth tracking and
+	// the captured nestedCreator propagate correctly.
 	if config.Type == "condition" {
-		// Validate expression length for nested conditions too
-		if config.Expression != "" {
-			if len(config.Expression) > MaxExpressionLength {
-				return nil, fmt.Errorf("%w: expression length %d exceeds maximum %d", ErrExpressionTooLong, len(config.Expression), MaxExpressionLength)
-			}
+		if config.Expression != "" && len(config.Expression) > MaxExpressionLength {
+			return nil, fmt.Errorf("%w: expression length %d exceeds maximum %d", ErrExpressionTooLong, len(config.Expression), MaxExpressionLength)
 		}
-		// Create the condition module using the internal function with depth tracking
 		return newConditionFromConfigWithDepth(ConditionConfig{
 			ModuleBase: connector.ModuleBase{OnError: config.OnError},
 			Expression: config.Expression,
@@ -372,34 +352,29 @@ func createNestedModuleWithDepth(config *NestedModuleConfig, depth int) (Module,
 			OnFalse:    config.OnFalse,
 			Then:       config.Then,
 			Else:       config.Else,
-		}, depth+1)
+		}, nestedCreator, depth+1)
 	}
 
-	// Use the factory's NestedModuleCreator if available (enables registry support)
-	// Note: For nested modules, we use 0 as the index since nested modules don't have
-	// a pipeline position. The index is primarily used for error logging context.
-	if NestedModuleCreator != nil {
-		return NestedModuleCreator(config, 0)
+	// Index 0 is fine: nested modules have no pipeline position; the index is
+	// used only for error logging context.
+	if nestedCreator != nil {
+		return nestedCreator(config, 0)
 	}
 
-	// Fallback to hardcoded behavior for built-in types (backward compatibility)
+	// Fallback for callers that did not inject a creator (legacy / standalone tests).
 	switch config.Type {
 	case "mapping":
 		mappings, err := ParseFieldMappings(config.Mappings)
 		if err != nil {
 			return nil, fmt.Errorf("parsing field mappings: %w", err)
 		}
-		onError := config.OnError
-		if onError == "" {
-			onError = OnErrorFail
-		}
-		module, err := NewMappingFromConfig(mappings, onError)
+		module, err := NewMappingFromConfig(mappings, config.OnError)
 		if err != nil {
 			return nil, fmt.Errorf("creating mapping module: %w", err)
 		}
 		return module, nil
 	default:
-		return nil, fmt.Errorf("unknown filter module type %q in nested config", config.Type)
+		return nil, fmt.Errorf("unknown filter module type %q in nested config (no nested creator injected)", config.Type)
 	}
 }
 
@@ -407,16 +382,16 @@ func createNestedModuleWithDepth(config *NestedModuleConfig, depth int) (Module,
 // Returns an error if the error should stop processing, nil if it should be skipped/logged.
 func (c *ConditionModule) handleError(err error, recordIdx int, errorType string) error {
 	switch c.onError {
-	case OnErrorFail:
+	case errhandling.OnErrorFail:
 		return err
-	case OnErrorSkip:
+	case errhandling.OnErrorSkip:
 		logger.Warn(fmt.Sprintf("skipping record due to %s error", errorType),
 			slog.Int("record_index", recordIdx),
 			slog.String("expression", c.expression),
 			slog.String("error", err.Error()),
 		)
 		return nil
-	case OnErrorLog:
+	case errhandling.OnErrorLog:
 		logger.Error(fmt.Sprintf("%s error (continuing)", errorType),
 			slog.Int("record_index", recordIdx),
 			slog.String("expression", c.expression),
@@ -432,15 +407,15 @@ func (c *ConditionModule) handleError(err error, recordIdx int, errorType string
 // Returns an error if the error should stop processing, nil if it should be skipped/logged.
 func (c *ConditionModule) handleNestedModuleError(err error, recordIdx int) error {
 	switch c.onError {
-	case OnErrorFail:
+	case errhandling.OnErrorFail:
 		return err
-	case OnErrorSkip:
+	case errhandling.OnErrorSkip:
 		logger.Warn("skipping record due to nested module error",
 			slog.Int("record_index", recordIdx),
 			slog.String("error", err.Error()),
 		)
 		return nil
-	case OnErrorLog:
+	case errhandling.OnErrorLog:
 		logger.Error("nested module error (continuing)",
 			slog.Int("record_index", recordIdx),
 			slog.String("error", err.Error()),
@@ -475,7 +450,7 @@ func (c *ConditionModule) Process(ctx context.Context, records []map[string]inte
 		slog.String("module_type", "condition"),
 		slog.String("expression", c.expression),
 		slog.Int("input_records", inputCount),
-		slog.String("on_error", c.onError),
+		slog.String("on_error", string(c.onError)),
 		slog.Bool("has_then", len(c.thenModules) > 0),
 		slog.Bool("has_else", len(c.elseModules) > 0),
 	)
@@ -595,12 +570,12 @@ func (c *ConditionModule) runNestedModules(ctx context.Context, modules []Module
 		processed, err := m.Process(ctx, records)
 		if err != nil {
 			switch c.onError {
-			case OnErrorSkip:
+			case errhandling.OnErrorSkip:
 				logger.Warn("skipping nested module error, continuing chain",
 					slog.String("error", err.Error()),
 				)
 				// Keep records from before this module and continue
-			case OnErrorLog:
+			case errhandling.OnErrorLog:
 				logger.Error("nested module error, continuing chain",
 					slog.String("error", err.Error()),
 				)

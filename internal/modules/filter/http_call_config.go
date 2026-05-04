@@ -44,21 +44,6 @@ func normalizeHTTPCallMergeStrategy(s string) string {
 	return s
 }
 
-// normalizeHTTPCallOnError falls back to "fail" on empty input and logs a
-// warning for unknown values.
-func normalizeHTTPCallOnError(s string) string {
-	if s == "" {
-		return OnErrorFail
-	}
-	if s != OnErrorFail && s != OnErrorSkip && s != OnErrorLog {
-		logger.Warn("invalid onError value for http_call module; defaulting to fail",
-			slog.String("on_error", s),
-		)
-		return OnErrorFail
-	}
-	return s
-}
-
 // buildHTTPCallAuth wraps auth.NewHandler with a module-specific error
 // message.
 func buildHTTPCallAuth(authCfg *connector.AuthConfig, client *http.Client) (auth.Handler, error) {

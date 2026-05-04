@@ -1,11 +1,13 @@
 package factory
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
 	"testing"
 
+	"github.com/cannectors/runtime/internal/modules/filter"
 	"github.com/cannectors/runtime/internal/modules/input"
 	"github.com/cannectors/runtime/internal/registry"
 	"github.com/cannectors/runtime/pkg/connector"
@@ -218,7 +220,7 @@ func TestCreateInputModule_ErrorReturnsError(t *testing.T) {
 	if got != nil {
 		// Check if the underlying value is nil using reflection
 		rv := reflect.ValueOf(got)
-		if rv.Kind() == reflect.Ptr && !rv.IsNil() {
+		if rv.Kind() == reflect.Pointer && !rv.IsNil() {
 			t.Errorf("expected nil module when constructor fails, got non-nil value: %v (type %T)", got, got)
 		}
 		// If it's a nil pointer, that's acceptable - the important part is that error was returned
@@ -256,5 +258,56 @@ func TestCreateInputModule_ConstructorError(t *testing.T) {
 	}
 	if got != nil {
 		t.Error("expected nil module when constructor returns error")
+	}
+}
+
+// stubFilter is a no-op filter used to verify that custom filter types
+// registered via registry.RegisterFilter are reachable from the nested
+// `then` block of a condition module.
+type stubFilter struct {
+	called bool
+}
+
+func (s *stubFilter) Process(_ context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
+	s.called = true
+	return records, nil
+}
+
+// TestCondition_NestedThen_ResolvesCustomRegisteredFilter ensures that a
+// filter type registered only in the test (i.e. not built-in) can be
+// instantiated inside a condition's `then` block via the registry-injected
+// nestedCreator. Regression guard for Story 16.6 (eliminates the prior
+// double-registration that bypassed the registry for nested modules).
+func TestCondition_NestedThen_ResolvesCustomRegisteredFilter(t *testing.T) {
+	const customType = "stub-nested-then"
+
+	stub := &stubFilter{}
+	registry.RegisterFilter(customType, func(_ connector.ModuleConfig, _ int) (filter.Module, error) {
+		return stub, nil
+	})
+
+	cfg := connector.ModuleConfig{
+		Type: "condition",
+		Raw: mustJSON(map[string]interface{}{
+			"expression": "true",
+			"then": []map[string]interface{}{
+				{"type": customType, "config": map[string]interface{}{}},
+			},
+		}),
+	}
+
+	mods, err := CreateFilterModules([]connector.ModuleConfig{cfg})
+	if err != nil {
+		t.Fatalf("CreateFilterModules error: %v", err)
+	}
+	if len(mods) != 1 {
+		t.Fatalf("expected 1 condition module, got %d", len(mods))
+	}
+
+	if _, err := mods[0].Process(context.Background(), []map[string]interface{}{{"x": 1}}); err != nil {
+		t.Fatalf("Process error: %v", err)
+	}
+	if !stub.called {
+		t.Fatal("custom filter registered for nested `then` was not invoked through the registry")
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
@@ -40,11 +41,11 @@ func TestScriptModuleCreation_WithOnError(t *testing.T) {
 		onError  string
 		expected string
 	}{
-		{"default", "", OnErrorFail},
-		{"fail", "fail", OnErrorFail},
-		{"skip", "skip", OnErrorSkip},
-		{"log", "log", OnErrorLog},
-		{"invalid defaults to fail", "invalid", OnErrorFail},
+		{"default", "", string(errhandling.OnErrorFail)},
+		{"fail", "fail", string(errhandling.OnErrorFail)},
+		{"skip", "skip", string(errhandling.OnErrorSkip)},
+		{"log", "log", string(errhandling.OnErrorLog)},
+		{"invalid defaults to fail", "invalid", string(errhandling.OnErrorFail)},
 	}
 
 	for _, tc := range testCases {
@@ -58,7 +59,7 @@ func TestScriptModuleCreation_WithOnError(t *testing.T) {
 			if err != nil {
 				t.Fatalf("expected no error, got: %v", err)
 			}
-			if module.onError != tc.expected {
+			if string(module.onError) != tc.expected {
 				t.Errorf("expected onError=%q, got %q", tc.expected, module.onError)
 			}
 		})
@@ -508,7 +509,7 @@ func TestScriptModuleProcess_JavaScriptException(t *testing.T) {
 		Script: `function transform(record) {
 			throw new Error("test error");
 		}`,
-		ModuleBase: connector.ModuleBase{OnError: OnErrorFail},
+		ModuleBase: connector.ModuleBase{OnError: string(errhandling.OnErrorFail)},
 	}
 
 	module, err := NewScriptFromConfig(config)
@@ -538,7 +539,7 @@ func TestScriptModuleProcess_OnErrorSkip(t *testing.T) {
 			}
 			return record;
 		}`,
-		ModuleBase: connector.ModuleBase{OnError: OnErrorSkip},
+		ModuleBase: connector.ModuleBase{OnError: string(errhandling.OnErrorSkip)},
 	}
 
 	module, err := NewScriptFromConfig(config)
@@ -573,7 +574,7 @@ func TestScriptModuleProcess_OnErrorLog(t *testing.T) {
 			record.processed = true;
 			return record;
 		}`,
-		ModuleBase: connector.ModuleBase{OnError: OnErrorLog},
+		ModuleBase: connector.ModuleBase{OnError: string(errhandling.OnErrorLog)},
 	}
 
 	module, err := NewScriptFromConfig(config)
@@ -616,7 +617,7 @@ func TestScriptModuleProcess_RuntimeError(t *testing.T) {
 		Script: `function transform(record) {
 			return record.nonExistent.property; // TypeError: Cannot read property of undefined
 		}`,
-		ModuleBase: connector.ModuleBase{OnError: OnErrorFail},
+		ModuleBase: connector.ModuleBase{OnError: string(errhandling.OnErrorFail)},
 	}
 
 	module, err := NewScriptFromConfig(config)
@@ -985,7 +986,7 @@ func TestScriptModule_InPipeline(t *testing.T) {
 		{Source: strPtrScript("total"), Target: "amount"},
 		{Source: strPtrScript("currency"), Target: "currencyCode"},
 	}
-	mappingModule, err := NewMappingFromConfig(mappingConfig, OnErrorFail)
+	mappingModule, err := NewMappingFromConfig(mappingConfig, string(errhandling.OnErrorFail))
 	if err != nil {
 		t.Fatalf("failed to create mapping module: %v", err)
 	}

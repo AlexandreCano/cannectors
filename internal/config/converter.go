@@ -280,14 +280,16 @@ func getIntSliceFromMap(m map[string]interface{}, key string) ([]int, bool) {
 // and injects resolved values into each module's raw map before serialization.
 func applyDefaults(builders []*moduleBuilder, defaults *connector.ModuleDefaults) {
 	for _, b := range builders {
-		resolveOnError(b.rawMap, defaults)
+		resolveOnErrorInheritance(b.rawMap, defaults)
 		resolveTimeout(b.rawMap, defaults)
 		resolveRetry(b.rawMap, defaults)
 	}
 }
 
-// resolveOnError resolves onError with precedence: module > defaults.
-func resolveOnError(m map[string]interface{}, defaults *connector.ModuleDefaults) {
+// resolveOnErrorInheritance applies inheritance for the onError field with
+// precedence module > defaults. Distinct from errhandling.ParseOnErrorStrategy,
+// which parses a user-provided string into a typed strategy.
+func resolveOnErrorInheritance(m map[string]interface{}, defaults *connector.ModuleDefaults) {
 	if v, ok := m["onError"].(string); ok && v != "" {
 		return
 	}

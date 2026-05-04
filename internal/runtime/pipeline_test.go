@@ -144,10 +144,12 @@ func TestExecutor_Execute_Success(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	if result == nil {
 		t.Fatal("Execute() returned nil result")
+		return
 	}
 
 	if result.Status != "success" {
@@ -210,6 +212,7 @@ func TestExecutor_Execute_MappingFilterIntegration(t *testing.T) {
 	mapper, err := filter.NewMappingFromConfig(mappings, "fail")
 	if err != nil {
 		t.Fatalf("NewMappingFromConfig() error = %v", err)
+		return
 	}
 
 	pipeline := &connector.Pipeline{
@@ -223,23 +226,29 @@ func TestExecutor_Execute_MappingFilterIntegration(t *testing.T) {
 	result, err := executor.Execute(pipeline)
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 	if result.Status != StatusSuccess {
 		t.Fatalf("expected success status, got %s", result.Status)
+		return
 	}
 	if len(mockOutput.sentRecords) != 1 {
 		t.Fatalf("expected 1 record sent, got %d", len(mockOutput.sentRecords))
+		return
 	}
 
 	contact, ok := mockOutput.sentRecords[0]["contact"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("expected contact map, got %T", mockOutput.sentRecords[0]["contact"])
+		return
 	}
 	if contact["name"] != "alice" {
 		t.Fatalf("expected contact.name=alice, got %v", contact["name"])
+		return
 	}
 	if contact["id"] != 12 {
 		t.Fatalf("expected contact.id=12, got %v", contact["id"])
+		return
 	}
 }
 
@@ -256,9 +265,10 @@ func TestExecutor_Execute_ConditionFilterIntegration(t *testing.T) {
 		Expression: "value > 10",
 		OnTrue:     "continue",
 		OnFalse:    "skip",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
+		return
 	}
 
 	pipeline := &connector.Pipeline{
@@ -272,15 +282,19 @@ func TestExecutor_Execute_ConditionFilterIntegration(t *testing.T) {
 	result, err := executor.Execute(pipeline)
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 	if result.Status != StatusSuccess {
 		t.Fatalf("expected success status, got %s", result.Status)
+		return
 	}
 	if len(mockOutput.sentRecords) != 1 {
 		t.Fatalf("expected 1 record sent, got %d", len(mockOutput.sentRecords))
+		return
 	}
 	if mockOutput.sentRecords[0]["value"] != 20 {
 		t.Fatalf("expected value=20, got %v", mockOutput.sentRecords[0]["value"])
+		return
 	}
 }
 
@@ -298,15 +312,17 @@ func TestExecutor_Execute_MappingThenConditionIntegration(t *testing.T) {
 	}, "fail")
 	if err != nil {
 		t.Fatalf("NewMappingFromConfig() error = %v", err)
+		return
 	}
 
 	cond, err := filter.NewConditionFromConfig(filter.ConditionConfig{
 		Expression: "value > 100",
 		OnTrue:     "continue",
 		OnFalse:    "skip",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
+		return
 	}
 
 	pipeline := &connector.Pipeline{
@@ -320,15 +336,19 @@ func TestExecutor_Execute_MappingThenConditionIntegration(t *testing.T) {
 	result, err := executor.Execute(pipeline)
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 	if result.Status != StatusSuccess {
 		t.Fatalf("expected success status, got %s", result.Status)
+		return
 	}
 	if len(mockOutput.sentRecords) != 1 {
 		t.Fatalf("expected 1 record sent, got %d", len(mockOutput.sentRecords))
+		return
 	}
 	if mockOutput.sentRecords[0]["value"] != 150 {
 		t.Fatalf("expected value=150, got %v", mockOutput.sentRecords[0]["value"])
+		return
 	}
 }
 
@@ -351,10 +371,12 @@ func TestExecutor_ExecuteWithRecords_Success(t *testing.T) {
 	result, err := executor.ExecuteWithRecords(pipeline, records)
 	if err != nil {
 		t.Fatalf("ExecuteWithRecords() returned unexpected error: %v", err)
+		return
 	}
 
 	if result == nil {
 		t.Fatal("ExecuteWithRecords() returned nil result")
+		return
 	}
 
 	if result.Status != "success" {
@@ -426,6 +448,7 @@ func TestExecutor_Execute_WithFilters(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	if result.Status != "success" {
@@ -443,6 +466,7 @@ func TestExecutor_Execute_WithFilters(t *testing.T) {
 	// Verify filter sequence: second filter should receive doubled values
 	if len(addFieldFilter.recordsReceived) != 2 {
 		t.Fatalf("Second filter received %d records, expected 2", len(addFieldFilter.recordsReceived))
+		return
 	}
 
 	// Check that first record has doubled value (10 * 2 = 20)
@@ -453,6 +477,7 @@ func TestExecutor_Execute_WithFilters(t *testing.T) {
 	// Verify output received fully processed records
 	if len(mockOutput.sentRecords) != 2 {
 		t.Fatalf("Output received %d records, expected 2", len(mockOutput.sentRecords))
+		return
 	}
 
 	// Check final output has doubled value and processed field
@@ -486,6 +511,7 @@ func TestExecutor_Execute_EmptyInputData(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	if result.Status != "success" {
@@ -525,6 +551,7 @@ func TestExecutor_Execute_DeterministicExecution(t *testing.T) {
 		result, err := executor.Execute(pipeline)
 		if err != nil {
 			t.Fatalf("Execution %d failed: %v", i, err)
+			return
 		}
 		results = append(results, result)
 	}
@@ -564,6 +591,7 @@ func TestExecutor_Execute_TimestampTracking(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	// StartedAt should be between before and after
@@ -603,10 +631,12 @@ func TestExecutor_Execute_InputError(t *testing.T) {
 	// Assert - error should be returned AND result with error details
 	if err == nil {
 		t.Fatal("Execute() should return error when input module fails")
+		return
 	}
 
 	if result == nil {
 		t.Fatal("Execute() should return result even on error")
+		return
 	}
 
 	if result.Status != "error" {
@@ -653,10 +683,12 @@ func TestExecutor_Execute_FilterError(t *testing.T) {
 	// Assert
 	if err == nil {
 		t.Fatal("Execute() should return error when filter module fails")
+		return
 	}
 
 	if result == nil {
 		t.Fatal("Execute() should return result even on error")
+		return
 	}
 
 	if result.Status != "error" {
@@ -702,10 +734,12 @@ func TestExecutor_Execute_OutputError(t *testing.T) {
 	// Assert
 	if err == nil {
 		t.Fatal("Execute() should return error when output module fails")
+		return
 	}
 
 	if result == nil {
 		t.Fatal("Execute() should return result even on error")
+		return
 	}
 
 	if result.Status != "error" {
@@ -759,10 +793,12 @@ func TestExecutor_Execute_MultipleFiltersSequence(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	if len(executionOrder) != 3 {
 		t.Fatalf("Expected 3 filters to execute, got %d", len(executionOrder))
+		return
 	}
 
 	for i, order := range executionOrder {
@@ -810,6 +846,7 @@ func TestExecutor_Execute_FilterErrorStopsExecution(t *testing.T) {
 	// Assert
 	if err == nil {
 		t.Fatal("Execute() should return error when filter fails")
+		return
 	}
 
 	// Only filter 1 should have executed (not filter 3)
@@ -850,6 +887,7 @@ func TestExecutor_DryRun(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	if result.Status != "success" {
@@ -880,10 +918,12 @@ func TestExecutor_Execute_NilPipeline(t *testing.T) {
 	// Assert
 	if err == nil {
 		t.Fatal("Execute() should return error for nil pipeline")
+		return
 	}
 
 	if result == nil {
 		t.Fatal("Execute() should return result even for nil pipeline error")
+		return
 	}
 
 	if result.Status != "error" {
@@ -918,6 +958,7 @@ func TestExecutor_Execute_ClosesOutputModuleOnSuccess(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	if !mockOutput.closed {
@@ -946,6 +987,7 @@ func TestExecutor_Execute_ClosesOutputModuleOnInputError(t *testing.T) {
 	// Assert
 	if err == nil {
 		t.Fatal("Execute() should return error when input fails")
+		return
 	}
 
 	if !mockOutput.closed {
@@ -979,6 +1021,7 @@ func TestExecutor_Execute_ClosesOutputModuleOnFilterError(t *testing.T) {
 	// Assert
 	if err == nil {
 		t.Fatal("Execute() should return error when filter fails")
+		return
 	}
 
 	if !mockOutput.closed {
@@ -1011,6 +1054,7 @@ func TestExecutor_Execute_ClosesOutputModuleOnOutputError(t *testing.T) {
 	// Assert
 	if err == nil {
 		t.Fatal("Execute() should return error when output fails")
+		return
 	}
 
 	if !mockOutput.closed {
@@ -1045,6 +1089,7 @@ func TestExecutor_Execute_ClosesInputModuleAfterInputExecution(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	if !mockInput.closed {
@@ -1073,6 +1118,7 @@ func TestExecutor_Execute_ClosesInputModuleOnInputError(t *testing.T) {
 	// Assert - expect error from input
 	if err == nil {
 		t.Fatal("Execute() should return error when input fails")
+		return
 	}
 
 	// Input module should still be closed even on error
@@ -1121,10 +1167,12 @@ func TestExecutor_Execute_ClosesInputModuleBeforeFilters(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	if !filterWithCheck.processCalled {
 		t.Fatal("Filter was not called")
+		return
 	}
 
 	if !filterWithCheck.inputClosedOnFilter {
@@ -1164,6 +1212,7 @@ func TestExecutor_Execute_InputClosedButRecordsStillAvailable(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	// Input should be closed
@@ -1215,6 +1264,7 @@ func TestExecutor_Execute_NoDoubleCloseOnInputModule(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	if closeCount != 1 {
@@ -1329,6 +1379,7 @@ func TestExecutor_DryRun_CallsPreview(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	if result.Status != "success" {
@@ -1353,6 +1404,7 @@ func TestExecutor_DryRun_CallsPreview(t *testing.T) {
 	// Result should contain preview information
 	if result.DryRunPreview == nil {
 		t.Fatal("DryRunPreview should be set in dry-run mode")
+		return
 	}
 
 	if len(result.DryRunPreview) != 1 {
@@ -1413,6 +1465,7 @@ func TestExecutor_DryRun_WithFilters_CallsPreview(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	// Filter should be called
@@ -1423,6 +1476,7 @@ func TestExecutor_DryRun_WithFilters_CallsPreview(t *testing.T) {
 	// Preview should receive FILTERED records (doubled values)
 	if len(mockOutput.previewRecords) != 2 {
 		t.Fatalf("PreviewRequest() received %d records, expected 2", len(mockOutput.previewRecords))
+		return
 	}
 
 	// Verify the first record has doubled value (10 * 2 = 20)
@@ -1433,6 +1487,7 @@ func TestExecutor_DryRun_WithFilters_CallsPreview(t *testing.T) {
 	// DryRunPreview should be set
 	if result.DryRunPreview == nil {
 		t.Fatal("DryRunPreview should be set in dry-run mode with filters")
+		return
 	}
 }
 
@@ -1459,6 +1514,7 @@ func TestExecutor_DryRun_NonPreviewableModule_SkipsPreview(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	if result.Status != "success" {
@@ -1502,6 +1558,7 @@ func TestExecutor_DryRun_PreviewError_ReportsError(t *testing.T) {
 	// but the error should be captured somewhere
 	if result == nil {
 		t.Fatal("Execute() should return result even with preview error")
+		return
 	}
 
 	// The execution should succeed but note the preview error
@@ -1553,6 +1610,7 @@ func TestExecutor_DryRun_RecordsProcessedCount(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	// RecordsProcessed should reflect the count that would be sent
@@ -1586,6 +1644,7 @@ func TestExecutor_DryRun_EmptyRecords(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	if result.Status != "success" {
@@ -1627,6 +1686,7 @@ func TestExecutor_ExecuteWithRecords_DryRun_CallsPreview(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("ExecuteWithRecords() returned unexpected error: %v", err)
+		return
 	}
 
 	if result.Status != "success" {
@@ -1680,6 +1740,7 @@ func TestExecutor_DryRun_InputModuleExecutesNormally(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	// Input module should be called normally
@@ -1738,6 +1799,7 @@ func TestExecutor_DryRun_FilterModulesExecuteNormally(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	// Filter should be called
@@ -1748,6 +1810,7 @@ func TestExecutor_DryRun_FilterModulesExecuteNormally(t *testing.T) {
 	// Preview should receive transformed data
 	if len(mockOutput.previewRecords) != 2 {
 		t.Fatalf("Preview received %d records, expected 2", len(mockOutput.previewRecords))
+		return
 	}
 
 	// Verify transformation was applied
@@ -1781,10 +1844,12 @@ func TestExecutor_DryRun_InputError_ReportedCorrectly(t *testing.T) {
 	// Assert
 	if err == nil {
 		t.Fatal("Execute() should return error when input fails in dry-run mode")
+		return
 	}
 
 	if result == nil {
 		t.Fatal("Execute() should return result even on input error")
+		return
 	}
 
 	if result.Status != "error" {
@@ -1827,10 +1892,12 @@ func TestExecutor_DryRun_FilterError_ReportedCorrectly(t *testing.T) {
 	// Assert
 	if err == nil {
 		t.Fatal("Execute() should return error when filter fails in dry-run mode")
+		return
 	}
 
 	if result == nil {
 		t.Fatal("Execute() should return result even on filter error")
+		return
 	}
 
 	if result.Status != "error" {
@@ -1889,11 +1956,13 @@ func TestExecutor_DryRun_MultipleFiltersSequence(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	// All filters should execute in order
 	if len(executionOrder) != 3 {
 		t.Fatalf("Expected 3 filters to execute, got %d", len(executionOrder))
+		return
 	}
 
 	for i, order := range executionOrder {
@@ -1948,6 +2017,7 @@ func TestExecutor_DryRun_CompletePipelineFlow(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	// Verify complete flow
@@ -2016,11 +2086,13 @@ func TestExecutor_DryRun_InputErrorDetails(t *testing.T) {
 	// Assert
 	if err == nil {
 		t.Fatal("Should return error on input failure")
+		return
 	}
 
 	// Error message should contain the original error
 	if result.Error == nil {
 		t.Fatal("Result should contain error details")
+		return
 	}
 
 	if result.Error.Code != "INPUT_FAILED" {
@@ -2062,10 +2134,12 @@ func TestExecutor_DryRun_FilterErrorDetails(t *testing.T) {
 	// Assert
 	if err == nil {
 		t.Fatal("Should return error on filter failure")
+		return
 	}
 
 	if result.Error == nil {
 		t.Fatal("Result should contain error details")
+		return
 	}
 
 	if result.Error.Code != "FILTER_FAILED" {
@@ -2150,14 +2224,17 @@ func TestExecutor_DryRun_NilPipeline_ErrorDetails(t *testing.T) {
 	// Assert
 	if err == nil {
 		t.Fatal("Should return error for nil pipeline")
+		return
 	}
 
 	if result == nil {
 		t.Fatal("Should return result even for nil pipeline")
+		return
 	}
 
 	if result.Error == nil {
 		t.Fatal("Result should contain error details")
+		return
 	}
 
 	if result.Error.Code != "INVALID_INPUT" {
@@ -2199,6 +2276,7 @@ func TestExecutor_DryRun_ShowCredentials_EndToEnd(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	if result.Status != "success" {
@@ -2257,14 +2335,17 @@ func TestExecutor_DryRun_NilInputModule_ErrorDetails(t *testing.T) {
 	// Assert
 	if err == nil {
 		t.Fatal("Should return error for nil input module")
+		return
 	}
 
 	if result == nil {
 		t.Fatal("Should return result even for nil input")
+		return
 	}
 
 	if result.Error == nil {
 		t.Fatal("Result should contain error details")
+		return
 	}
 
 	if result.Error.Code != "INVALID_INPUT" {
@@ -2311,6 +2392,7 @@ func TestExecutor_Execute_LogsExecutionStart(t *testing.T) {
 	_, err := executor.Execute(pipeline)
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	// Assert - check for execution start log
@@ -2376,6 +2458,7 @@ func TestExecutor_Execute_LogsStageStart(t *testing.T) {
 	_, err := executor.Execute(pipeline)
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	// Assert - check for stage start logs
@@ -2443,6 +2526,7 @@ func TestExecutor_Execute_LogsExecutionEnd(t *testing.T) {
 	_, err := executor.Execute(pipeline)
 	if err != nil {
 		t.Fatalf("Execute() returned unexpected error: %v", err)
+		return
 	}
 
 	// Assert - check for execution end log

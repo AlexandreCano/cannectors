@@ -106,24 +106,24 @@ development_status:
   # Epic 15: HTTP Client Consolidation (from audit 2026-04-21)
   # Factorise les 3 modules HTTP (polling, request, http_call) via un package partagé
   # Source: docs/AUDIT_TECHNIQUE_2026-04-21.md §5 P1.1
-  epic-15: in-progress
-  15-1-create-internal-httpclient-package: review
-  15-2-enhance-retry-executor-retry-after-and-body-hints: review
-  15-3-migrate-http-output-to-httpclient: review
-  15-4-migrate-http-polling-to-httpclient: review
-  15-5-migrate-http-call-to-httpclient: review
+  epic-15: done
+  15-1-create-internal-httpclient-package: done
+  15-2-enhance-retry-executor-retry-after-and-body-hints: done
+  15-3-migrate-http-output-to-httpclient: done
+  15-4-migrate-http-polling-to-httpclient: done
+  15-5-migrate-http-call-to-httpclient: done
   epic-15-retrospective: optional
 
   # Epic 16: Code Duplication Cleanup (from audit 2026-04-21)
   # Unifie les duplications non-HTTP (path navigation, RetryInfo, onError, metadata, etc.)
   # Source: docs/AUDIT_TECHNIQUE_2026-04-21.md §5 P1.3, P1.4, P2.2, P2.3, P2.4, §2.2
-  epic-16: backlog
-  16-1-unify-record-path-navigation: backlog
-  16-2-unify-retry-info-type: backlog
-  16-3-unify-onerror-strategy-parsing: backlog
-  16-4-extract-metadata-package: backlog
-  16-5-remove-template-wrapper-and-duplicate-retry-codes: backlog
-  16-6-consolidate-condition-filter-registration: backlog
+  epic-16: review
+  16-1-unify-record-path-navigation: review
+  16-2-unify-retry-info-type: review
+  16-3-unify-onerror-strategy-parsing: review
+  16-4-extract-metadata-package: review
+  16-5-remove-template-wrapper-and-duplicate-retry-codes: review
+  16-6-consolidate-condition-filter-registration: review
   epic-16-retrospective: optional
 
   # Epic 17: Schema/Runtime Alignment & Bug Fixes (from audit 2026-04-21)

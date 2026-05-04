@@ -54,6 +54,7 @@ func TestNewWebhookFromConfig_ValidConfig(t *testing.T) {
 
 	if w == nil {
 		t.Fatal("NewWebhookFromConfig() returned nil, want Webhook")
+		return
 	}
 
 	if w.endpoint != "/webhook/orders" {

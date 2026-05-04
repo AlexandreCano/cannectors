@@ -91,7 +91,7 @@ func TestConditionBasicEquality(t *testing.T) {
 				Lang:       "simple",
 				OnTrue:     "continue",
 				OnFalse:    "skip",
-			})
+			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
@@ -201,7 +201,7 @@ func TestConditionNumericComparisons(t *testing.T) {
 				Lang:       "simple",
 				OnTrue:     "continue",
 				OnFalse:    "skip",
-			})
+			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
@@ -299,7 +299,7 @@ func TestConditionLogicalOperators(t *testing.T) {
 				Lang:       "simple",
 				OnTrue:     "continue",
 				OnFalse:    "skip",
-			})
+			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
@@ -369,7 +369,7 @@ func TestConditionNestedFieldAccess(t *testing.T) {
 				Lang:       "simple",
 				OnTrue:     "continue",
 				OnFalse:    "skip",
-			})
+			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
@@ -438,7 +438,7 @@ func TestConditionArrayAccess(t *testing.T) {
 				Lang:       "simple",
 				OnTrue:     "continue",
 				OnFalse:    "skip",
-			})
+			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
@@ -466,7 +466,7 @@ func TestConditionMultipleRecords(t *testing.T) {
 		Lang:       "simple",
 		OnTrue:     "continue",
 		OnFalse:    "skip",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -504,7 +504,7 @@ func TestConditionEmptyInput(t *testing.T) {
 		Lang:       "simple",
 		OnTrue:     "continue",
 		OnFalse:    "skip",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -534,7 +534,7 @@ func TestConditionConfigValidation(t *testing.T) {
 	_, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
 		Lang:       "simple",
-	})
+	}, nil)
 	if err != nil {
 		t.Errorf("valid config should not error: %v", err)
 	}
@@ -545,7 +545,7 @@ func TestConditionDefaultLang(t *testing.T) {
 	// Lang not specified should default to "simple"
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -571,7 +571,7 @@ func TestConditionOnTrueContinue(t *testing.T) {
 		Expression: "status == 'active'",
 		OnTrue:     "continue",
 		OnFalse:    "skip",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -596,7 +596,7 @@ func TestConditionOnTrueSkip(t *testing.T) {
 		Expression: "status == 'active'",
 		OnTrue:     "skip",
 		OnFalse:    "continue",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -627,7 +627,7 @@ func TestConditionOnFalseContinue(t *testing.T) {
 		Expression: "status == 'active'",
 		OnTrue:     "continue",
 		OnFalse:    "continue",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -654,7 +654,7 @@ func TestConditionOnFalseSkip(t *testing.T) {
 		Expression: "status == 'active'",
 		OnTrue:     "continue",
 		OnFalse:    "skip",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -684,7 +684,7 @@ func TestConditionDefaultRouting(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "qty > 10",
 		// Defaults: OnTrue="continue", OnFalse="skip"
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -753,7 +753,7 @@ func TestConditionNullValueHandling(t *testing.T) {
 				Expression: tt.expression,
 				OnTrue:     "continue",
 				OnFalse:    "skip",
-			})
+			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
@@ -807,7 +807,7 @@ func TestConditionTypeMismatchHandling(t *testing.T) {
 				Expression: tt.expression,
 				OnTrue:     "continue",
 				OnFalse:    "skip",
-			})
+			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
@@ -843,7 +843,7 @@ func TestConditionNestedThenMapping(t *testing.T) {
 			},
 		}},
 		OnFalse: "skip",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -890,7 +890,7 @@ func TestConditionNestedElseMapping(t *testing.T) {
 				{Source: strPtrCond("status"), Target: "currentStatus"},
 			},
 		}},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -936,7 +936,7 @@ func TestConditionNestedBothThenElse(t *testing.T) {
 				{Source: strPtrCond("name"), Target: "standardName"},
 			},
 		}},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -983,7 +983,7 @@ func TestConditionNestedRecursiveCondition(t *testing.T) {
 			OnFalse:    "skip",     // Medium level: skip
 		}},
 		OnFalse: "skip", // Level 0: skip
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -1021,7 +1021,7 @@ func TestConditionNestedPriorityOverOnTrue(t *testing.T) {
 			},
 		}},
 		OnFalse: "skip",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -1057,7 +1057,7 @@ func TestConditionNestedPriorityOverOnFalse(t *testing.T) {
 				{Source: strPtrCond("id"), Target: "elseId"},
 			},
 		}},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -1093,7 +1093,7 @@ func TestConditionNestedModuleReturnsEmpty(t *testing.T) {
 			OnFalse:    "skip", // Skip the record
 		}},
 		OnFalse: "skip",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -1175,7 +1175,7 @@ func TestConditionParenthesesGrouping(t *testing.T) {
 				Expression: tt.expression,
 				OnTrue:     "continue",
 				OnFalse:    "skip",
-			})
+			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
@@ -1256,7 +1256,7 @@ func TestConditionStringOperations(t *testing.T) {
 				Expression: tt.expression,
 				OnTrue:     "continue",
 				OnFalse:    "skip",
-			})
+			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
@@ -1324,7 +1324,7 @@ func TestConditionDeepNestedFieldAccess(t *testing.T) {
 				Expression: tt.expression,
 				OnTrue:     "continue",
 				OnFalse:    "skip",
-			})
+			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
@@ -1353,7 +1353,7 @@ func TestConditionLangSimple(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
 		Lang:       "simple",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -1374,7 +1374,7 @@ func TestConditionLangCELNotImplemented(t *testing.T) {
 	_, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
 		Lang:       "cel",
-	})
+	}, nil)
 	if err == nil {
 		t.Error("expected error for lang='cel' (not implemented)")
 	}
@@ -1388,7 +1388,7 @@ func TestConditionLangJSONataNotImplemented(t *testing.T) {
 	_, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status = 'active'",
 		Lang:       "jsonata",
-	})
+	}, nil)
 	if err == nil {
 		t.Error("expected error for lang='jsonata' (not implemented)")
 	}
@@ -1402,7 +1402,7 @@ func TestConditionLangJMESPathNotImplemented(t *testing.T) {
 	_, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
 		Lang:       "jmespath",
-	})
+	}, nil)
 	if err == nil {
 		t.Error("expected error for lang='jmespath' (not implemented)")
 	}
@@ -1416,7 +1416,7 @@ func TestConditionLangUnknown(t *testing.T) {
 	_, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
 		Lang:       "unknown-lang",
-	})
+	}, nil)
 	if err == nil {
 		t.Error("expected error for unknown lang")
 	}
@@ -1430,7 +1430,7 @@ func TestConditionLangDefaultIsSimple(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "value > 10",
 		// Lang not specified - should default to "simple"
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -1513,7 +1513,7 @@ func TestConditionSyntaxErrorDetection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := NewConditionFromConfig(ConditionConfig{
 				Expression: tt.expression,
-			})
+			}, nil)
 			if tt.wantErr && err == nil {
 				t.Errorf("expected error for expression %q, got nil", tt.expression)
 			}
@@ -1531,7 +1531,7 @@ func TestConditionOnErrorFail(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "data.unknownMethod()",
 		ModuleBase: connector.ModuleBase{OnError: "fail"},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -1553,7 +1553,7 @@ func TestConditionOnErrorSkip(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "value.invalidMethod() > 0",
 		ModuleBase: connector.ModuleBase{OnError: "skip"},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -1581,7 +1581,7 @@ func TestConditionOnErrorLog(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "value.invalidMethod() > 0",
 		ModuleBase: connector.ModuleBase{OnError: "log"},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -1608,7 +1608,7 @@ func TestConditionInvalidOnErrorDefaultsToFail(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "data.unknownMethod()",
 		ModuleBase: connector.ModuleBase{OnError: "invalid"},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -1628,7 +1628,7 @@ func TestConditionEmptyExpressionDefaultsToOnTrue(t *testing.T) {
 	_, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "",
 		OnTrue:     "continue",
-	})
+	}, nil)
 	if err == nil {
 		t.Fatal("NewConditionFromConfig() expected error for empty expression, got nil")
 	}
@@ -1641,7 +1641,7 @@ func TestConditionEmptyExpressionOnTrueSkipFiltersAll(t *testing.T) {
 	_, err := NewConditionFromConfig(ConditionConfig{
 		Expression: " ",
 		OnTrue:     "skip",
-	})
+	}, nil)
 	if err == nil {
 		t.Fatal("NewConditionFromConfig() expected error for whitespace-only expression, got nil")
 	}
@@ -1657,7 +1657,7 @@ func TestConditionErrorDetails(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "value.invalidMethod() > 100",
 		ModuleBase: connector.ModuleBase{OnError: "fail"},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -1732,7 +1732,7 @@ func TestConditionToBoolConversion(t *testing.T) {
 				Expression: tt.expr,
 				OnTrue:     "continue",
 				OnFalse:    "skip",
-			})
+			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
@@ -1771,7 +1771,7 @@ func TestConditionInvalidOnTrueOnFalse(t *testing.T) {
 				Expression: "value > 0",
 				OnTrue:     tt.onTrue,
 				OnFalse:    tt.onFalse,
-			})
+			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
@@ -1800,7 +1800,7 @@ func TestConditionInvalidOnTrueOnFalse(t *testing.T) {
 func TestConditionInvalidExpressionError(t *testing.T) {
 	_, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status = 'active'", // Invalid: single = instead of ==
-	})
+	}, nil)
 	if err == nil {
 		t.Fatal("expected error for invalid expression")
 	}
@@ -1816,7 +1816,7 @@ func TestConditionDefaultOnErrorIsFail(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "missing == 'value'",
 		// OnError not specified - should default to "fail"
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -1846,7 +1846,7 @@ func TestConditionDefaultOnErrorIsFail(t *testing.T) {
 func TestConditionImplementsModule(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -1859,7 +1859,7 @@ func TestConditionImplementsModule(t *testing.T) {
 func TestConditionOutputFormat(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -1911,7 +1911,7 @@ func TestConditionChainWithMapping(t *testing.T) {
 	// Then apply condition on mapped output
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "value > 100",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -1946,7 +1946,7 @@ func TestConditionChainWithMapping(t *testing.T) {
 func TestConditionEmptyConditionBehavior(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "true", // Always true condition
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -1966,7 +1966,7 @@ func TestConditionEmptyConditionBehavior(t *testing.T) {
 func TestConditionPreservesRecordOrder(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "keep == true",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -2005,7 +2005,7 @@ func TestConditionPreservesRecordOrder(t *testing.T) {
 func TestConditionDeterministicSameInputSameOutput(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active' && amount > 50",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -2052,7 +2052,7 @@ func TestConditionDeterministicEvaluationConsistency(t *testing.T) {
 		t.Run(expr, func(t *testing.T) {
 			cond, err := NewConditionFromConfig(ConditionConfig{
 				Expression: expr,
-			})
+			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
@@ -2135,7 +2135,7 @@ func TestConditionDeterministicRoutingConsistency(t *testing.T) {
 				Expression: "value == true",
 				OnTrue:     tt.onTrue,
 				OnFalse:    tt.onFalse,
-			})
+			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
@@ -2162,7 +2162,7 @@ func TestConditionNoTimeDependent(t *testing.T) {
 	// by running the same evaluation multiple times over a period
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
@@ -2193,13 +2193,13 @@ func TestConditionDeterministicErrorHandling(t *testing.T) {
 	// Create a condition with invalid expression to test error consistency
 	_, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status = 'active'", // Invalid expression - should always error
-	})
+	}, nil)
 
 	// Run 50 times to verify error is consistently returned
 	for i := 0; i < 50; i++ {
 		_, testErr := NewConditionFromConfig(ConditionConfig{
 			Expression: "status = 'active'",
-		})
+		}, nil)
 
 		if testErr == nil {
 			t.Errorf("iteration %d: expected error for invalid expression, got nil", i)

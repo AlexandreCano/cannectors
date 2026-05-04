@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"syscall"
 	"testing"
+
+	"github.com/cannectors/runtime/pkg/connector"
 )
 
 // TestErrorCategory tests error category constants and their string values.
@@ -386,7 +388,7 @@ func TestGetErrorCategory(t *testing.T) {
 func TestDefaultRetryableStatusCodes(t *testing.T) {
 	expected := []int{429, 500, 502, 503, 504}
 
-	codes := DefaultRetryableStatusCodes()
+	codes := connector.DefaultRetryableStatusCodes()
 
 	if len(codes) != len(expected) {
 		t.Errorf("DefaultRetryableStatusCodes() length = %v, want %v", len(codes), len(expected))
@@ -424,7 +426,7 @@ func TestIsRetryableStatusCode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("status_%d", tt.code), func(t *testing.T) {
-			result := IsRetryableStatusCode(tt.code, DefaultRetryableStatusCodes())
+			result := IsRetryableStatusCode(tt.code, connector.DefaultRetryableStatusCodes())
 			if result != tt.retryable {
 				t.Errorf("IsRetryableStatusCode(%d) = %v, want %v", tt.code, result, tt.retryable)
 			}

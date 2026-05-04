@@ -93,9 +93,9 @@ func TestGetSQLNestedValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := getSQLNestedValue(record, tt.path)
+			got, _ := moduleconfig.GetNestedValue(record, tt.path)
 			if got != tt.want {
-				t.Errorf("getSQLNestedValue(%q) = %v, want %v", tt.path, got, tt.want)
+				t.Errorf("GetNestedValue(%q) = %v, want %v", tt.path, got, tt.want)
 			}
 		})
 	}

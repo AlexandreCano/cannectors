@@ -16,6 +16,7 @@ import (
 
 	"github.com/cannectors/runtime/internal/cache"
 	"github.com/cannectors/runtime/internal/database"
+	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/pathutil"
@@ -29,7 +30,6 @@ const (
 	defaultSQLCallCacheSize = 1000
 	defaultSQLCallCacheTTL  = 300 // 5 minutes
 	defaultSQLCallStrategy  = "merge"
-	defaultSQLCallOnError   = "fail"
 )
 
 // Template prefix constants
@@ -37,9 +37,6 @@ const (
 	// RecordFieldPrefix is the prefix for record field access in templates
 	RecordFieldPrefix = "record."
 )
-
-// Note: OnErrorFail, OnErrorSkip, OnErrorLog constants are defined in mapping.go
-// and are available in this package since they're in the same package.
 
 // Error types for sql_call module
 var (
@@ -67,7 +64,7 @@ type SQLCallModule struct {
 	query             string
 	mergeStrategy     string
 	resultKey         string
-	onError           string
+	onError           errhandling.OnErrorStrategy
 	cache             cache.Cache
 	cacheEnabled      bool
 	cacheTTL          time.Duration
@@ -99,7 +96,7 @@ func NewSQLCallFromConfig(config SQLCallConfig) (*SQLCallModule, error) {
 	}
 
 	mergeStrategy := resolveMergeStrategy(config.MergeStrategy)
-	onError := resolveOnError(config.OnError)
+	onError := errhandling.ParseOnErrorStrategy(config.OnError)
 	timeout := connector.GetTimeoutDuration(config.TimeoutMs, defaultSQLCallTimeout)
 
 	db, driver, err := createDatabaseConnection(config, timeout)
@@ -167,14 +164,6 @@ func resolveMergeStrategy(strategy string) string {
 	return strategy
 }
 
-// resolveOnError returns the onError behavior with default if empty.
-func resolveOnError(onError string) string {
-	if onError == "" {
-		return defaultSQLCallOnError
-	}
-	return onError
-}
-
 // createDatabaseConnection creates and opens a database connection.
 func createDatabaseConnection(config SQLCallConfig, timeout time.Duration) (*sql.DB, string, error) {
 	dbConfig := database.Config{
@@ -219,11 +208,11 @@ func setupCache(config SQLCallConfig) (cache.Cache, time.Duration, bool) {
 }
 
 // logSQLCallModuleInitialization logs the module initialization details.
-func logSQLCallModuleInitialization(driver, mergeStrategy, onError string, cacheEnabled bool, timeout time.Duration) {
+func logSQLCallModuleInitialization(driver, mergeStrategy string, onError errhandling.OnErrorStrategy, cacheEnabled bool, timeout time.Duration) {
 	logger.Debug("sql_call module initialized",
 		slog.String("driver", driver),
 		slog.String("merge_strategy", mergeStrategy),
-		slog.String("on_error", onError),
+		slog.String("on_error", string(onError)),
 		slog.Bool("cache_enabled", cacheEnabled),
 		slog.Duration("timeout", timeout),
 	)
@@ -241,7 +230,7 @@ func (m *SQLCallModule) Process(ctx context.Context, records []map[string]interf
 	logger.Debug("sql_call filter processing started",
 		slog.String("module_type", "sql_call"),
 		slog.Int("input_records", inputCount),
-		slog.String("on_error", m.onError),
+		slog.String("on_error", string(m.onError)),
 	)
 
 	result := make([]map[string]interface{}, 0, len(records))
@@ -267,7 +256,7 @@ func (m *SQLCallModule) Process(ctx context.Context, records []map[string]interf
 		if err != nil {
 			errorCount++
 			switch m.onError {
-			case OnErrorFail:
+			case errhandling.OnErrorFail:
 				duration := time.Since(startTime)
 				logger.Error("sql_call filter processing failed",
 					slog.String("module_type", "sql_call"),
@@ -276,7 +265,7 @@ func (m *SQLCallModule) Process(ctx context.Context, records []map[string]interf
 					slog.String("error", err.Error()),
 				)
 				return nil, err
-			case OnErrorSkip:
+			case errhandling.OnErrorSkip:
 				skippedCount++
 				logger.Warn("skipping record due to sql_call error",
 					slog.String("module_type", "sql_call"),
@@ -284,7 +273,7 @@ func (m *SQLCallModule) Process(ctx context.Context, records []map[string]interf
 					slog.String("error", err.Error()),
 				)
 				continue
-			case OnErrorLog:
+			case errhandling.OnErrorLog:
 				logger.Error("sql_call error (continuing)",
 					slog.String("module_type", "sql_call"),
 					slog.Int("record_index", recordIdx),
@@ -412,7 +401,7 @@ func (m *SQLCallModule) buildParameterizedQuery(queryTemplate string, record map
 		fieldPath = strings.TrimPrefix(fieldPath, RecordFieldPrefix)
 
 		// Get value from record
-		value := getSQLNestedValue(record, fieldPath)
+		value, _ := moduleconfig.GetNestedValue(record, fieldPath)
 
 		// Replace with positional parameter
 		paramPlaceholder := database.FormatPlaceholder(m.driver, paramIndex)
@@ -427,23 +416,6 @@ func (m *SQLCallModule) buildParameterizedQuery(queryTemplate string, record map
 	}
 
 	return query, args, nil
-}
-
-// getSQLNestedValue extracts a value from a nested map using dot notation.
-// Uses a different name to avoid conflict with the filter package's getNestedValue.
-func getSQLNestedValue(record map[string]interface{}, path string) interface{} {
-	parts := strings.Split(path, ".")
-	current := interface{}(record)
-
-	for _, part := range parts {
-		if m, ok := current.(map[string]interface{}); ok {
-			current = m[part]
-		} else {
-			return nil
-		}
-	}
-
-	return current
 }
 
 // rowsToRecords converts sql.Rows to a slice of maps.

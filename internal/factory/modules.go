@@ -15,22 +15,14 @@
 package factory
 
 import (
-	"encoding/json"
 	"fmt"
 
-	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/modules/filter"
 	"github.com/cannectors/runtime/internal/modules/input"
 	"github.com/cannectors/runtime/internal/modules/output"
 	"github.com/cannectors/runtime/internal/registry"
 	"github.com/cannectors/runtime/pkg/connector"
 )
-
-func init() {
-	// Initialize the nested module creator in the filter package to enable
-	// registry-based module creation in nested condition blocks.
-	filter.NestedModuleCreator = CreateFilterModuleFromNestedConfig
-}
 
 // CreateInputModule creates an input module instance from configuration.
 // Uses the registry to look up the constructor by type.
@@ -68,40 +60,17 @@ func CreateFilterModules(cfgs []connector.ModuleConfig) ([]filter.Module, error)
 	return modules, nil
 }
 
-// createSingleFilterModule creates a single filter module based on its type.
-// Uses the registry to look up the constructor, with special handling for
-// condition modules that require config parsing.
+// createSingleFilterModule creates a single filter module by looking up the
+// registered constructor for its type. The condition filter is registered
+// like any other type and resolves its nested then/else modules via the
+// registry — no special-casing needed here.
 func createSingleFilterModule(cfg connector.ModuleConfig, index int) (filter.Module, error) {
-	// Special handling for condition modules due to nested config parsing
-	if cfg.Type == "condition" {
-		return createConditionFilterModule(cfg, index)
-	}
-
 	constructor := registry.GetFilterConstructor(cfg.Type)
 	if constructor != nil {
 		return constructor(cfg, index)
 	}
 
-	// Error for unregistered types
 	return nil, fmt.Errorf("unknown filter module type %q at index %d: supported types are %v", cfg.Type, index, registry.ListFilterTypes())
-}
-
-// createConditionFilterModule creates a condition filter module from configuration.
-func createConditionFilterModule(cfg connector.ModuleConfig, index int) (filter.Module, error) {
-	condConfig, err := moduleconfig.ParseModuleConfig[filter.ConditionConfig](cfg)
-	if err != nil {
-		return nil, fmt.Errorf("invalid condition config at index %d: %w", index, err)
-	}
-	if condConfig.Expression == "" {
-		return nil, fmt.Errorf("invalid condition config at index %d: required field 'expression' is missing or empty in condition config", index)
-	}
-
-	module, err := filter.NewConditionFromConfig(condConfig)
-	if err != nil {
-		return nil, fmt.Errorf("invalid condition config at index %d: %w", index, err)
-	}
-
-	return module, nil
 }
 
 // CreateOutputModule creates an output module instance from configuration.
@@ -119,70 +88,4 @@ func CreateOutputModule(cfg *connector.ModuleConfig) (output.Module, error) {
 
 	// Error for unregistered types
 	return nil, fmt.Errorf("unknown output module type %q: supported types are %v", cfg.Type, registry.ListOutputTypes())
-}
-
-// CreateFilterModuleFromNestedConfig creates a filter module from a NestedModuleConfig
-// using the registry. This enables custom filter types to work in nested condition blocks.
-func CreateFilterModuleFromNestedConfig(nestedConfig *filter.NestedModuleConfig, index int) (filter.Module, error) {
-	if nestedConfig == nil {
-		return nil, nil
-	}
-
-	// Special handling for condition modules due to nested config structure
-	if nestedConfig.Type == "condition" {
-		condConfig := filter.ConditionConfig{
-			ModuleBase: connector.ModuleBase{OnError: nestedConfig.OnError},
-			Expression: nestedConfig.Expression,
-			Lang:       nestedConfig.Lang,
-			OnTrue:     nestedConfig.OnTrue,
-			OnFalse:    nestedConfig.OnFalse,
-			Then:       nestedConfig.Then,
-			Else:       nestedConfig.Else,
-		}
-		return filter.NewConditionFromConfig(condConfig)
-	}
-
-	// Build a raw config map from NestedModuleConfig
-	rawMap := make(map[string]interface{})
-	if nestedConfig.Config != nil {
-		for k, v := range nestedConfig.Config {
-			rawMap[k] = v
-		}
-	}
-
-	// Add mappings to config if present (for mapping modules)
-	if len(nestedConfig.Mappings) > 0 {
-		mappings := make([]interface{}, len(nestedConfig.Mappings))
-		for i, m := range nestedConfig.Mappings {
-			mappings[i] = map[string]interface{}{
-				"source": m.Source,
-				"target": m.Target,
-			}
-		}
-		rawMap["mappings"] = mappings
-	}
-
-	// Add onError to config if present
-	if nestedConfig.OnError != "" {
-		rawMap["onError"] = nestedConfig.OnError
-	}
-
-	raw, err := json.Marshal(rawMap)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling nested config for %q: %w", nestedConfig.Type, err)
-	}
-
-	moduleConfig := connector.ModuleConfig{
-		Type: nestedConfig.Type,
-		Raw:  raw,
-	}
-
-	// Use registry to create the module
-	constructor := registry.GetFilterConstructor(moduleConfig.Type)
-	if constructor != nil {
-		return constructor(moduleConfig, index)
-	}
-
-	// Error for unregistered types
-	return nil, fmt.Errorf("unknown filter module type %q in nested config: supported types are %v", moduleConfig.Type, registry.ListFilterTypes())
 }

@@ -21,7 +21,9 @@ import (
 	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/internal/httpclient"
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/internal/metadata"
 	"github.com/cannectors/runtime/internal/moduleconfig"
+	"github.com/cannectors/runtime/internal/template"
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
@@ -92,8 +94,8 @@ type HTTPRequestModule struct {
 	onError           errhandling.OnErrorStrategy // "fail", "skip", "log"
 	successCodes      []int                       // HTTP status codes considered success
 	lastRetryInfo     *connector.RetryInfo
-	retryHintProgram  *vm.Program        // Compiled expr program for retryHintFromBody
-	templateEvaluator *TemplateEvaluator // Template evaluator for dynamic content
+	retryHintProgram  *vm.Program         // Compiled expr program for retryHintFromBody
+	templateEvaluator *template.Evaluator // Template evaluator for dynamic content
 }
 
 // HTTPRequestOutputConfig holds typed configuration for the HTTP request output module.
@@ -205,7 +207,7 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 		reqConfig.bodyTemplateRaw = string(templateContent)
 
 		// Validate template syntax in loaded file
-		if err := ValidateTemplateSyntax(reqConfig.bodyTemplateRaw); err != nil {
+		if err := template.ValidateSyntax(reqConfig.bodyTemplateRaw); err != nil {
 			return nil, fmt.Errorf("invalid template syntax in %q: %w", reqConfig.BodyTemplateFile, err)
 		}
 
@@ -227,13 +229,13 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 		onError:           onError,
 		successCodes:      successCodes,
 		retryHintProgram:  retryHintProgram,
-		templateEvaluator: NewTemplateEvaluator(),
+		templateEvaluator: template.NewEvaluator(),
 	}
 
 	// Check if endpoint/headers use templating
-	hasTemplating := HasTemplateVariables(cfg.Endpoint)
+	hasTemplating := template.HasVariables(cfg.Endpoint)
 	for _, v := range headers {
-		if HasTemplateVariables(v) {
+		if template.HasVariables(v) {
 			hasTemplating = true
 			break
 		}
@@ -255,13 +257,13 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 // validateTemplateConfig validates template syntax in configuration.
 func validateTemplateConfig(endpoint string, headers map[string]string) error {
 	// Validate endpoint template syntax
-	if err := ValidateTemplateSyntax(endpoint); err != nil {
+	if err := template.ValidateSyntax(endpoint); err != nil {
 		return fmt.Errorf("invalid endpoint template: %w", err)
 	}
 
 	// Validate header template syntax
 	for name, value := range headers {
-		if err := ValidateTemplateSyntax(value); err != nil {
+		if err := template.ValidateSyntax(value); err != nil {
 			return fmt.Errorf("invalid template in header %q: %w", name, err)
 		}
 	}
@@ -357,7 +359,7 @@ func (h *HTTPRequestModule) sendBatchMode(ctx context.Context, records []map[str
 		// For batch mode with template, we can only use first record's data
 		// The template should be designed accordingly
 		if len(records) > 0 {
-			bodyStr := h.templateEvaluator.EvaluateTemplate(h.request.bodyTemplateRaw, records[0])
+			bodyStr := h.templateEvaluator.Evaluate(h.request.bodyTemplateRaw, records[0])
 			body = []byte(bodyStr)
 
 			// Validate resulting JSON is well-formed (AC #4)
@@ -379,7 +381,7 @@ func (h *HTTPRequestModule) sendBatchMode(ctx context.Context, records []map[str
 		)
 	} else {
 		// Default: marshal records to JSON array (with metadata stripped)
-		recordsForBody := stripMetadataFromRecords(records)
+		recordsForBody := metadata.StripFromRecords(records, metadata.DefaultFieldName)
 		body, err = json.Marshal(recordsForBody)
 		if err != nil {
 			logger.Error("failed to marshal records to JSON",
@@ -483,7 +485,7 @@ func (h *HTTPRequestModule) sendSingleRecordMode(ctx context.Context, records []
 // Returns an error only on marshal failure; invalid JSON from templates is logged but not returned.
 func (h *HTTPRequestModule) buildBodyForRecord(record map[string]interface{}, recordIndex int) ([]byte, error) {
 	if h.request.bodyTemplateRaw != "" {
-		bodyStr := h.templateEvaluator.EvaluateTemplate(h.request.bodyTemplateRaw, record)
+		bodyStr := h.templateEvaluator.Evaluate(h.request.bodyTemplateRaw, record)
 		body := []byte(bodyStr)
 		if h.isJSONContentType() {
 			if validationErr := validateJSON(body); validationErr != nil {
@@ -497,7 +499,7 @@ func (h *HTTPRequestModule) buildBodyForRecord(record map[string]interface{}, re
 		return body, nil
 	}
 	// Strip metadata before serialization
-	recordForBody := stripMetadataFromRecord(record)
+	recordForBody := metadata.StripFromRecord(record, metadata.DefaultFieldName)
 	body, err := json.Marshal(recordForBody)
 	if err != nil {
 		logger.Error("failed to marshal record",
@@ -755,8 +757,8 @@ func (h *HTTPRequestModule) extractHeadersFromRecord(record map[string]interface
 
 	for headerName, headerValue := range h.headers {
 		value := headerValue
-		if HasTemplateVariables(headerValue) {
-			value = h.templateEvaluator.EvaluateTemplate(headerValue, record)
+		if template.HasVariables(headerValue) {
+			value = h.templateEvaluator.Evaluate(headerValue, record)
 			if value == "" {
 				continue
 			}
@@ -767,7 +769,7 @@ func (h *HTTPRequestModule) extractHeadersFromRecord(record map[string]interface
 	// Add headers from keys (paramType=header)
 	for _, k := range h.request.Keys {
 		if k.paramType == "header" {
-			value := getFieldValue(record, k.field)
+			value := getRecordFieldString(record, k.field)
 			if value != "" {
 				httpclient.TryAddValidHeader(headers, k.paramName, value)
 			}
@@ -818,7 +820,7 @@ func (h *HTTPRequestModule) buildBaseHeadersMap(recordHeaders map[string]string)
 	headers[headerContentType] = defaultContentType
 
 	for key, value := range h.headers {
-		if HasTemplateVariables(value) {
+		if template.HasVariables(value) {
 			continue
 		}
 		httpclient.TryAddValidHeader(headers, key, value)

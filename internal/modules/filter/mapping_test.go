@@ -5,6 +5,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/cannectors/runtime/internal/errhandling"
 )
 
 // strPtr is a helper to create string pointers for test cases.
@@ -1960,7 +1962,7 @@ func TestMapping_MetadataPreservation(t *testing.T) {
 			{Source: strPtr("age"), Target: "userAge"},
 		}
 
-		module, err := NewMappingFromConfig(mappings, OnErrorFail)
+		module, err := NewMappingFromConfig(mappings, string(errhandling.OnErrorFail))
 		if err != nil {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}
@@ -2011,7 +2013,7 @@ func TestMapping_MetadataPreservation(t *testing.T) {
 			{Source: strPtr("data"), Target: "output"},
 		}
 
-		module, err := NewMappingFromConfig(mappings, OnErrorFail)
+		module, err := NewMappingFromConfig(mappings, string(errhandling.OnErrorFail))
 		if err != nil {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}
@@ -2052,7 +2054,7 @@ func TestMapping_MetadataPreservation(t *testing.T) {
 			{Source: strPtr("name"), Target: "fullName"},
 		}
 
-		module, err := NewMappingFromConfig(mappings, OnErrorFail)
+		module, err := NewMappingFromConfig(mappings, string(errhandling.OnErrorFail))
 		if err != nil {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}
@@ -2089,7 +2091,7 @@ func TestMapping_FieldDeletion(t *testing.T) {
 			{Target: "password"}, // Delete password field
 		}
 
-		module, err := NewMappingFromConfig(mappings, OnErrorFail)
+		module, err := NewMappingFromConfig(mappings, string(errhandling.OnErrorFail))
 		if err != nil {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}
@@ -2127,7 +2129,7 @@ func TestMapping_FieldDeletion(t *testing.T) {
 			{Target: "secret"},
 		}
 
-		module, err := NewMappingFromConfig(mappings, OnErrorFail)
+		module, err := NewMappingFromConfig(mappings, string(errhandling.OnErrorFail))
 		if err != nil {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}
@@ -2167,7 +2169,7 @@ func TestMapping_FieldDeletion(t *testing.T) {
 			{Target: "user.password"},
 		}
 
-		module, err := NewMappingFromConfig(mappings, OnErrorFail)
+		module, err := NewMappingFromConfig(mappings, string(errhandling.OnErrorFail))
 		if err != nil {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}
@@ -2205,7 +2207,7 @@ func TestMapping_FieldDeletion(t *testing.T) {
 			{Target: "user"},
 		}
 
-		module, err := NewMappingFromConfig(mappings, OnErrorFail)
+		module, err := NewMappingFromConfig(mappings, string(errhandling.OnErrorFail))
 		if err != nil {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}
@@ -2240,7 +2242,7 @@ func TestMapping_FieldDeletion(t *testing.T) {
 			{Target: "nonexistent"},
 		}
 
-		module, err := NewMappingFromConfig(mappings, OnErrorFail)
+		module, err := NewMappingFromConfig(mappings, string(errhandling.OnErrorFail))
 		if err != nil {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}
@@ -2269,7 +2271,7 @@ func TestMapping_FieldDeletion(t *testing.T) {
 			{Source: strPtr("email"), Target: "contact"},
 		}
 
-		module, err := NewMappingFromConfig(mappings, OnErrorFail)
+		module, err := NewMappingFromConfig(mappings, string(errhandling.OnErrorFail))
 		if err != nil {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}

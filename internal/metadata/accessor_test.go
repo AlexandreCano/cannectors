@@ -1,10 +1,10 @@
-package runtime
+package metadata
 
 import (
 	"testing"
 )
 
-func TestNewMetadataAccessor(t *testing.T) {
+func TestNewAccessor(t *testing.T) {
 	tests := []struct {
 		name          string
 		fieldName     string
@@ -13,7 +13,7 @@ func TestNewMetadataAccessor(t *testing.T) {
 		{
 			name:          "empty uses default",
 			fieldName:     "",
-			wantFieldName: DefaultMetadataFieldName,
+			wantFieldName: DefaultFieldName,
 		},
 		{
 			name:          "custom field name",
@@ -24,7 +24,7 @@ func TestNewMetadataAccessor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			accessor := NewMetadataAccessor(tt.fieldName)
+			accessor := NewAccessor(tt.fieldName)
 			if accessor.FieldName() != tt.wantFieldName {
 				t.Errorf("FieldName() = %q, want %q", accessor.FieldName(), tt.wantFieldName)
 			}
@@ -32,8 +32,8 @@ func TestNewMetadataAccessor(t *testing.T) {
 	}
 }
 
-func TestMetadataAccessor_GetSet(t *testing.T) {
-	accessor := NewMetadataAccessor("")
+func TestAccessor_GetSet(t *testing.T) {
+	accessor := NewAccessor("")
 
 	t.Run("set and get simple value", func(t *testing.T) {
 		record := make(map[string]interface{})
@@ -103,8 +103,8 @@ func TestMetadataAccessor_GetSet(t *testing.T) {
 	})
 }
 
-func TestMetadataAccessor_Delete(t *testing.T) {
-	accessor := NewMetadataAccessor("")
+func TestAccessor_Delete(t *testing.T) {
+	accessor := NewAccessor("")
 
 	t.Run("delete existing key", func(t *testing.T) {
 		record := make(map[string]interface{})
@@ -127,7 +127,6 @@ func TestMetadataAccessor_Delete(t *testing.T) {
 			t.Error("expected nested key to be deleted")
 		}
 
-		// Parent should still exist
 		_, found = accessor.Get(record, "parent")
 		if !found {
 			t.Error("expected parent key to still exist")
@@ -145,8 +144,8 @@ func TestMetadataAccessor_Delete(t *testing.T) {
 	})
 }
 
-func TestMetadataAccessor_GetAllSetAll(t *testing.T) {
-	accessor := NewMetadataAccessor("")
+func TestAccessor_GetAllSetAll(t *testing.T) {
+	accessor := NewAccessor("")
 
 	t.Run("get all metadata", func(t *testing.T) {
 		record := make(map[string]interface{})
@@ -195,8 +194,8 @@ func TestMetadataAccessor_GetAllSetAll(t *testing.T) {
 	})
 }
 
-func TestMetadataAccessor_Merge(t *testing.T) {
-	accessor := NewMetadataAccessor("")
+func TestAccessor_Merge(t *testing.T) {
+	accessor := NewAccessor("")
 
 	t.Run("merge into existing metadata", func(t *testing.T) {
 		record := make(map[string]interface{})
@@ -228,8 +227,8 @@ func TestMetadataAccessor_Merge(t *testing.T) {
 	})
 }
 
-func TestMetadataAccessor_Copy(t *testing.T) {
-	accessor := NewMetadataAccessor("")
+func TestAccessor_Copy(t *testing.T) {
+	accessor := NewAccessor("")
 
 	t.Run("copy metadata between records", func(t *testing.T) {
 		src := make(map[string]interface{})
@@ -257,10 +256,8 @@ func TestMetadataAccessor_Copy(t *testing.T) {
 		dst := make(map[string]interface{})
 		accessor.Copy(src, dst)
 
-		// Modify source
 		accessor.Set(src, "nested.value", "modified")
 
-		// Destination should be unchanged
 		val, _ := accessor.Get(dst, "nested.value")
 		if val != "original" {
 			t.Errorf("Get('nested.value') = %v, want 'original' (deep copy should be independent)", val)
@@ -276,8 +273,8 @@ func TestMetadataAccessor_Copy(t *testing.T) {
 	})
 }
 
-func TestMetadataAccessor_Strip(t *testing.T) {
-	accessor := NewMetadataAccessor("")
+func TestAccessor_Strip(t *testing.T) {
+	accessor := NewAccessor("")
 
 	t.Run("strip metadata from record", func(t *testing.T) {
 		record := map[string]interface{}{
@@ -307,8 +304,8 @@ func TestMetadataAccessor_Strip(t *testing.T) {
 	})
 }
 
-func TestMetadataAccessor_StripCopy(t *testing.T) {
-	accessor := NewMetadataAccessor("")
+func TestAccessor_StripCopy(t *testing.T) {
+	accessor := NewAccessor("")
 
 	t.Run("strip copy preserves original", func(t *testing.T) {
 		record := map[string]interface{}{
@@ -318,25 +315,22 @@ func TestMetadataAccessor_StripCopy(t *testing.T) {
 
 		stripped := accessor.StripCopy(record)
 
-		// Original should still have metadata
 		if !accessor.HasMetadata(record) {
 			t.Error("expected original record to still have metadata")
 		}
 
-		// Stripped should not have metadata
 		if _, exists := stripped[accessor.FieldName()]; exists {
 			t.Error("expected stripped copy to not have metadata field")
 		}
 
-		// Stripped should have data
 		if stripped["data"] != "value" {
 			t.Errorf("stripped['data'] = %v, want 'value'", stripped["data"])
 		}
 	})
 }
 
-func TestMetadataAccessor_HasMetadata(t *testing.T) {
-	accessor := NewMetadataAccessor("")
+func TestAccessor_HasMetadata(t *testing.T) {
+	accessor := NewAccessor("")
 
 	t.Run("has metadata", func(t *testing.T) {
 		record := make(map[string]interface{})
@@ -375,14 +369,12 @@ func TestDeepCopyMap(t *testing.T) {
 
 		dst := deepCopyMap(src)
 
-		// Modify source (safe type assertions for test data)
 		src["simple"] = "modified"
 		nested, _ := src["nested"].(map[string]interface{})
 		nested["inner"] = "modified"
 		arr, _ := src["array"].([]interface{})
 		arr[0] = "modified"
 
-		// Destination should be unchanged
 		if dst["simple"] != "value" {
 			t.Error("simple value was not deep copied")
 		}
@@ -403,13 +395,12 @@ func TestDeepCopyMap(t *testing.T) {
 	})
 }
 
-func TestCustomMetadataFieldName(t *testing.T) {
-	accessor := NewMetadataAccessor("_custom")
+func TestCustomFieldName(t *testing.T) {
+	accessor := NewAccessor("_custom")
 
 	record := make(map[string]interface{})
 	accessor.Set(record, "key", "value")
 
-	// Check that metadata is stored under custom field name
 	if _, exists := record["_custom"]; !exists {
 		t.Error("expected metadata to be stored under '_custom' field")
 	}
@@ -421,5 +412,73 @@ func TestCustomMetadataFieldName(t *testing.T) {
 	val, found := accessor.Get(record, "key")
 	if !found || val != "value" {
 		t.Errorf("Get('key') = %v, %v, want 'value', true", val, found)
+	}
+}
+
+func TestStripFromRecord(t *testing.T) {
+	t.Run("strips metadata field from copy", func(t *testing.T) {
+		record := map[string]interface{}{
+			"data":      "value",
+			"_metadata": map[string]interface{}{"key": "meta"},
+		}
+		stripped := StripFromRecord(record, "")
+
+		if _, exists := stripped["_metadata"]; exists {
+			t.Error("expected stripped copy to lack _metadata")
+		}
+		if _, exists := record["_metadata"]; !exists {
+			t.Error("expected original to still have _metadata (StripFromRecord must not mutate)")
+		}
+		if stripped["data"] != "value" {
+			t.Errorf("stripped['data'] = %v, want 'value'", stripped["data"])
+		}
+	})
+
+	t.Run("returns original when metadata field is absent", func(t *testing.T) {
+		record := map[string]interface{}{"data": "value"}
+		got := StripFromRecord(record, "")
+		// Identity check: nothing to copy when there's no metadata.
+		if &got == &record {
+			t.Error("expected same backing storage when no metadata to strip")
+		}
+		if got["data"] != "value" {
+			t.Errorf("got['data'] = %v, want 'value'", got["data"])
+		}
+	})
+
+	t.Run("custom field name", func(t *testing.T) {
+		record := map[string]interface{}{
+			"data":    "value",
+			"_custom": map[string]interface{}{"x": 1},
+		}
+		stripped := StripFromRecord(record, "_custom")
+		if _, exists := stripped["_custom"]; exists {
+			t.Error("expected _custom to be stripped")
+		}
+	})
+
+	t.Run("nil record returns nil", func(t *testing.T) {
+		if StripFromRecord(nil, "") != nil {
+			t.Error("expected nil for nil input")
+		}
+	})
+}
+
+func TestStripFromRecords(t *testing.T) {
+	records := []map[string]interface{}{
+		{"data": "a", "_metadata": map[string]interface{}{"i": 1}},
+		{"data": "b"},
+	}
+	stripped := StripFromRecords(records, "")
+
+	if len(stripped) != 2 {
+		t.Fatalf("len = %d, want 2", len(stripped))
+	}
+	if _, exists := stripped[0]["_metadata"]; exists {
+		t.Error("expected first record to be stripped")
+	}
+	// Original first record must remain unchanged.
+	if _, exists := records[0]["_metadata"]; !exists {
+		t.Error("expected original first record to still have _metadata")
 	}
 }

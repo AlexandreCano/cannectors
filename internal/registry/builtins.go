@@ -3,6 +3,7 @@
 package registry
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/cannectors/runtime/internal/moduleconfig"
@@ -61,9 +62,11 @@ func registerBuiltinFilterModules() {
 	})
 
 	// condition - Conditional routing filter module
-	// IMPORTANT: This registry entry provides basic condition support without nested modules.
-	// For full support including nested then/else blocks, use factory.CreateFilterModules()
-	// which calls factory.createConditionFilterModule() with complete parsing.
+	//
+	// Nested then/else modules are resolved via the registry through
+	// resolveNestedFilter, which serializes the nested config and dispatches
+	// to the appropriate registered constructor. This means custom filter
+	// types registered via RegisterFilter work transparently in nested blocks.
 	RegisterFilter("condition", func(cfg connector.ModuleConfig, index int) (filter.Module, error) {
 		condConfig, err := moduleconfig.ParseModuleConfig[filter.ConditionConfig](cfg)
 		if err != nil {
@@ -72,9 +75,7 @@ func registerBuiltinFilterModules() {
 		if condConfig.Expression == "" {
 			return nil, fmt.Errorf("required field 'expression' is missing or empty in condition config at index %d", index)
 		}
-		// Note: Nested then/else modules are NOT parsed here.
-		// Use factory.CreateFilterModules() for full condition support with nested modules.
-		return filter.NewConditionFromConfig(condConfig)
+		return filter.NewConditionFromConfig(condConfig, resolveNestedFilter)
 	})
 
 	// script - JavaScript transformation filter module using Goja
@@ -141,6 +142,49 @@ func registerBuiltinFilterModules() {
 		}
 		return module, nil
 	})
+}
+
+// resolveNestedFilter resolves a NestedModuleConfig by serializing it back to
+// JSON and dispatching to the registered filter constructor for the type.
+// This is the closure injected into condition modules so nested then/else
+// blocks support every registered filter type — including custom ones —
+// without the filter package needing to depend on the registry.
+func resolveNestedFilter(nestedConfig *filter.NestedModuleConfig, index int) (filter.Module, error) {
+	if nestedConfig == nil {
+		return nil, nil
+	}
+
+	rawMap := make(map[string]interface{})
+	for k, v := range nestedConfig.Config {
+		rawMap[k] = v
+	}
+
+	if len(nestedConfig.Mappings) > 0 {
+		mappings := make([]interface{}, len(nestedConfig.Mappings))
+		for i, m := range nestedConfig.Mappings {
+			mappings[i] = map[string]interface{}{
+				"source": m.Source,
+				"target": m.Target,
+			}
+		}
+		rawMap["mappings"] = mappings
+	}
+
+	if nestedConfig.OnError != "" {
+		rawMap["onError"] = nestedConfig.OnError
+	}
+
+	raw, err := json.Marshal(rawMap)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling nested config for %q: %w", nestedConfig.Type, err)
+	}
+
+	moduleConfig := connector.ModuleConfig{Type: nestedConfig.Type, Raw: raw}
+	constructor := GetFilterConstructor(moduleConfig.Type)
+	if constructor == nil {
+		return nil, fmt.Errorf("unknown filter module type %q in nested config: supported types are %v", moduleConfig.Type, ListFilterTypes())
+	}
+	return constructor(moduleConfig, index)
 }
 
 // registerBuiltinOutputModules registers all built-in output module types.

@@ -96,6 +96,8 @@ type RetryInfo struct {
 	RetryCount int `json:"retryCount,omitempty"`
 	// RetryDelaysMs is the delay before each retry in milliseconds
 	RetryDelaysMs []int64 `json:"retryDelaysMs,omitempty"`
+	// TotalDurationMs is the total time spent including retries, in milliseconds.
+	TotalDurationMs int64 `json:"totalDurationMs,omitempty"`
 }
 
 // RetryInfoProvider is implemented by modules that perform retries (e.g. HTTP Polling, HTTP Request).

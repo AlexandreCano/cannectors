@@ -17,6 +17,7 @@ import (
 
 	"github.com/cannectors/runtime/internal/auth"
 	"github.com/cannectors/runtime/internal/cache"
+	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/internal/httpclient"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/moduleconfig"
@@ -96,7 +97,7 @@ type HTTPCallModule struct {
 	cache             cache.Cache
 	mergeStrategy     string
 	dataField         string
-	onError           string
+	onError           errhandling.OnErrorStrategy
 	headers           map[string]string
 	cacheTTL          time.Duration
 	cacheKey          string              // Cache key configuration (optional)
@@ -169,7 +170,7 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 	}
 
 	mergeStrategy := normalizeHTTPCallMergeStrategy(config.MergeStrategy)
-	onError := normalizeHTTPCallOnError(config.OnError)
+	onError := errhandling.ParseOnErrorStrategy(config.OnError)
 	timeout := connector.GetTimeoutDuration(config.TimeoutMs, defaultHTTPCallTimeout)
 
 	httpClient := httpclient.NewClient(timeout)
@@ -212,7 +213,7 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 		slog.String("method", method),
 		slog.Int("keys_count", len(config.Keys)),
 		slog.String("merge_strategy", mergeStrategy),
-		slog.String("on_error", onError),
+		slog.String("on_error", string(onError)),
 		slog.Int("cache_max_size", cacheMaxSize),
 		slog.Int("cache_ttl_seconds", cacheTTLSeconds),
 		slog.String("cache_key", config.Cache.Key),
@@ -256,7 +257,7 @@ func (m *HTTPCallModule) Process(ctx context.Context, records []map[string]inter
 	logger.Debug("filter processing started",
 		slog.String("module_type", "http_call"),
 		slog.Int("input_records", inputCount),
-		slog.String("on_error", m.onError),
+		slog.String("on_error", string(m.onError)),
 	)
 
 	result := make([]map[string]interface{}, 0, len(records))
@@ -283,7 +284,7 @@ func (m *HTTPCallModule) Process(ctx context.Context, records []map[string]inter
 		if err != nil {
 			errorCount++
 			switch m.onError {
-			case OnErrorFail:
+			case errhandling.OnErrorFail:
 				duration := time.Since(startTime)
 				logger.Error("filter processing failed",
 					slog.String("module_type", "http_call"),
@@ -292,7 +293,7 @@ func (m *HTTPCallModule) Process(ctx context.Context, records []map[string]inter
 					slog.String("error", err.Error()),
 				)
 				return nil, err
-			case OnErrorSkip:
+			case errhandling.OnErrorSkip:
 				skippedCount++
 				logger.Warn("skipping record due to http_call error",
 					slog.String("module_type", "http_call"),
@@ -300,7 +301,7 @@ func (m *HTTPCallModule) Process(ctx context.Context, records []map[string]inter
 					slog.String("error", err.Error()),
 				)
 				continue
-			case OnErrorLog:
+			case errhandling.OnErrorLog:
 				logger.Error("http_call error (continuing)",
 					slog.String("module_type", "http_call"),
 					slog.Int("record_index", recordIdx),

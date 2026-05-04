@@ -48,6 +48,7 @@ func TestConvertToPipeline_ValidConfig(t *testing.T) {
 	}
 	if pipeline == nil {
 		t.Fatal("ConvertToPipeline() returned nil pipeline")
+		return
 	}
 	if pipeline.Name != "test-connector" {
 		t.Errorf("Expected name 'test-connector', got '%s'", pipeline.Name)
@@ -560,6 +561,7 @@ func TestConvertToPipeline_WithAndWithoutVersion(t *testing.T) {
 			}
 			if pipeline == nil {
 				t.Fatal("ConvertToPipeline() returned nil pipeline")
+				return
 			}
 			if pipeline.Version != tt.expectedVersion {
 				t.Errorf("Expected version '%s', got '%s'", tt.expectedVersion, pipeline.Version)

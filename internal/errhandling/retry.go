@@ -188,41 +188,25 @@ func ParseOnErrorStrategy(s string) OnErrorStrategy {
 // It takes a context and returns a result and an error.
 type RetryFunc func(ctx context.Context) (interface{}, error)
 
-// RetryInfo contains information about retry attempts.
-type RetryInfo struct {
-	// TotalAttempts is the total number of attempts made.
-	TotalAttempts int
-
-	// SuccessfulAttempt is the attempt number that succeeded (0 if failed).
-	SuccessfulAttempt int
-
-	// RetryCount is the number of retries (TotalAttempts - 1).
-	RetryCount int
-
-	// TotalDuration is the total time spent including retries.
-	TotalDuration time.Duration
-
-	// Delays is the list of delays between retries.
-	Delays []time.Duration
-
-	// Errors is the list of errors encountered during retries.
-	Errors []error
-}
-
 // RetryExecutor executes functions with retry logic.
+//
+// Public retry information is exposed through GetRetryInfo() as a
+// *connector.RetryInfo (the same type modules expose via RetryInfoProvider).
+// Internal-only signals (intermediate errors, successful attempt index) live
+// directly on the executor and are accessible via LastErrors() and
+// SuccessfulAttempt() — they do not leak through the public RetryInfo type.
 type RetryExecutor struct {
-	config    RetryConfig
-	retryInfo RetryInfo
+	config            connector.RetryConfig
+	retryInfo         connector.RetryInfo
+	errors            []error
+	successfulAttempt int
 }
 
 // NewRetryExecutor creates a new retry executor with the given configuration.
-func NewRetryExecutor(config RetryConfig) *RetryExecutor {
+func NewRetryExecutor(config connector.RetryConfig) *RetryExecutor {
 	return &RetryExecutor{
 		config: config,
-		retryInfo: RetryInfo{
-			Delays: make([]time.Duration, 0),
-			Errors: make([]error, 0),
-		},
+		errors: make([]error, 0),
 	}
 }
 
@@ -231,10 +215,7 @@ func NewRetryExecutor(config RetryConfig) *RetryExecutor {
 // Returns the result and any error encountered.
 func (e *RetryExecutor) Execute(ctx context.Context, fn RetryFunc) (interface{}, error) {
 	startTime := time.Now()
-	e.retryInfo = RetryInfo{
-		Delays: make([]time.Duration, 0),
-		Errors: make([]error, 0),
-	}
+	e.resetRetryState()
 
 	var lastErr error
 	maxAttempts := e.config.MaxAttempts + 1 // Initial attempt + retries
@@ -245,7 +226,7 @@ func (e *RetryExecutor) Execute(ctx context.Context, fn RetryFunc) (interface{},
 		// Check context before attempt
 		select {
 		case <-ctx.Done():
-			e.retryInfo.TotalDuration = time.Since(startTime)
+			e.retryInfo.TotalDurationMs = millisSince(startTime)
 			return nil, ClassifyNetworkError(ctx.Err())
 		default:
 		}
@@ -255,22 +236,22 @@ func (e *RetryExecutor) Execute(ctx context.Context, fn RetryFunc) (interface{},
 
 		// Success
 		if err == nil {
-			e.retryInfo.SuccessfulAttempt = attempt + 1
+			e.successfulAttempt = attempt + 1
 			e.retryInfo.RetryCount = attempt
-			e.retryInfo.TotalDuration = time.Since(startTime)
+			e.retryInfo.TotalDurationMs = millisSince(startTime)
 			return result, nil
 		}
 
 		// Record error
 		lastErr = err
-		e.retryInfo.Errors = append(e.retryInfo.Errors, err)
+		e.errors = append(e.errors, err)
 
 		// Classify error
 		classified := ClassifyError(err)
 
 		// Don't retry fatal errors
 		if !classified.Retryable {
-			e.retryInfo.TotalDuration = time.Since(startTime)
+			e.retryInfo.TotalDurationMs = millisSince(startTime)
 			return nil, err
 		}
 
@@ -281,12 +262,12 @@ func (e *RetryExecutor) Execute(ctx context.Context, fn RetryFunc) (interface{},
 
 		// Calculate delay for next attempt
 		delay := e.config.CalculateDelay(attempt)
-		e.retryInfo.Delays = append(e.retryInfo.Delays, delay)
+		e.retryInfo.RetryDelaysMs = append(e.retryInfo.RetryDelaysMs, delay.Milliseconds())
 
 		// Wait before retry (respect context cancellation)
 		select {
 		case <-ctx.Done():
-			e.retryInfo.TotalDuration = time.Since(startTime)
+			e.retryInfo.TotalDurationMs = millisSince(startTime)
 			return nil, ClassifyNetworkError(ctx.Err())
 		case <-time.After(delay):
 			// Continue to next attempt
@@ -294,13 +275,42 @@ func (e *RetryExecutor) Execute(ctx context.Context, fn RetryFunc) (interface{},
 	}
 
 	e.retryInfo.RetryCount = e.retryInfo.TotalAttempts - 1
-	e.retryInfo.TotalDuration = time.Since(startTime)
+	e.retryInfo.TotalDurationMs = millisSince(startTime)
 	return nil, lastErr
 }
 
-// GetRetryInfo returns information about the retry attempts.
-func (e *RetryExecutor) GetRetryInfo() RetryInfo {
-	return e.retryInfo
+// GetRetryInfo returns the retry attempts information as the public
+// connector.RetryInfo type (same type modules expose via RetryInfoProvider).
+// The returned pointer references the executor's internal state — copy fields
+// if you need a stable snapshot.
+func (e *RetryExecutor) GetRetryInfo() *connector.RetryInfo {
+	info := e.retryInfo
+	return &info
+}
+
+// LastErrors returns the errors collected during the last Execute/ExecuteWithHooks
+// invocation. Intended for internal diagnostics; intermediate errors do not
+// leak through the public RetryInfo type because they may carry sensitive data.
+func (e *RetryExecutor) LastErrors() []error {
+	return e.errors
+}
+
+// SuccessfulAttempt returns the 1-indexed attempt number that succeeded, or 0
+// when the last execution did not succeed.
+func (e *RetryExecutor) SuccessfulAttempt() int {
+	return e.successfulAttempt
+}
+
+// resetRetryState clears the per-execution state on the executor.
+func (e *RetryExecutor) resetRetryState() {
+	e.retryInfo = connector.RetryInfo{}
+	e.errors = e.errors[:0]
+	e.successfulAttempt = 0
+}
+
+// millisSince returns the elapsed time since start as int64 milliseconds.
+func millisSince(start time.Time) int64 {
+	return time.Since(start).Milliseconds()
 }
 
 // ExecuteWithCallback executes the function with retry and calls the callback after each attempt.
@@ -334,10 +344,7 @@ func (e *RetryExecutor) ExecuteWithHooks(
 	callback func(attempt int, err error, nextDelay time.Duration),
 ) (interface{}, error) {
 	startTime := time.Now()
-	e.retryInfo = RetryInfo{
-		Delays: make([]time.Duration, 0),
-		Errors: make([]error, 0),
-	}
+	e.resetRetryState()
 
 	var lastErr error
 	maxAttempts := e.config.MaxAttempts + 1
@@ -347,7 +354,7 @@ func (e *RetryExecutor) ExecuteWithHooks(
 
 		select {
 		case <-ctx.Done():
-			e.retryInfo.TotalDuration = time.Since(startTime)
+			e.retryInfo.TotalDurationMs = millisSince(startTime)
 			return nil, ClassifyNetworkError(ctx.Err())
 		default:
 		}
@@ -358,14 +365,14 @@ func (e *RetryExecutor) ExecuteWithHooks(
 			if callback != nil {
 				callback(attempt, nil, 0)
 			}
-			e.retryInfo.SuccessfulAttempt = attempt + 1
+			e.successfulAttempt = attempt + 1
 			e.retryInfo.RetryCount = attempt
-			e.retryInfo.TotalDuration = time.Since(startTime)
+			e.retryInfo.TotalDurationMs = millisSince(startTime)
 			return result, nil
 		}
 
 		lastErr = err
-		e.retryInfo.Errors = append(e.retryInfo.Errors, err)
+		e.errors = append(e.errors, err)
 
 		classified := ClassifyError(err)
 
@@ -377,7 +384,7 @@ func (e *RetryExecutor) ExecuteWithHooks(
 					delay = clampDelay(override, e.config.MaxDelayMs)
 				}
 			}
-			e.retryInfo.Delays = append(e.retryInfo.Delays, delay)
+			e.retryInfo.RetryDelaysMs = append(e.retryInfo.RetryDelaysMs, delay.Milliseconds())
 		}
 
 		if callback != nil {
@@ -385,7 +392,7 @@ func (e *RetryExecutor) ExecuteWithHooks(
 		}
 
 		if !classified.Retryable {
-			e.retryInfo.TotalDuration = time.Since(startTime)
+			e.retryInfo.TotalDurationMs = millisSince(startTime)
 			return nil, err
 		}
 
@@ -395,14 +402,14 @@ func (e *RetryExecutor) ExecuteWithHooks(
 
 		select {
 		case <-ctx.Done():
-			e.retryInfo.TotalDuration = time.Since(startTime)
+			e.retryInfo.TotalDurationMs = millisSince(startTime)
 			return nil, ClassifyNetworkError(ctx.Err())
 		case <-time.After(delay):
 		}
 	}
 
 	e.retryInfo.RetryCount = e.retryInfo.TotalAttempts - 1
-	e.retryInfo.TotalDuration = time.Since(startTime)
+	e.retryInfo.TotalDurationMs = millisSince(startTime)
 	return nil, lastErr
 }
 

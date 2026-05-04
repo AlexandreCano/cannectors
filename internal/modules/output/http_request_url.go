@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/internal/template"
 )
 
 // resolveEndpointWithStaticQuery appends the module's static query params to
@@ -49,13 +50,13 @@ func (h *HTTPRequestModule) resolveEndpointForBatch(endpoint string, records []m
 // evaluated first, then path parameters ({param}) are substituted.
 func (h *HTTPRequestModule) resolveEndpointForRecord(record map[string]interface{}) string {
 	endpoint := h.endpoint
-	if HasTemplateVariables(endpoint) {
-		endpoint = h.templateEvaluator.EvaluateTemplateForURL(endpoint, record)
+	if template.HasVariables(endpoint) {
+		endpoint = h.templateEvaluator.EvaluateForURL(endpoint, record)
 	}
 
 	for _, k := range h.request.Keys {
 		if k.paramType == "path" {
-			value := getFieldValue(record, k.field)
+			value := getRecordFieldString(record, k.field)
 			if value != "" {
 				placeholder := "{" + k.paramName + "}"
 				endpoint = strings.ReplaceAll(endpoint, placeholder, url.PathEscape(value))
@@ -78,7 +79,7 @@ func (h *HTTPRequestModule) resolveEndpointForRecord(record map[string]interface
 	}
 	for _, k := range h.request.Keys {
 		if k.paramType == "query" {
-			value := getFieldValue(record, k.field)
+			value := getRecordFieldString(record, k.field)
 			if value != "" {
 				q.Set(k.paramName, value)
 			}

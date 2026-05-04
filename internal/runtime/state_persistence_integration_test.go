@@ -53,6 +53,7 @@ func TestExecutor_StatePersistence_Timestamp(t *testing.T) {
 	inputModule, err := input.NewHTTPPollingFromConfig(config)
 	if err != nil {
 		t.Fatalf("NewHTTPPollingFromConfig() error = %v", err)
+		return
 	}
 
 	outputModule := NewMockOutputModule(nil)
@@ -71,6 +72,7 @@ func TestExecutor_StatePersistence_Timestamp(t *testing.T) {
 	result1, err := executor.Execute(pipeline)
 	if err != nil {
 		t.Fatalf("First execution failed: %v", err)
+		return
 	}
 	if result1.Status != "success" {
 		t.Errorf("First execution status = %s, want success", result1.Status)
@@ -83,9 +85,11 @@ func TestExecutor_StatePersistence_Timestamp(t *testing.T) {
 	state, err := stateStore.Load(pipeline.ID)
 	if err != nil {
 		t.Fatalf("Failed to load state: %v", err)
+		return
 	}
 	if state == nil {
 		t.Fatal("State should be persisted after first execution")
+		return
 	}
 	if state.LastTimestamp == nil {
 		t.Error("State should have LastTimestamp")
@@ -96,6 +100,7 @@ func TestExecutor_StatePersistence_Timestamp(t *testing.T) {
 	inputModule2, err := input.NewHTTPPollingFromConfig(config)
 	if err != nil {
 		t.Fatalf("NewHTTPPollingFromConfig() error = %v", err)
+		return
 	}
 	outputModule2 := NewMockOutputModule(nil)
 	executor2 := NewExecutorWithModules(inputModule2, nil, outputModule2, false)
@@ -106,6 +111,7 @@ func TestExecutor_StatePersistence_Timestamp(t *testing.T) {
 	result2, err := executor2.Execute(pipeline)
 	if err != nil {
 		t.Fatalf("Second execution failed: %v", err)
+		return
 	}
 	if result2.Status != "success" {
 		t.Errorf("Second execution status = %s, want success", result2.Status)
@@ -158,6 +164,7 @@ func TestExecutor_StatePersistence_ID(t *testing.T) {
 	inputModule, err := input.NewHTTPPollingFromConfig(config)
 	if err != nil {
 		t.Fatalf("NewHTTPPollingFromConfig() error = %v", err)
+		return
 	}
 
 	outputModule := NewMockOutputModule(nil)
@@ -176,6 +183,7 @@ func TestExecutor_StatePersistence_ID(t *testing.T) {
 	result1, err := executor.Execute(pipeline)
 	if err != nil {
 		t.Fatalf("First execution failed: %v", err)
+		return
 	}
 	if result1.Status != "success" {
 		t.Errorf("First execution status = %s, want success", result1.Status)
@@ -188,9 +196,11 @@ func TestExecutor_StatePersistence_ID(t *testing.T) {
 	state, err := stateStore.Load(pipeline.ID)
 	if err != nil {
 		t.Fatalf("Failed to load state: %v", err)
+		return
 	}
 	if state == nil {
 		t.Fatal("State should be persisted after first execution")
+		return
 	}
 	if state.LastID == nil {
 		t.Error("State should have LastID")
@@ -204,6 +214,7 @@ func TestExecutor_StatePersistence_ID(t *testing.T) {
 	inputModule2, err := input.NewHTTPPollingFromConfig(config)
 	if err != nil {
 		t.Fatalf("NewHTTPPollingFromConfig() error = %v", err)
+		return
 	}
 	outputModule2 := NewMockOutputModule(nil)
 	executor2 := NewExecutorWithModules(inputModule2, nil, outputModule2, false)
@@ -213,6 +224,7 @@ func TestExecutor_StatePersistence_ID(t *testing.T) {
 	result2, err := executor2.Execute(pipeline)
 	if err != nil {
 		t.Fatalf("Second execution failed: %v", err)
+		return
 	}
 	if result2.Status != "success" {
 		t.Errorf("Second execution status = %s, want success", result2.Status)
@@ -266,6 +278,7 @@ func TestExecutor_StatePersistence_AfterRestart(t *testing.T) {
 	inputModule1, err := input.NewHTTPPollingFromConfig(config)
 	if err != nil {
 		t.Fatalf("NewHTTPPollingFromConfig() error = %v", err)
+		return
 	}
 	outputModule1 := NewMockOutputModule(nil)
 	executor1 := NewExecutorWithModules(inputModule1, nil, outputModule1, false)
@@ -274,6 +287,7 @@ func TestExecutor_StatePersistence_AfterRestart(t *testing.T) {
 	result1, err := executor1.Execute(pipeline)
 	if err != nil {
 		t.Fatalf("First execution failed: %v", err)
+		return
 	}
 	if result1.Status != "success" {
 		t.Errorf("First execution status = %s, want success", result1.Status)
@@ -283,12 +297,14 @@ func TestExecutor_StatePersistence_AfterRestart(t *testing.T) {
 	stateFile := filepath.Join(tmpDir, pipeline.ID+".json")
 	if _, statErr := os.Stat(stateFile); os.IsNotExist(statErr) {
 		t.Fatal("State file should exist after first execution")
+		return
 	}
 
 	// Simulate restart: create new executor instance
 	inputModule2, err := input.NewHTTPPollingFromConfig(config)
 	if err != nil {
 		t.Fatalf("NewHTTPPollingFromConfig() error = %v", err)
+		return
 	}
 	outputModule2 := NewMockOutputModule(nil)
 	executor2 := NewExecutorWithModules(inputModule2, nil, outputModule2, false)
@@ -298,6 +314,7 @@ func TestExecutor_StatePersistence_AfterRestart(t *testing.T) {
 	result2, err := executor2.Execute(pipeline)
 	if err != nil {
 		t.Fatalf("Second execution failed: %v", err)
+		return
 	}
 	if result2.Status != "success" {
 		t.Errorf("Second execution status = %s, want success", result2.Status)
@@ -307,9 +324,11 @@ func TestExecutor_StatePersistence_AfterRestart(t *testing.T) {
 	state, err := stateStore.Load(pipeline.ID)
 	if err != nil {
 		t.Fatalf("Failed to load state: %v", err)
+		return
 	}
 	if state == nil {
 		t.Fatal("State should exist after second execution")
+		return
 	}
 	if state.LastTimestamp == nil {
 		t.Error("State should have LastTimestamp")
@@ -343,6 +362,7 @@ func TestExecutor_StatePersistence_NoStateStore(t *testing.T) {
 	inputModule, err := input.NewHTTPPollingFromConfig(config)
 	if err != nil {
 		t.Fatalf("NewHTTPPollingFromConfig() error = %v", err)
+		return
 	}
 
 	outputModule := NewMockOutputModule(nil)
@@ -360,6 +380,7 @@ func TestExecutor_StatePersistence_NoStateStore(t *testing.T) {
 	result, err := executor.Execute(pipeline)
 	if err != nil {
 		t.Fatalf("Execution failed: %v", err)
+		return
 	}
 	if result.Status != "success" {
 		t.Errorf("Execution status = %s, want success", result.Status)
@@ -396,6 +417,7 @@ func TestExecutor_StatePersistence_FailedExecution(t *testing.T) {
 	inputModule, err := input.NewHTTPPollingFromConfig(config)
 	if err != nil {
 		t.Fatalf("NewHTTPPollingFromConfig() error = %v", err)
+		return
 	}
 
 	// Output module that fails
@@ -414,6 +436,7 @@ func TestExecutor_StatePersistence_FailedExecution(t *testing.T) {
 	result, err := executor.Execute(pipeline)
 	if err == nil {
 		t.Fatal("Execution should fail")
+		return
 	}
 	if result.Status != "error" {
 		t.Errorf("Execution status = %s, want error", result.Status)
@@ -423,6 +446,7 @@ func TestExecutor_StatePersistence_FailedExecution(t *testing.T) {
 	state, err := stateStore.Load(pipeline.ID)
 	if err != nil {
 		t.Fatalf("Failed to load state: %v", err)
+		return
 	}
 	if state != nil {
 		t.Error("State should NOT be persisted when execution fails")

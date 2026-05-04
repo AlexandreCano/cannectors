@@ -451,6 +451,34 @@ The runtime interacts with modules **only** through public interfaces:
 - Common pitfalls and how to avoid them
 - Architectural principles and enforcement mechanisms
 
+## Parsing `onError`
+
+Modules that expose an `onError` configuration field (`fail` / `skip` / `log`) must use the shared parser and constants from `internal/errhandling`:
+
+```go
+import "github.com/cannectors/runtime/internal/errhandling"
+
+// In your constructor: parse the user-provided string into a typed strategy.
+strategy := errhandling.ParseOnErrorStrategy(config.OnError)
+
+// Store the typed value on the module struct (not a raw string).
+type MyModule struct {
+    onError errhandling.OnErrorStrategy
+}
+
+// Compare against the typed constants instead of string literals.
+switch m.onError {
+case errhandling.OnErrorFail:
+    return err
+case errhandling.OnErrorSkip:
+    // continue
+case errhandling.OnErrorLog:
+    // log and continue
+}
+```
+
+`ParseOnErrorStrategy` accepts empty input (returns `OnErrorFail`), unknown values (also fall back to `OnErrorFail`), and is case-insensitive. Do not reimplement parsing locally — divergent default-handling has caused subtle bugs in the past.
+
 ## Best Practices
 
 1. **Use init() for registration** - This ensures modules are available when the package is imported

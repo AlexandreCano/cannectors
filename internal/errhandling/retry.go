@@ -281,10 +281,13 @@ func (e *RetryExecutor) Execute(ctx context.Context, fn RetryFunc) (interface{},
 
 // GetRetryInfo returns the retry attempts information as the public
 // connector.RetryInfo type (same type modules expose via RetryInfoProvider).
-// The returned pointer references the executor's internal state — copy fields
-// if you need a stable snapshot.
+// The returned pointer refers to a snapshot of the executor's retry state and
+// does not reflect subsequent mutations to the executor.
 func (e *RetryExecutor) GetRetryInfo() *connector.RetryInfo {
 	info := e.retryInfo
+	if info.RetryDelaysMs != nil {
+		info.RetryDelaysMs = append([]int64(nil), info.RetryDelaysMs...)
+	}
 	return &info
 }
 

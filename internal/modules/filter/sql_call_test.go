@@ -6,6 +6,76 @@ import (
 	"github.com/cannectors/runtime/internal/moduleconfig"
 )
 
+// TestMarshalDeterministic_StableForPermutedKeys verifies AC #1 of Story 17.3:
+// two records with the same data but keys inserted in different orders must
+// produce the same cache key.
+func TestMarshalDeterministic_StableForPermutedKeys(t *testing.T) {
+	t.Parallel()
+
+	a := map[string]interface{}{"a": 1, "b": 2, "c": "three"}
+	b := map[string]interface{}{"c": "three", "a": 1, "b": 2}
+
+	gotA, err := marshalDeterministic(a)
+	if err != nil {
+		t.Fatalf("marshalDeterministic(a) error = %v", err)
+	}
+	gotB, err := marshalDeterministic(b)
+	if err != nil {
+		t.Fatalf("marshalDeterministic(b) error = %v", err)
+	}
+	if string(gotA) != string(gotB) {
+		t.Errorf("permuted keys produced different output:\n  a=%s\n  b=%s", gotA, gotB)
+	}
+}
+
+// TestMarshalDeterministic_NestedKeysSorted verifies AC #3: nested maps must
+// also be canonicalised so that {"u":{"x":1,"y":2}} and {"u":{"y":2,"x":1}}
+// share the same serialization.
+func TestMarshalDeterministic_NestedKeysSorted(t *testing.T) {
+	t.Parallel()
+
+	a := map[string]interface{}{
+		"user": map[string]interface{}{"id": 1, "name": "x", "addr": map[string]interface{}{"city": "Paris", "zip": "75001"}},
+	}
+	b := map[string]interface{}{
+		"user": map[string]interface{}{"name": "x", "addr": map[string]interface{}{"zip": "75001", "city": "Paris"}, "id": 1},
+	}
+
+	gotA, _ := marshalDeterministic(a)
+	gotB, _ := marshalDeterministic(b)
+	if string(gotA) != string(gotB) {
+		t.Errorf("nested permutations produced different output:\n  a=%s\n  b=%s", gotA, gotB)
+	}
+}
+
+// TestMarshalDeterministic_StressLoop verifies AC #4: 1000 iterations on a
+// permuted record always yield the same cache key.
+func TestMarshalDeterministic_StressLoop(t *testing.T) {
+	t.Parallel()
+
+	const iterations = 1000
+	first, err := marshalDeterministic(map[string]interface{}{
+		"a": 1, "b": 2, "c": 3, "d": 4, "e": 5,
+		"nested": map[string]interface{}{"x": "X", "y": "Y", "z": "Z"},
+	})
+	if err != nil {
+		t.Fatalf("marshalDeterministic error = %v", err)
+	}
+	for i := 0; i < iterations; i++ {
+		// Each iteration uses a freshly-built map (Go map iteration is randomized).
+		got, err := marshalDeterministic(map[string]interface{}{
+			"e": 5, "c": 3, "a": 1, "d": 4, "b": 2,
+			"nested": map[string]interface{}{"z": "Z", "x": "X", "y": "Y"},
+		})
+		if err != nil {
+			t.Fatalf("iteration %d: marshalDeterministic error = %v", i, err)
+		}
+		if string(got) != string(first) {
+			t.Fatalf("iteration %d produced divergent output:\n  first=%s\n  got=  %s", i, first, got)
+		}
+	}
+}
+
 func TestNewSQLCallFromConfig_Validation(t *testing.T) {
 	t.Parallel()
 

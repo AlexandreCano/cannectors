@@ -13,6 +13,12 @@ import (
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
+// MaxOAuth2Retries is the maximum number of token-refresh + retry cycles
+// performed when an OAuth2-protected endpoint replies with 401. After this
+// many consecutive 401s the credentials are considered invalid and the call
+// fails fast with ErrOAuth2InvalidCredentials. See Story 17.5.
+const MaxOAuth2Retries = 2
+
 // Error types for authentication
 var (
 	ErrNilConfig          = errors.New("authentication configuration is nil")
@@ -21,6 +27,10 @@ var (
 	ErrMissingBearerToken = errors.New("token is required for bearer authentication")
 	ErrMissingBasicAuth   = errors.New("username and password are required for basic authentication")
 	ErrMissingOAuth2Creds = errors.New("tokenUrl, clientId, and clientSecret are required for oauth2 authentication")
+	// ErrOAuth2InvalidCredentials is returned when an OAuth2-authenticated
+	// request keeps replying 401 after MaxOAuth2Retries token refreshes.
+	// The runtime treats it as a fatal authentication error (no further retry).
+	ErrOAuth2InvalidCredentials = errors.New("OAuth2 credentials appear invalid after token refresh")
 )
 
 // Handler defines the interface for authentication handlers.

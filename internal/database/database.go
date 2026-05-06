@@ -284,19 +284,100 @@ func FormatPlaceholder(driver string, index int) string {
 	}
 }
 
-// ConvertPlaceholders converts a query with ? placeholders to the driver's style.
-// This allows writing queries with ? placeholders and converting them as needed.
+// ConvertPlaceholders converts a query written with `?` placeholders to the
+// driver's native style (e.g. `$1, $2, ...` for Postgres). The substitution
+// walks the query character by character so that `?` characters appearing
+// inside string literals (`'...'`, `"..."`) or comments (`-- ...`,
+// `/* ... */`) are preserved verbatim. SQL string-literal escaping with a
+// doubled quote (`”`) is supported.
+//
+// Limitations: Postgres dollar-quoted strings (`$tag$ ... $tag$`) are not
+// special-cased — `?` characters inside them will be substituted. None of
+// the current callers rely on dollar quoting, so this is acceptable.
 func ConvertPlaceholders(query string, driver string) string {
 	if GetPlaceholderStyle(driver) == PlaceholderQuestion {
 		return query
 	}
 
-	// Convert ? to $1, $2, etc.
-	result := query
+	var out strings.Builder
+	out.Grow(len(query) + 8)
 	paramIndex := 1
-	for strings.Contains(result, "?") {
-		result = strings.Replace(result, "?", fmt.Sprintf("$%d", paramIndex), 1)
-		paramIndex++
+	i := 0
+	for i < len(query) {
+		c := query[i]
+		switch {
+		case c == '\'':
+			j := skipQuoted(query, i, '\'')
+			out.WriteString(query[i:j])
+			i = j
+		case c == '"':
+			j := skipQuoted(query, i, '"')
+			out.WriteString(query[i:j])
+			i = j
+		case c == '-' && i+1 < len(query) && query[i+1] == '-':
+			j := skipLineComment(query, i)
+			out.WriteString(query[i:j])
+			i = j
+		case c == '/' && i+1 < len(query) && query[i+1] == '*':
+			j := skipBlockComment(query, i)
+			out.WriteString(query[i:j])
+			i = j
+		case c == '?':
+			fmt.Fprintf(&out, "$%d", paramIndex)
+			paramIndex++
+			i++
+		default:
+			out.WriteByte(c)
+			i++
+		}
 	}
-	return result
+	return out.String()
+}
+
+// skipQuoted returns the index just past the closing quote of a SQL string
+// literal that starts at `start`. Doubled quotes (`”` or `""`) are treated
+// as embedded quotes per SQL standard. If the string is unterminated, the
+// scan stops at end-of-input (the caller emits the remaining bytes verbatim).
+func skipQuoted(s string, start int, quote byte) int {
+	i := start + 1
+	for i < len(s) {
+		if s[i] == quote {
+			if i+1 < len(s) && s[i+1] == quote {
+				i += 2
+				continue
+			}
+			return i + 1
+		}
+		i++
+	}
+	return i
+}
+
+// skipLineComment returns the index just past the newline that ends the SQL
+// line comment starting at `--` at position `start`. End-of-input ends the
+// comment.
+func skipLineComment(s string, start int) int {
+	i := start + 2
+	for i < len(s) && s[i] != '\n' {
+		i++
+	}
+	if i < len(s) {
+		return i + 1
+	}
+	return i
+}
+
+// skipBlockComment returns the index just past the closing `*/` of a SQL
+// block comment that starts at `start`. SQL does not nest block comments by
+// default (the standard does not require it), so we match the first `*/`.
+// Unterminated comments stop at end-of-input.
+func skipBlockComment(s string, start int) int {
+	i := start + 2
+	for i+1 < len(s) {
+		if s[i] == '*' && s[i+1] == '/' {
+			return i + 2
+		}
+		i++
+	}
+	return len(s)
 }

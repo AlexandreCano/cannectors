@@ -77,8 +77,10 @@ type HTTPPolling struct {
 	retryHintProgram *vm.Program // Compiled retryHintFromBody expression (may be nil).
 	lastRetryInfo    *connector.RetryInfo
 
-	// OAuth2 token invalidation tracking
-	oauth2Invalidated bool
+	// OAuth2 token invalidation tracking. Counts how many times the cached
+	// token has been invalidated for the current Fetch cycle. Bounded by
+	// auth.MaxOAuth2Retries to prevent infinite refresh loops (Story 17.5).
+	oauth2RetryCount int
 
 	// State persistence
 	persistenceConfig *persistence.StatePersistenceConfig
@@ -185,8 +187,8 @@ func logModuleCreation(endpoint string, timeout time.Duration, authHandler auth.
 func (h *HTTPPolling) Fetch(ctx context.Context) ([]map[string]interface{}, error) {
 	startTime := time.Now()
 
-	// Reset OAuth2 invalidation tracking for this fetch cycle
-	h.oauth2Invalidated = false
+	// Reset OAuth2 retry tracking for this fetch cycle
+	h.oauth2RetryCount = 0
 
 	// Build endpoint with state-based query params if applicable
 	endpoint, err := h.buildEndpointWithState(h.endpoint)
@@ -344,6 +346,11 @@ func (h *HTTPPolling) doRequestWithRetry(ctx context.Context, endpoint string) (
 				"error", err.Error(),
 			)
 		}
+		// Story 17.5: surface a typed authentication error when 401 persists
+		// after the maximum number of OAuth2 token-refresh retries.
+		if resp != nil && resp.StatusCode == http.StatusUnauthorized && h.oauth2RetryCount >= auth.MaxOAuth2Retries {
+			return nil, fmt.Errorf("%w: endpoint=%s", auth.ErrOAuth2InvalidCredentials, endpoint)
+		}
 		return nil, err
 	}
 
@@ -371,10 +378,11 @@ func (h *HTTPPolling) doRequestWithRetry(ctx context.Context, endpoint string) (
 	return body, nil
 }
 
-// handleOAuth2Unauthorized invalidates the cached OAuth2 token on 401 the
-// first time it is seen during a Fetch cycle and signals the retry loop to
-// retry once with a fresh token. Subsequent 401s return false to prevent
-// infinite loops when credentials are actually invalid.
+// handleOAuth2Unauthorized invalidates the cached OAuth2 token on 401 and
+// signals the retry loop to retry with a fresh token, but only up to
+// auth.MaxOAuth2Retries times per Fetch cycle. Beyond that, returning false
+// stops the loop so the caller can wrap the failure as
+// auth.ErrOAuth2InvalidCredentials (Story 17.5).
 func (h *HTTPPolling) handleOAuth2Unauthorized(resp *http.Response, endpoint string) bool {
 	if resp == nil || resp.StatusCode != http.StatusUnauthorized || h.authHandler == nil {
 		return false
@@ -383,17 +391,19 @@ func (h *HTTPPolling) handleOAuth2Unauthorized(resp *http.Response, endpoint str
 	if !ok {
 		return false
 	}
-	if h.oauth2Invalidated {
+	if h.oauth2RetryCount >= auth.MaxOAuth2Retries {
 		logger.Warn("401 Unauthorized persists after OAuth2 token refresh, likely invalid credentials",
 			"endpoint", endpoint,
+			"oauth2_retry_count", h.oauth2RetryCount,
 		)
 		return false
 	}
 	logger.Debug("401 Unauthorized with OAuth2, invalidating cached token",
 		"endpoint", endpoint,
+		"oauth2_retry_count", h.oauth2RetryCount,
 	)
 	invalidator.InvalidateToken()
-	h.oauth2Invalidated = true
+	h.oauth2RetryCount++
 	return true
 }
 

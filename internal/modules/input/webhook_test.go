@@ -42,7 +42,7 @@ func TestNewWebhookFromConfig_ValidConfig(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/orders",
+			"path":          "/webhook/orders",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}
@@ -89,11 +89,29 @@ func TestNewWebhookFromConfig_MissingEndpoint(t *testing.T) {
 	}
 }
 
+func TestNewWebhookFromConfig_PathField(t *testing.T) {
+	config := &connector.ModuleConfig{
+		Type: "webhook",
+		Raw: mustJSON(map[string]interface{}{
+			"path":          "/hook/orders",
+			"listenAddress": "127.0.0.1:0",
+		}),
+	}
+
+	w, err := NewWebhookFromConfig(config)
+	if err != nil {
+		t.Fatalf("NewWebhookFromConfig() error = %v, want nil", err)
+	}
+	if w.endpoint != "/hook/orders" {
+		t.Errorf("Webhook.endpoint = %q, want %q", w.endpoint, "/hook/orders")
+	}
+}
+
 func TestNewWebhookFromConfig_DefaultListenAddress(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint": "/webhook/test",
+			"path": "/webhook/test",
 		}),
 	}
 
@@ -111,7 +129,7 @@ func TestNewWebhookFromConfig_SignatureMissingType(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint": "/webhook/test",
+			"path": "/webhook/test",
 			"signature": map[string]interface{}{
 				"secret": "test-secret",
 			},
@@ -128,7 +146,7 @@ func TestNewWebhookFromConfig_SignatureUnsupportedType(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint": "/webhook/test",
+			"path": "/webhook/test",
 			"signature": map[string]interface{}{
 				"type":   "rsa-sha256",
 				"secret": "test-secret",
@@ -146,7 +164,7 @@ func TestWebhook_Start_StartsServer(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0", // Port 0 for dynamic allocation
 		}),
 	}
@@ -188,7 +206,7 @@ func TestWebhook_Start_UsesConfiguredTimeout(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 			"timeoutMs":     2000.0,
 		}),
@@ -226,7 +244,7 @@ func TestWebhook_GracefulShutdown(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}
@@ -273,7 +291,7 @@ func TestWebhook_Stop_StopsServer(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}
@@ -317,7 +335,7 @@ func TestWebhook_HTTPPostHandler_RegisteredCorrectly(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/orders",
+			"path":          "/webhook/orders",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}
@@ -387,7 +405,7 @@ func TestWebhook_ParsePayload_JSONArray(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}
@@ -444,7 +462,7 @@ func TestWebhook_ParsePayload_SingleObject(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}
@@ -506,7 +524,7 @@ func TestWebhook_ParsePayload_WithDataField(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 			"dataField":     "items",
 		}),
@@ -564,7 +582,7 @@ func TestWebhook_ParsePayload_MalformedJSON(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}
@@ -609,7 +627,7 @@ func TestWebhook_ParsePayload_DataFieldWithNonObject(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 			"dataField":     "items",
 		}),
@@ -655,7 +673,7 @@ func TestWebhook_RejectNonPOST(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}
@@ -701,7 +719,7 @@ func TestWebhook_MissingBody(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}
@@ -750,7 +768,7 @@ func TestWebhook_SignatureValidation_Valid(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 			"signature": map[string]interface{}{
 				"type":   "hmac-sha256",
@@ -825,7 +843,7 @@ func TestWebhook_SignatureValidation_Invalid(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 			"signature": map[string]interface{}{
 				"type":   "hmac-sha256",
@@ -881,7 +899,7 @@ func TestWebhook_SignatureValidation_MissingSignature(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 			"signature": map[string]interface{}{
 				"type":   "hmac-sha256",
@@ -934,7 +952,7 @@ func TestWebhook_SignatureValidation_CustomHeader(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 			"signature": map[string]interface{}{
 				"type":   "hmac-sha256",
@@ -1009,7 +1027,7 @@ func TestWebhook_RateLimiting(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 			"rateLimit": map[string]interface{}{
 				"requestsPerSecond": float64(1), // 1 token per second refill
@@ -1078,7 +1096,7 @@ func TestWebhook_ConcurrentRequests(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}
@@ -1143,7 +1161,7 @@ func TestWebhook_ThreadSafeDataProcessing(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}
@@ -1215,7 +1233,7 @@ func TestWebhook_QueueBackpressure(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 			"queueSize":     float64(1),
 			"maxConcurrent": float64(1),
@@ -1306,7 +1324,7 @@ func TestWebhook_Fetch_NotImplemented(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}
@@ -1330,7 +1348,7 @@ func TestWebhook_DataFlowToHandler(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}
@@ -1388,7 +1406,7 @@ func TestWebhook_HandlerError_ReturnsServerError(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}
@@ -1439,7 +1457,7 @@ func TestWebhook_InvalidEndpoint_Returns404(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/orders",
+			"path":          "/webhook/orders",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}
@@ -1485,7 +1503,7 @@ func TestWebhook_DeterministicBehavior(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}
@@ -1551,7 +1569,7 @@ func BenchmarkWebhook_HandleRequest(b *testing.B) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/bench",
+			"path":          "/webhook/bench",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}

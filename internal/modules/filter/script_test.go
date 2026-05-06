@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -707,6 +708,39 @@ func TestScriptModuleProcess_ContextCancellationDuringExecution(t *testing.T) {
 		if !strings.Contains(errStr, "context deadline exceeded") && !strings.Contains(errStr, "context canceled") {
 			t.Errorf("expected context.DeadlineExceeded or context.Canceled error, got: %v", err)
 		}
+	}
+}
+
+// TestScriptModuleProcess_CancellationStress verifies Story 17.4 AC #1, #4:
+// when many fast Process() calls race with context cancellation, no panic
+// occurs and the goroutine count stays bounded (no leak from the cancellation
+// watcher).
+func TestScriptModuleProcess_CancellationStress(t *testing.T) {
+	config := ScriptConfig{
+		Script: `function transform(record) { return record; }`,
+	}
+	module, err := NewScriptFromConfig(config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	const iterations = 1000
+	baseline := runtime.NumGoroutine()
+
+	for i := 0; i < iterations; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		// Cancel concurrently with the call to maximize the race window.
+		go cancel()
+		_, _ = module.Process(ctx, []map[string]interface{}{{"id": i}})
+	}
+
+	// Allow any pending watchers triggered by ctx.Cancel() a moment to settle.
+	time.Sleep(20 * time.Millisecond)
+
+	// Goroutine count must not have ballooned from leaked watchers.
+	current := runtime.NumGoroutine()
+	if current > baseline+50 {
+		t.Errorf("goroutine leak suspected: baseline=%d current=%d (delta=%d)", baseline, current, current-baseline)
 	}
 }
 

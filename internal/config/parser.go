@@ -187,7 +187,7 @@ func ParseConfig(filepath string) *Result {
 	}
 
 	// Transfer parse results
-	result.Data = parseResult.Data
+	result.Data = unwrapConnectorRoot(parseResult.Data)
 	result.ParseErrors = parseResult.Errors
 	result.Format = parseResult.Format
 
@@ -197,7 +197,7 @@ func ParseConfig(filepath string) *Result {
 	}
 
 	// Validate against schema
-	validationResult := ValidateConfig(parseResult.Data)
+	validationResult := ValidateConfig(result.Data)
 	result.ValidationErrors = validationResult.Errors
 
 	return result
@@ -243,7 +243,7 @@ func ParseConfigString(content string, format string) *Result {
 	}
 
 	// Transfer parse results
-	result.Data = parseResult.Data
+	result.Data = unwrapConnectorRoot(parseResult.Data)
 	result.ParseErrors = parseResult.Errors
 	result.Format = parseResult.Format
 
@@ -253,10 +253,26 @@ func ParseConfigString(content string, format string) *Result {
 	}
 
 	// Validate against schema
-	validationResult := ValidateConfig(parseResult.Data)
+	validationResult := ValidateConfig(result.Data)
 	result.ValidationErrors = validationResult.Errors
 
 	return result
+}
+
+// unwrapConnectorRoot accepts both the canonical pipeline shape (top-level
+// `name`/`input`/`output`/`filters`) and the documentation-style shape used
+// by every file under `configs/examples/`, where the pipeline lives under a
+// single `connector` key. When the latter is detected, the inner object is
+// returned so the schema and converter see the canonical layout.
+func unwrapConnectorRoot(data map[string]interface{}) map[string]interface{} {
+	if len(data) != 1 {
+		return data
+	}
+	inner, ok := data["connector"].(map[string]interface{})
+	if !ok {
+		return data
+	}
+	return inner
 }
 
 // DetectFormat detects the configuration format from file extension.

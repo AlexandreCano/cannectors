@@ -109,7 +109,7 @@ type Webhook struct {
 
 // WebhookInputConfig holds the parsed configuration for the webhook input module.
 type WebhookInputConfig struct {
-	Endpoint      string           `json:"endpoint"`
+	Path          string           `json:"path,omitempty"`
 	ListenAddress string           `json:"listenAddress,omitempty"`
 	DataField     string           `json:"dataField,omitempty"`
 	TimeoutMs     int              `json:"timeoutMs,omitempty"`
@@ -122,12 +122,12 @@ type WebhookInputConfig struct {
 // NewWebhookFromConfig creates a new Webhook input module from configuration.
 //
 // Required config fields:
-//   - endpoint: The HTTP endpoint path (e.g., "/webhook/orders")
+//   - path: The HTTP endpoint path (e.g., "/webhook/orders").
 //
 // Optional config fields:
 //   - listenAddress: Server listen address (default: "0.0.0.0:8080")
 //   - dataField: JSON field containing the array of records (for nested payloads)
-//   - timeout: Request timeout in seconds (default: 15)
+//   - timeoutMs: Request timeout in milliseconds (default: 15000)
 //   - signature: Signature validation configuration
 //   - type: "hmac-sha256"
 //   - header: Header name for signature (default: "X-Webhook-Signature")
@@ -142,9 +142,10 @@ func NewWebhookFromConfig(config *connector.ModuleConfig) (*Webhook, error) {
 		return nil, err
 	}
 
-	if cfg.Endpoint == "" {
+	if cfg.Path == "" {
 		return nil, ErrMissingEndpoint
 	}
+	endpoint := cfg.Path
 
 	if cfg.Signature != nil {
 		if cfg.Signature.Header == "" {
@@ -179,7 +180,7 @@ func NewWebhookFromConfig(config *connector.ModuleConfig) (*Webhook, error) {
 	}
 
 	w := &Webhook{
-		endpoint:      cfg.Endpoint,
+		endpoint:      endpoint,
 		listenAddress: listenAddress,
 		dataField:     cfg.DataField,
 		timeout:       timeout,

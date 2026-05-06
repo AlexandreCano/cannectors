@@ -276,6 +276,43 @@ func TestConvertPlaceholders(t *testing.T) {
 			driver: DriverPostgres,
 			want:   "INSERT INTO t (a, b, c) VALUES ($1, $2, $3)",
 		},
+		// Story 17.6 AC #1: `?` inside single-quoted string literals must not
+		// be converted; only the bind-marker `?` becomes a numbered placeholder.
+		{
+			name:   "postgres ? inside single-quoted string is preserved",
+			query:  "SELECT * FROM t WHERE a = ? AND b LIKE '%?%'",
+			driver: DriverPostgres,
+			want:   "SELECT * FROM t WHERE a = $1 AND b LIKE '%?%'",
+		},
+		// Story 17.6 AC #1: doubled quote inside string is the SQL escape and
+		// must not terminate the literal early.
+		{
+			name:   "postgres escaped quote does not terminate literal",
+			query:  "SELECT ? WHERE n = 'it''s ? a test'",
+			driver: DriverPostgres,
+			want:   "SELECT $1 WHERE n = 'it''s ? a test'",
+		},
+		// Story 17.6 AC #2: line-comment ?'s are preserved.
+		{
+			name:   "postgres ? in single-line comment preserved",
+			query:  "SELECT ? -- ? is a joke\nFROM t",
+			driver: DriverPostgres,
+			want:   "SELECT $1 -- ? is a joke\nFROM t",
+		},
+		// Story 17.6 AC #2: block-comment ?'s are preserved.
+		{
+			name:   "postgres ? in block comment preserved",
+			query:  "SELECT ? /* who? me? */ FROM t WHERE a = ?",
+			driver: DriverPostgres,
+			want:   "SELECT $1 /* who? me? */ FROM t WHERE a = $2",
+		},
+		// Story 17.6 AC #5: MySQL/SQLite drivers stay no-op.
+		{
+			name:   "mysql with ? in literal stays untouched",
+			query:  "SELECT * FROM t WHERE a = ? AND b LIKE '%?%'",
+			driver: DriverMySQL,
+			want:   "SELECT * FROM t WHERE a = ? AND b LIKE '%?%'",
+		},
 	}
 
 	for _, tt := range tests {

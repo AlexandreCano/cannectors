@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dop251/goja"
@@ -368,19 +369,28 @@ func (m *ScriptModule) Process(ctx context.Context, records []map[string]interfa
 		slog.String("on_error", string(m.onError)),
 	)
 
-	// Set up a single cancellation watcher for the entire Process() call
-	// This avoids creating a goroutine per record
-	interruptDone := make(chan struct{})
-	defer close(interruptDone)
+	// scriptFinished gates the cancellation watcher: once Process is done,
+	// the watcher must not call runtime.Interrupt anymore (otherwise a
+	// pending interrupt could leak into a subsequent Process call). Story 17.4.
+	var scriptFinished atomic.Bool
 
 	// Use context.AfterFunc to interrupt JavaScript execution when context is canceled
 	// This is more efficient than a goroutine per record
 	stopInterrupt := context.AfterFunc(ctx, func() {
+		if scriptFinished.Load() {
+			return
+		}
 		m.interruptMu.Lock()
+		defer m.interruptMu.Unlock()
+		if scriptFinished.Load() {
+			return
+		}
 		m.runtime.Interrupt(ctx.Err().Error())
-		m.interruptMu.Unlock()
 	})
 	defer func() {
+		// Mark first, then stop and wait. If the watcher was racing, the
+		// double-checked Load above will see the flag and exit cleanly.
+		scriptFinished.Store(true)
 		stopInterrupt()
 		// Clear any pending interrupt after processing completes
 		m.interruptMu.Lock()

@@ -546,11 +546,11 @@ func (h *HTTPRequestModule) executeRequestAndLog(
 }
 
 // handleOAuth2Unauthorized handles 401 Unauthorized for OAuth2 authentication.
-// It invalidates the cached token the first time the server returns 401 and
-// returns true so the retry loop can try once with a fresh token. Subsequent
-// 401s during the same request cycle return false to prevent an infinite
-// loop when credentials are actually invalid.
-func (h *HTTPRequestModule) handleOAuth2Unauthorized(resp *http.Response, alreadyRetried *bool) bool {
+// It invalidates the cached token and asks the retry loop to try again with a
+// fresh token, but only up to auth.MaxOAuth2Retries times in the same request
+// cycle. After that, returning false stops the retry loop so the caller can
+// surface ErrOAuth2InvalidCredentials instead of looping forever (Story 17.5).
+func (h *HTTPRequestModule) handleOAuth2Unauthorized(resp *http.Response, retryCount *int) bool {
 	if resp == nil || resp.StatusCode != http.StatusUnauthorized {
 		return false
 	}
@@ -561,20 +561,22 @@ func (h *HTTPRequestModule) handleOAuth2Unauthorized(resp *http.Response, alread
 	if !ok {
 		return false
 	}
-	if *alreadyRetried {
+	if *retryCount >= auth.MaxOAuth2Retries {
 		logger.Warn("401 Unauthorized persists after OAuth2 token refresh, likely invalid credentials",
 			slog.String("endpoint", h.endpoint),
 			slog.String("method", h.method),
+			slog.Int("oauth2_retry_count", *retryCount),
 		)
 		return false
 	}
 
-	logger.Debug("401 Unauthorized with OAuth2, invalidating token and retrying once",
+	logger.Debug("401 Unauthorized with OAuth2, invalidating token and retrying",
 		slog.String("endpoint", h.endpoint),
 		slog.String("method", h.method),
+		slog.Int("oauth2_retry_count", *retryCount),
 	)
 	invalidator.InvalidateToken()
-	*alreadyRetried = true
+	*retryCount++
 	return true
 }
 
@@ -591,7 +593,7 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 	}
 
 	var delaysMs []int64
-	oauth2Retried := false
+	oauth2RetryCount := 0
 
 	hooks := httpclient.RetryHooks{
 		OnRetry: func(attempt int, retryErr error, nextDelay time.Duration) {
@@ -616,7 +618,7 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 			return httpclient.EvalRetryHint(h.retryHintProgram, respBody)
 		},
 		OnAttemptFailure: func(_ int, resp *http.Response, _ error) bool {
-			return h.handleOAuth2Unauthorized(resp, &oauth2Retried)
+			return h.handleOAuth2Unauthorized(resp, &oauth2RetryCount)
 		},
 	}
 
@@ -632,6 +634,11 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 		}()
 	}
 	if err != nil {
+		// Story 17.5: surface a typed authentication error when 401 persists
+		// after the maximum number of OAuth2 token-refresh retries.
+		if oauth2RetryCount >= auth.MaxOAuth2Retries && resp != nil && resp.StatusCode == http.StatusUnauthorized {
+			err = fmt.Errorf("%w: endpoint=%s status=%d", auth.ErrOAuth2InvalidCredentials, endpoint, resp.StatusCode)
+		}
 		return h.recordRetryFailure(err, delaysMs, startTime, endpoint)
 	}
 
@@ -649,6 +656,15 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 			slog.String("status", resp.Status),
 			slog.String("response_body", bodySnippet),
 		)
+		// Story 17.5: when 401 persists after the maximum number of OAuth2
+		// token-refresh retries, surface a typed authentication error so the
+		// runtime classifies it as fatal instead of looping further.
+		if resp.StatusCode == http.StatusUnauthorized && oauth2RetryCount >= auth.MaxOAuth2Retries {
+			return h.recordRetryFailure(
+				fmt.Errorf("%w: endpoint=%s status=%d", auth.ErrOAuth2InvalidCredentials, endpoint, resp.StatusCode),
+				delaysMs, startTime, endpoint,
+			)
+		}
 		classified := errhandling.ClassifyHTTPStatus(resp.StatusCode, bodySnippet)
 		classified.OriginalErr = &httpclient.Error{
 			StatusCode:      resp.StatusCode,

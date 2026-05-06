@@ -42,7 +42,7 @@ func TestWebhook_ExecutorIntegration(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
-			"endpoint":      "/webhook/test",
+			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}

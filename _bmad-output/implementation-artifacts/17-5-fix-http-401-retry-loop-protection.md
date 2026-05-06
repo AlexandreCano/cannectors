@@ -1,6 +1,6 @@
 # Story 17.5: Protect HTTP 401 retry from infinite loop with bad OAuth2 credentials
 
-Status: backlog
+Status: review
 
 ## Story
 

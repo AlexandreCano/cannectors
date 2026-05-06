@@ -345,7 +345,7 @@ func TestOAuth2Handler_WithScopes(t *testing.T) {
 			"tokenUrl":     tokenServer.URL,
 			"clientId":     "client",
 			"clientSecret": "secret",
-			"scopes":       []string{"read", "write", "admin"},
+			"scope":        "read write admin",
 		}),
 	}
 
@@ -359,9 +359,84 @@ func TestOAuth2Handler_WithScopes(t *testing.T) {
 		t.Fatalf("ApplyAuth failed: %v", err)
 	}
 
-	// Scopes should be space-separated
+	// Scopes should be forwarded as the canonical RFC 6749 space-separated string.
 	if receivedScopes != "read write admin" {
 		t.Errorf("scopes = %q, want %q", receivedScopes, "read write admin")
+	}
+}
+
+// captureScopeServer returns a token server that captures the `scope` form
+// value from each token request and emits a valid token response.
+func captureScopeServer(t *testing.T, capture *string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("failed to parse form: %v", err)
+		}
+		// Use Values.Has to distinguish "absent" from "empty string".
+		if r.Form.Has("scope") {
+			*capture = r.Form.Get("scope")
+		} else {
+			*capture = "<absent>"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"Bearer","expires_in":3600}`))
+	}))
+}
+
+func TestOAuth2Handler_ScopeFieldString(t *testing.T) {
+	// Story 17.2 AC #1: canonical `scope` (RFC 6749) is sent as-is.
+	var got string
+	srv := captureScopeServer(t, &got)
+	defer srv.Close()
+
+	cfg := &connector.AuthConfig{
+		Type: "oauth2",
+		Credentials: toJSON(t, map[string]interface{}{
+			"tokenUrl":     srv.URL,
+			"clientId":     "client",
+			"clientSecret": "secret",
+			"scope":        "read write",
+		}),
+	}
+	handler, err := NewHandler(cfg, nil)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "https://example.com/api", nil)
+	if err := handler.ApplyAuth(context.Background(), req); err != nil {
+		t.Fatalf("ApplyAuth: %v", err)
+	}
+	if got != "read write" {
+		t.Errorf("scope sent = %q, want %q", got, "read write")
+	}
+}
+
+func TestOAuth2Handler_NoScopesOmitted(t *testing.T) {
+	// Story 17.2 AC #4: when no scope is configured, the form must omit the
+	// `scope` parameter (not send an empty value).
+	var got string
+	srv := captureScopeServer(t, &got)
+	defer srv.Close()
+
+	cfg := &connector.AuthConfig{
+		Type: "oauth2",
+		Credentials: toJSON(t, map[string]interface{}{
+			"tokenUrl":     srv.URL,
+			"clientId":     "client",
+			"clientSecret": "secret",
+		}),
+	}
+	handler, err := NewHandler(cfg, nil)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "https://example.com/api", nil)
+	if err := handler.ApplyAuth(context.Background(), req); err != nil {
+		t.Fatalf("ApplyAuth: %v", err)
+	}
+	if got != "<absent>" {
+		t.Errorf("scope param should be absent, got %q", got)
 	}
 }
 

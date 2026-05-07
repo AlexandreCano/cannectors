@@ -576,7 +576,7 @@ func (h *HTTPRequestModule) handleOAuth2Unauthorized(resp *http.Response, retryC
 		slog.Int("oauth2_retry_count", *retryCount),
 	)
 	invalidator.InvalidateToken()
-	*retryCount++
+	(*retryCount)++
 	return true
 }
 

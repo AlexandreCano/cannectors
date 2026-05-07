@@ -166,7 +166,7 @@ func TestGetSQLNestedValue(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, _ := recordpath.Get(record, tt.path)
 			if got != tt.want {
-				t.Errorf("GetNestedValue(%q) = %v, want %v", tt.path, got, tt.want)
+				t.Errorf("recordpath.Get(%q) = %v, want %v", tt.path, got, tt.want)
 			}
 		})
 	}

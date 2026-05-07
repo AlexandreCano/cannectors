@@ -38,12 +38,6 @@
 						"retry": {
 							"$ref": "common-schema.json#/$defs/retryConfig"
 						},
-						"timeout": {
-							"type": "number",
-							"description": "Legacy timeout in seconds. Use timeoutMs instead.",
-							"minimum": 0,
-							"deprecated": true
-						},
 						"keys": {
 							"type": "array",
 							"description": "List of key configurations for extracting values from records and using them in path, query, or headers.",

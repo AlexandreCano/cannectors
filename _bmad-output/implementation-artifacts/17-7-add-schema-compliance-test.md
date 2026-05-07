@@ -1,6 +1,6 @@
 # Story 17.7: Add automated schema/runtime compliance test
 
-Status: backlog
+Status: review
 
 ## Story
 

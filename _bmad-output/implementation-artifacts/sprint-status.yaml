@@ -117,26 +117,26 @@ development_status:
   # Epic 16: Code Duplication Cleanup (from audit 2026-04-21)
   # Unifie les duplications non-HTTP (path navigation, RetryInfo, onError, metadata, etc.)
   # Source: docs/AUDIT_TECHNIQUE_2026-04-21.md §5 P1.3, P1.4, P2.2, P2.3, P2.4, §2.2
-  epic-16: review
-  16-1-unify-record-path-navigation: review
-  16-2-unify-retry-info-type: review
-  16-3-unify-onerror-strategy-parsing: review
-  16-4-extract-metadata-package: review
-  16-5-remove-template-wrapper-and-duplicate-retry-codes: review
-  16-6-consolidate-condition-filter-registration: review
+  epic-16: done
+  16-1-unify-record-path-navigation: done
+  16-2-unify-retry-info-type: done
+  16-3-unify-onerror-strategy-parsing: done
+  16-4-extract-metadata-package: done
+  16-5-remove-template-wrapper-and-duplicate-retry-codes: done
+  16-6-consolidate-condition-filter-registration: done
   epic-16-retrospective: optional
 
   # Epic 17: Schema/Runtime Alignment & Bug Fixes (from audit 2026-04-21)
   # Corrige les bugs critiques documentés dans docs/plan.md §3 et ajoute un garde-fou
   # Source: docs/AUDIT_TECHNIQUE_2026-04-21.md §5 P1.2, P2.6, P3.4
-  epic-17: backlog
-  17-1-fix-webhook-path-endpoint-mismatch: backlog
-  17-2-fix-oauth2-scope-parsing: backlog
-  17-3-fix-sql-call-cache-key-determinism: backlog
-  17-4-fix-script-filter-cancellation-race: backlog
-  17-5-fix-http-401-retry-loop-protection: backlog
-  17-6-fix-sql-placeholder-conversion: backlog
-  17-7-add-schema-compliance-test: backlog
+  epic-17: review
+  17-1-fix-webhook-path-endpoint-mismatch: review
+  17-2-fix-oauth2-scope-parsing: review
+  17-3-fix-sql-call-cache-key-determinism: review
+  17-4-fix-script-filter-cancellation-race: review
+  17-5-fix-http-401-retry-loop-protection: review
+  17-6-fix-sql-placeholder-conversion: review
+  17-7-add-schema-compliance-test: review
   epic-17-retrospective: optional
 
   # Epic 18: God File Split & Module Error Harmonization (from audit 2026-04-21)

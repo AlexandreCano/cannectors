@@ -1,6 +1,6 @@
 # Story 17.3: Fix `sql_call` cache key non-determinism
 
-Status: backlog
+Status: review
 
 ## Story
 

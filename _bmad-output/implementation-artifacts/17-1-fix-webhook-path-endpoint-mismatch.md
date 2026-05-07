@@ -1,6 +1,6 @@
 # Story 17.1: Fix webhook `path` vs `endpoint` schema mismatch
 
-Status: backlog
+Status: review
 
 ## Story
 

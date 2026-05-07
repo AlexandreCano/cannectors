@@ -10,9 +10,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cannectors/runtime/internal/auth"
 	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/internal/httpclient"
 	"github.com/cannectors/runtime/pkg/connector"
@@ -3613,6 +3615,115 @@ func TestHTTPRequest_CustomRetryableStatusCodes_DefaultFallback(t *testing.T) {
 	// Should have made 3 requests with default retryable codes
 	if ts.getRequestCount() != 3 {
 		t.Errorf("expected 3 requests with default retryable codes, got %d", ts.getRequestCount())
+	}
+}
+
+func TestHTTPRequest_OAuth2_401InfiniteLoopProtection(t *testing.T) {
+	// Story 17.5 AC #1, #5: when OAuth2 credentials are bad, the module
+	// must stop retrying after auth.MaxOAuth2Retries (=2) consecutive 401s
+	// and surface ErrOAuth2InvalidCredentials, not loop forever.
+
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"Bearer","expires_in":3600}`))
+	}))
+	defer tokenServer.Close()
+
+	var apiCalls int32
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&apiCalls, 1)
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+	}))
+	defer apiServer.Close()
+
+	config := newModuleConfigWithAuth(
+		map[string]interface{}{
+			"endpoint": apiServer.URL + "/api/data",
+			"method":   "POST",
+			"retry": map[string]interface{}{
+				"maxAttempts": float64(5),
+				"delayMs":     float64(1),
+			},
+		},
+		"oauth2",
+		toJSON(t, map[string]string{
+			"tokenUrl":     tokenServer.URL,
+			"clientId":     "client",
+			"clientSecret": "secret",
+		}),
+	)
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("NewHTTPRequestFromConfig: %v", err)
+	}
+
+	records := []map[string]interface{}{{"x": 1}}
+	_, err = module.Send(context.Background(), records)
+	if err == nil {
+		t.Fatal("expected error after exhausting OAuth2 retries")
+	}
+	if !errors.Is(err, auth.ErrOAuth2InvalidCredentials) {
+		t.Errorf("expected ErrOAuth2InvalidCredentials, got %v", err)
+	}
+
+	// 1 initial + auth.MaxOAuth2Retries (=2) refresh attempts = 3 hits to the API.
+	if got, want := atomic.LoadInt32(&apiCalls), int32(1+auth.MaxOAuth2Retries); got != want {
+		t.Errorf("API request count = %d, want %d (1 initial + %d OAuth2 retries)", got, want, auth.MaxOAuth2Retries)
+	}
+}
+
+func TestHTTPRequest_OAuth2_401ThenSuccess(t *testing.T) {
+	// Story 17.5 AC #2: a 401 followed by a successful retry after token
+	// refresh should complete normally (no error surfaced).
+	var tokens int32
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&tokens, 1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"Bearer","expires_in":3600}`))
+	}))
+	defer tokenServer.Close()
+
+	var apiCalls int32
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		count := atomic.AddInt32(&apiCalls, 1)
+		if count == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer apiServer.Close()
+
+	config := newModuleConfigWithAuth(
+		map[string]interface{}{
+			"endpoint": apiServer.URL + "/api/data",
+			"method":   "POST",
+			"retry": map[string]interface{}{
+				"maxAttempts": float64(3),
+				"delayMs":     float64(1),
+			},
+		},
+		"oauth2",
+		toJSON(t, map[string]string{
+			"tokenUrl":     tokenServer.URL,
+			"clientId":     "client",
+			"clientSecret": "secret",
+		}),
+	)
+
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("NewHTTPRequestFromConfig: %v", err)
+	}
+
+	if _, err := module.Send(context.Background(), []map[string]interface{}{{"x": 1}}); err != nil {
+		t.Fatalf("Send: unexpected error %v", err)
+	}
+	if got := atomic.LoadInt32(&apiCalls); got != 2 {
+		t.Errorf("expected 2 API calls (1 initial + 1 retry after token refresh), got %d", got)
 	}
 }
 

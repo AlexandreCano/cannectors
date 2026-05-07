@@ -476,19 +476,70 @@ func (m *SQLCallModule) buildCacheKey(record map[string]interface{}) string {
 	return fmt.Sprintf("%s::%s", m.query, string(recordJSON))
 }
 
-// marshalDeterministic produces deterministic JSON by sorting map keys.
+// marshalDeterministic produces deterministic JSON by recursively sorting map
+// keys. The standard library's json.Marshal already sorts top-level keys for
+// map[string]T, but only when the value is itself a map of the same type.
+// This helper normalises every nested map[string]interface{} (the canonical
+// Go shape produced by JSON/YAML parsers) so the cache key is stable for
+// records that carry the same data with different insertion order.
 func marshalDeterministic(record map[string]interface{}) ([]byte, error) {
-	keys := make([]string, 0, len(record))
-	for k := range record {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	return json.Marshal(canonicalize(record))
+}
 
-	ordered := make([]interface{}, 0, len(keys)*2)
-	for _, k := range keys {
-		ordered = append(ordered, k, record[k])
+// canonicalize returns a value where every map[string]interface{} is replaced
+// by an *orderedMap with sorted keys. Slices are walked recursively. Other
+// values are returned unchanged. Combined with json.Marshal, this guarantees
+// a byte-for-byte identical output for two semantically equal inputs.
+func canonicalize(v interface{}) interface{} {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		keys := make([]string, 0, len(t))
+		for k := range t {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		out := make([][2]interface{}, len(keys))
+		for i, k := range keys {
+			out[i] = [2]interface{}{k, canonicalize(t[k])}
+		}
+		return orderedMap(out)
+	case []interface{}:
+		out := make([]interface{}, len(t))
+		for i, item := range t {
+			out[i] = canonicalize(item)
+		}
+		return out
+	default:
+		return v
 	}
-	return json.Marshal(ordered)
+}
+
+// orderedMap is a slice of (key, value) pairs that marshals to a JSON object
+// while preserving the slice's order. Pre-sorted keys then yield deterministic
+// output.
+type orderedMap [][2]interface{}
+
+func (m orderedMap) MarshalJSON() ([]byte, error) {
+	var buf strings.Builder
+	buf.WriteByte('{')
+	for i, kv := range m {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		key, err := json.Marshal(kv[0])
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(key)
+		buf.WriteByte(':')
+		val, err := json.Marshal(kv[1])
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(val)
+	}
+	buf.WriteByte('}')
+	return []byte(buf.String()), nil
 }
 
 // mergeData merges query result into the record.

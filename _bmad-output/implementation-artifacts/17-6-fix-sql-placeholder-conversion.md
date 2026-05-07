@@ -1,6 +1,6 @@
 # Story 17.6: Fix `database.ConvertPlaceholders` for strings containing `?`
 
-Status: backlog
+Status: review
 
 ## Story
 

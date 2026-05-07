@@ -57,9 +57,9 @@
 		"webhookInputConfig": {
 			"type": "object",
 			"description": "Webhook input module configuration. Listens for incoming HTTP requests.",
-			"required": [ "endpoint" ],
+			"required": [ "path" ],
 			"properties": {
-				"endpoint": {
+				"path": {
 					"type": "string",
 					"description": "Webhook endpoint path (e.g. /webhook/orders)."
 				},

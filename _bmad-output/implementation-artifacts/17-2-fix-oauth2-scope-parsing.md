@@ -1,6 +1,6 @@
 # Story 17.2: Fix OAuth2 `scope` vs `scopes` parsing
 
-Status: backlog
+Status: review
 
 ## Story
 

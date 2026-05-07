@@ -1,6 +1,6 @@
 # Story 17.4: Fix `script` filter context cancellation race condition
 
-Status: backlog
+Status: review
 
 ## Story
 

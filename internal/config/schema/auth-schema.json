@@ -135,12 +135,9 @@
 					"type": "string",
 					"description": "Client secret or env reference (${VAR})."
 				},
-				"scopes": {
-					"type": "array",
-					"items": {
-						"type": "string"
-					},
-					"description": "OAuth2 scopes."
+				"scope": {
+					"type": "string",
+					"description": "OAuth2 scopes as a space-separated string (RFC 6749 §3.3)."
 				}
 			},
 			"additionalProperties": false

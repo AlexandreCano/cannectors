@@ -95,6 +95,28 @@ func (e *ScriptError) Error() string {
 	return e.Message
 }
 
+// ErrorCode implements errhandling.ModuleError.
+func (e *ScriptError) ErrorCode() string { return e.Code }
+
+// ErrorModule implements errhandling.ModuleError.
+func (e *ScriptError) ErrorModule() string { return "script" }
+
+// ErrorRecordIndex implements errhandling.ModuleError.
+func (e *ScriptError) ErrorRecordIndex() int { return e.RecordIndex }
+
+// ErrorDetails implements errhandling.ModuleError. Returns a copy of the
+// existing Details map enriched with the JS stack trace when present.
+func (e *ScriptError) ErrorDetails() map[string]interface{} {
+	d := make(map[string]interface{}, len(e.Details)+1)
+	for k, v := range e.Details {
+		d[k] = v
+	}
+	if e.StackTrace != "" {
+		d["stack_trace"] = e.StackTrace
+	}
+	return d
+}
+
 // newScriptError creates a ScriptError with optional details.
 func newScriptError(code, message string, recordIdx int, stackTrace string, err error) *ScriptError {
 	details := make(map[string]interface{})

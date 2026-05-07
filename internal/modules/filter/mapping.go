@@ -4,19 +4,15 @@ package filter
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"math"
 	"regexp"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/internal/logger"
-	"github.com/cannectors/runtime/internal/moduleconfig"
+	"github.com/cannectors/runtime/internal/recordpath"
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
@@ -107,6 +103,72 @@ type MappingModule struct {
 	onError  errhandling.OnErrorStrategy
 }
 
+// MappingError carries structured context for mapping failures.
+type MappingError struct {
+	Code         string
+	Message      string
+	SourceField  string
+	TargetField  string
+	RecordIndex  int
+	MappingIndex int
+	TransformOp  string
+	SourceValue  interface{}
+}
+
+func (e *MappingError) Error() string {
+	return e.Message
+}
+
+// ErrorCode implements errhandling.ModuleError.
+func (e *MappingError) ErrorCode() string { return e.Code }
+
+// ErrorModule implements errhandling.ModuleError.
+func (e *MappingError) ErrorModule() string { return "mapping" }
+
+// ErrorRecordIndex implements errhandling.ModuleError.
+func (e *MappingError) ErrorRecordIndex() int { return e.RecordIndex }
+
+// ErrorDetails implements errhandling.ModuleError. Surfaces structured
+// mapping context (target/source field, mapping index, transform op, source
+// value) as a flat map for ExecutionError.Details.
+func (e *MappingError) ErrorDetails() map[string]interface{} {
+	d := map[string]interface{}{
+		"source_field":  e.SourceField,
+		"target_field":  e.TargetField,
+		"mapping_index": e.MappingIndex,
+	}
+	if e.TransformOp != "" {
+		d["transform_op"] = e.TransformOp
+	}
+	if e.SourceValue != nil {
+		d["source_value"] = e.SourceValue
+	}
+	return d
+}
+
+// TransformError carries context for transform failures.
+type TransformError struct {
+	Op  string
+	Err error
+}
+
+func (e TransformError) Error() string {
+	return fmt.Sprintf("transform %q failed: %v", e.Op, e.Err)
+}
+
+func newMappingError(code, message string, mapping MappingConfig, recordIdx, mappingIdx int, value interface{}, transformOp string) *MappingError {
+	return &MappingError{
+		Code:         code,
+		Message:      message,
+		SourceField:  mapping.Source,
+		TargetField:  mapping.Target,
+		RecordIndex:  recordIdx,
+		MappingIndex: mappingIdx,
+		TransformOp:  transformOp,
+		SourceValue:  value,
+	}
+}
+
 // NewMappingFromConfig creates a new mapping filter module from configuration.
 // It validates the mappings and returns an error if any mapping is invalid.
 //
@@ -135,224 +197,6 @@ func NewMappingFromConfig(mappings []FieldMapping, onError string) (*MappingModu
 		mappings: configs,
 		onError:  strategy,
 	}, nil
-}
-
-// MappingError carries structured context for mapping failures.
-type MappingError struct {
-	Code         string
-	Message      string
-	SourceField  string
-	TargetField  string
-	RecordIndex  int
-	MappingIndex int
-	TransformOp  string
-	SourceValue  interface{}
-}
-
-func (e *MappingError) Error() string {
-	return e.Message
-}
-
-// TransformError carries context for transform failures.
-type TransformError struct {
-	Op  string
-	Err error
-}
-
-func (e TransformError) Error() string {
-	return fmt.Sprintf("transform %q failed: %v", e.Op, e.Err)
-}
-
-func newMappingError(code, message string, mapping MappingConfig, recordIdx, mappingIdx int, value interface{}, transformOp string) *MappingError {
-	return &MappingError{
-		Code:         code,
-		Message:      message,
-		SourceField:  mapping.Source,
-		TargetField:  mapping.Target,
-		RecordIndex:  recordIdx,
-		MappingIndex: mappingIdx,
-		TransformOp:  transformOp,
-		SourceValue:  value,
-	}
-}
-
-// parseMappingConfig validates and normalizes a single field mapping.
-func parseMappingConfig(m FieldMapping, index int) (MappingConfig, error) {
-	config := MappingConfig{
-		DefaultValue: m.DefaultValue,
-		OnMissing:    m.OnMissing,
-	}
-
-	// Validate target is provided
-	if m.Target == "" {
-		return config, fmt.Errorf("%w at index %d: mapping must have a target field", ErrInvalidMapping, index)
-	}
-
-	// Handle source field:
-	// - nil (not declared) = delete the target field
-	// - empty string = error (invalid)
-	// - non-empty string = normal mapping
-	if m.Source == nil {
-		config.Source = "" // Empty string internally means "delete"
-	} else if *m.Source == "" {
-		return config, fmt.Errorf("%w at index %d: source cannot be empty string, omit it to delete the field", ErrInvalidMapping, index)
-	} else {
-		config.Source = *m.Source
-	}
-	config.Target = m.Target
-
-	// Set default onMissing behavior
-	if config.OnMissing == "" {
-		config.OnMissing = OnMissingSetNull
-	}
-
-	// Parse transforms array and pre-compile regex patterns
-	if m.Transforms != nil {
-		config.Transforms = make([]TransformConfig, len(m.Transforms))
-		for i, t := range m.Transforms {
-			tc := TransformConfig{
-				Op:          t.Op,
-				Format:      t.Format,
-				Pattern:     t.Pattern,
-				Replacement: t.Replacement,
-				Separator:   t.Separator,
-			}
-			// Pre-compile regex pattern for replace operations
-			if t.Op == "replace" && t.Pattern != "" {
-				re, err := regexp.Compile(t.Pattern)
-				if err != nil {
-					return config, fmt.Errorf("%w at index %d: invalid regex pattern in transform %d: %v", ErrInvalidMapping, index, i, err)
-				}
-				tc.CompiledPattern = re
-			}
-			config.Transforms[i] = tc
-		}
-	}
-
-	return config, nil
-}
-
-// ParseFieldMappings parses raw mapping configuration into FieldMapping structs.
-// Accepts []FieldMapping, []map[string]interface{}, or []interface{} decoded from JSON/YAML.
-func ParseFieldMappings(raw interface{}) ([]FieldMapping, error) {
-	if raw == nil {
-		return []FieldMapping{}, nil
-	}
-
-	switch v := raw.(type) {
-	case []FieldMapping:
-		return v, nil
-	case []map[string]interface{}:
-		return parseFieldMappingList(v)
-	case []interface{}:
-		mappings := make([]map[string]interface{}, 0, len(v))
-		for i, item := range v {
-			switch m := item.(type) {
-			case map[string]interface{}:
-				mappings = append(mappings, m)
-			case FieldMapping:
-				mappings = append(mappings, map[string]interface{}{
-					"source":       m.Source,
-					"target":       m.Target,
-					"defaultValue": m.DefaultValue,
-					"onMissing":    m.OnMissing,
-					"transforms":   m.Transforms,
-				})
-			default:
-				return nil, fmt.Errorf("mapping at index %d must be an object", i)
-			}
-		}
-		return parseFieldMappingList(mappings)
-	default:
-		return nil, fmt.Errorf("mappings must be an array")
-	}
-}
-
-func parseFieldMappingList(raw []map[string]interface{}) ([]FieldMapping, error) {
-	mappings := make([]FieldMapping, 0, len(raw))
-	for i, item := range raw {
-		mapping, err := parseFieldMappingMap(item, i)
-		if err != nil {
-			return nil, fmt.Errorf("parsing field mapping at index %d: %w", i, err)
-		}
-		mappings = append(mappings, mapping)
-	}
-	return mappings, nil
-}
-
-func parseFieldMappingMap(data map[string]interface{}, index int) (FieldMapping, error) {
-	mapping := FieldMapping{}
-
-	// Source is a pointer: nil means "not declared" (delete), non-nil is the value
-	if source, ok := data["source"].(string); ok {
-		mapping.Source = &source
-	}
-	if target, ok := data["target"].(string); ok {
-		mapping.Target = target
-	}
-	if defaultValue, ok := data["defaultValue"]; ok {
-		mapping.DefaultValue = defaultValue
-	}
-	if onMissing, ok := data["onMissing"].(string); ok {
-		mapping.OnMissing = onMissing
-	}
-	if rawTransforms, ok := data["transforms"]; ok {
-		transforms, err := parseTransformOps(rawTransforms, index)
-		if err != nil {
-			return mapping, err
-		}
-		mapping.Transforms = transforms
-	}
-
-	return mapping, nil
-}
-
-func parseTransformOps(raw interface{}, mappingIndex int) ([]TransformOp, error) {
-	if raw == nil {
-		return nil, nil
-	}
-
-	list, ok := raw.([]interface{})
-	if !ok {
-		if typed, okTyped := raw.([]TransformOp); okTyped {
-			return typed, nil
-		}
-		return nil, fmt.Errorf("transforms for mapping %d must be an array", mappingIndex)
-	}
-
-	ops := make([]TransformOp, 0, len(list))
-	for i, item := range list {
-		switch v := item.(type) {
-		case string:
-			ops = append(ops, TransformOp{Op: v})
-		case map[string]interface{}:
-			op, _ := v["op"].(string)
-			if op == "" {
-				return nil, fmt.Errorf("transform op missing at mapping %d index %d", mappingIndex, i)
-			}
-			ops = append(ops, TransformOp{
-				Op:          op,
-				Format:      stringValue(v["format"]),
-				Pattern:     stringValue(v["pattern"]),
-				Replacement: stringValue(v["replacement"]),
-				Separator:   stringValue(v["separator"]),
-			})
-		default:
-			return nil, fmt.Errorf("transform op at mapping %d index %d must be an object or string", mappingIndex, i)
-		}
-	}
-
-	return ops, nil
-}
-
-func stringValue(value interface{}) string {
-	if value == nil {
-		return ""
-	}
-	if s, ok := value.(string); ok {
-		return s
-	}
-	return fmt.Sprintf("%v", value)
 }
 
 // Process applies field mappings to the input records.
@@ -469,7 +313,7 @@ func (m *MappingModule) processRecord(record map[string]interface{}, recordIdx i
 	for mappingIdx, mapping := range m.mappings {
 		// Empty source means delete the target field
 		if mapping.Source == "" {
-			moduleconfig.DeleteNestedValue(record, mapping.Target)
+			recordpath.Delete(record, mapping.Target)
 			continue
 		}
 
@@ -486,7 +330,7 @@ func (m *MappingModule) processRecord(record map[string]interface{}, recordIdx i
 			return m.handleTransformError(err, mapping, recordIdx, mappingIdx, value, record)
 		}
 
-		if err := moduleconfig.SetNestedValue(record, mapping.Target, transformedValue); err != nil {
+		if err := recordpath.Set(record, mapping.Target, transformedValue); err != nil {
 			return m.handleSetValueError(err, mapping, recordIdx, mappingIdx, transformedValue, record)
 		}
 	}
@@ -496,7 +340,7 @@ func (m *MappingModule) processRecord(record map[string]interface{}, recordIdx i
 
 // getSourceValue retrieves the source value for a mapping, handling missing field cases.
 func (m *MappingModule) getSourceValue(record map[string]interface{}, mapping MappingConfig, recordIdx, mappingIdx int) (interface{}, bool, error) {
-	value, found := moduleconfig.GetNestedValue(record, mapping.Source)
+	value, found := recordpath.Get(record, mapping.Source)
 
 	if !found {
 		switch mapping.OnMissing {
@@ -553,6 +397,7 @@ func (m *MappingModule) applyTransforms(value interface{}, mapping MappingConfig
 }
 
 // applyTransformOp applies a specific transform operation.
+// Helpers (applyTrim, applyToInt, etc.) live in mapping_transforms.go.
 func (m *MappingModule) applyTransformOp(value interface{}, config TransformConfig) (interface{}, error) {
 	if value == nil {
 		return nil, nil
@@ -591,297 +436,5 @@ func (m *MappingModule) applyTransformOp(value interface{}, config TransformConf
 			slog.String("op", config.Op),
 		)
 		return value, nil
-	}
-}
-
-// Transform operations
-
-func applyTrim(value interface{}) (interface{}, error) {
-	if s, ok := value.(string); ok {
-		return strings.TrimSpace(s), nil
-	}
-	return value, nil
-}
-
-func applyLowercase(value interface{}) (interface{}, error) {
-	if s, ok := value.(string); ok {
-		return strings.ToLower(s), nil
-	}
-	return value, nil
-}
-
-func applyUppercase(value interface{}) (interface{}, error) {
-	if s, ok := value.(string); ok {
-		return strings.ToUpper(s), nil
-	}
-	return value, nil
-}
-
-func applyDateFormat(value interface{}, format string) (interface{}, error) {
-	if format == "" {
-		format = "2006-01-02T15:04:05" // Default: YYYY-MM-DDTHH:mm:ss
-	}
-
-	// Convert common format strings to Go layout
-	goFormat := convertDateFormat(format)
-
-	// Parse the input value
-	var t time.Time
-	var err error
-
-	switch v := value.(type) {
-	case string:
-		// Try common input formats
-		inputFormats := []string{
-			time.RFC3339,
-			"2006-01-02T15:04:05Z07:00",
-			"2006-01-02T15:04:05",
-			"2006-01-02",
-			time.RFC1123,
-		}
-		for _, inputFmt := range inputFormats {
-			t, err = time.Parse(inputFmt, v)
-			if err == nil {
-				break
-			}
-		}
-		if err != nil {
-			return value, fmt.Errorf("could not parse date: %s", v)
-		}
-	case time.Time:
-		t = v
-	default:
-		return value, nil
-	}
-
-	return t.Format(goFormat), nil
-}
-
-// convertDateFormat converts common date format strings to Go layout.
-// The current patterns are designed not to overlap, so replacement order does not affect behavior.
-// If overlapping patterns are added in the future (e.g., "M" and "MM"), ensure longer patterns are replaced first.
-func convertDateFormat(format string) string {
-	replacements := []struct {
-		pattern     string
-		replacement string
-	}{
-		{"YYYY", "2006"},
-		{"YY", "06"},
-		{"MM", "01"},
-		{"DD", "02"},
-		{"HH", "15"},
-		{"mm", "04"},
-		{"ss", "05"},
-		{"SSS", "000"},
-	}
-
-	result := format
-	for _, r := range replacements {
-		result = strings.ReplaceAll(result, r.pattern, r.replacement)
-	}
-	return result
-}
-
-func applyReplace(value interface{}, compiledPattern *regexp.Regexp, replacement string) (interface{}, error) {
-	if s, ok := value.(string); ok {
-		if compiledPattern == nil {
-			return s, nil
-		}
-		return compiledPattern.ReplaceAllString(s, replacement), nil
-	}
-	return value, nil
-}
-
-func applySplit(value interface{}, separator string) (interface{}, error) {
-	if s, ok := value.(string); ok {
-		if separator == "" {
-			separator = ","
-		}
-		parts := strings.Split(s, separator)
-		result := make([]interface{}, len(parts))
-		for i, p := range parts {
-			// Note: each split part is trimmed of surrounding whitespace.
-			result[i] = strings.TrimSpace(p)
-		}
-		return result, nil
-	}
-	return value, nil
-}
-
-func applyJoin(value interface{}, separator string) (interface{}, error) {
-	if separator == "" {
-		separator = ","
-	}
-
-	switch v := value.(type) {
-	case []interface{}:
-		parts := make([]string, len(v))
-		for i, item := range v {
-			parts[i] = fmt.Sprintf("%v", item)
-		}
-		return strings.Join(parts, separator), nil
-	case []string:
-		return strings.Join(v, separator), nil
-	}
-	return value, nil
-}
-
-func applyToString(value interface{}) (interface{}, error) {
-	switch v := value.(type) {
-	case string:
-		return v, nil
-	case []byte:
-		return string(v), nil
-	case time.Time:
-		return v.Format(time.RFC3339), nil
-	default:
-		return fmt.Sprintf("%v", value), nil
-	}
-}
-
-func applyToInt(value interface{}) (interface{}, error) {
-	switch v := value.(type) {
-	case int:
-		return v, nil
-	case int64:
-		return int(v), nil
-	case int32:
-		return int(v), nil
-	case uint:
-		return int(v), nil
-	case uint64:
-		return int(v), nil
-	case uint32:
-		return int(v), nil
-	case float64:
-		if math.Trunc(v) != v {
-			return nil, fmt.Errorf("cannot convert float with fractional part to int: %v", v)
-		}
-		return int(v), nil
-	case float32:
-		if math.Trunc(float64(v)) != float64(v) {
-			return nil, fmt.Errorf("cannot convert float with fractional part to int: %v", v)
-		}
-		return int(v), nil
-	case json.Number:
-		i, err := v.Int64()
-		if err != nil {
-			return nil, fmt.Errorf("cannot convert number to int: %w", err)
-		}
-		return int(i), nil
-	case string:
-		i, err := strconv.Atoi(strings.TrimSpace(v))
-		if err != nil {
-			return nil, fmt.Errorf("cannot parse int from string %q: %w", v, err)
-		}
-		return i, nil
-	case bool:
-		if v {
-			return 1, nil
-		}
-		return 0, nil
-	default:
-		return nil, fmt.Errorf("cannot convert %T to int", value)
-	}
-}
-
-func applyToFloat(value interface{}) (interface{}, error) {
-	switch v := value.(type) {
-	case float64:
-		return v, nil
-	case float32:
-		return float64(v), nil
-	case int:
-		return float64(v), nil
-	case int64:
-		return float64(v), nil
-	case int32:
-		return float64(v), nil
-	case uint:
-		return float64(v), nil
-	case uint64:
-		return float64(v), nil
-	case uint32:
-		return float64(v), nil
-	case json.Number:
-		f, err := v.Float64()
-		if err != nil {
-			return nil, fmt.Errorf("cannot convert number to float: %w", err)
-		}
-		return f, nil
-	case string:
-		f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
-		if err != nil {
-			return nil, fmt.Errorf("cannot parse float from string %q: %w", v, err)
-		}
-		return f, nil
-	case bool:
-		if v {
-			return 1.0, nil
-		}
-		return 0.0, nil
-	default:
-		return nil, fmt.Errorf("cannot convert %T to float", value)
-	}
-}
-
-func applyToBool(value interface{}) (interface{}, error) {
-	switch v := value.(type) {
-	case bool:
-		return v, nil
-	case string:
-		b, err := strconv.ParseBool(strings.TrimSpace(v))
-		if err != nil {
-			return nil, fmt.Errorf("cannot parse bool from string %q: %w", v, err)
-		}
-		return b, nil
-	case int:
-		return v != 0, nil
-	case int64:
-		return v != 0, nil
-	case int32:
-		return v != 0, nil
-	case uint:
-		return v != 0, nil
-	case uint64:
-		return v != 0, nil
-	case uint32:
-		return v != 0, nil
-	case float64:
-		return v != 0, nil
-	case float32:
-		return v != 0, nil
-	default:
-		return nil, fmt.Errorf("cannot convert %T to bool", value)
-	}
-}
-
-func applyToArray(value interface{}) (interface{}, error) {
-	switch v := value.(type) {
-	case []interface{}:
-		return v, nil
-	case []string:
-		result := make([]interface{}, len(v))
-		for i, item := range v {
-			result[i] = item
-		}
-		return result, nil
-	default:
-		return []interface{}{value}, nil
-	}
-}
-
-func applyToObject(value interface{}) (interface{}, error) {
-	switch v := value.(type) {
-	case map[string]interface{}:
-		return v, nil
-	case map[string]string:
-		result := make(map[string]interface{}, len(v))
-		for key, item := range v {
-			result[key] = item
-		}
-		return result, nil
-	default:
-		return nil, fmt.Errorf("cannot convert %T to object", value)
 	}
 }

@@ -1,6 +1,6 @@
 # Story 18.5: Split `internal/moduleconfig` by responsibility
 
-Status: backlog
+Status: review
 
 ## Story
 
@@ -80,4 +80,21 @@ Audit §2.1 note que `moduleconfig` porte 3 responsabilités non reliées :
 
 ## File List
 
-(à compléter)
+- `internal/recordpath/path.go` (NEW, 246 LOC) — Get/Set/Delete/IsNested/ParsePart, ErrEmptyPath, ErrInvalidArrayIndex
+- `internal/recordpath/path_test.go` (NEW, 169 LOC) — tests migrés depuis `moduleconfig/nested_test.go`
+- `internal/moduleconfig/nested.go` — supprimé
+- `internal/moduleconfig/nested_test.go` — supprimé
+- Imports migrés (10 fichiers) :
+  - `internal/template/template.go`, `internal/template/template_test.go`
+  - `internal/metadata/accessor.go`
+  - `internal/modules/output/http_request_helpers.go`
+  - `internal/modules/filter/mapping.go`
+  - `internal/modules/filter/set.go`
+  - `internal/modules/filter/remove.go`
+  - `internal/modules/filter/http_call.go`
+  - `internal/modules/filter/sql_call.go`
+  - `internal/modules/filter/sql_call_test.go`
+
+`recordpath` est un package feuille (zéro dépendance interne), importable partout sans risque de cycle.
+
+1647 tests passent, golangci-lint propre.

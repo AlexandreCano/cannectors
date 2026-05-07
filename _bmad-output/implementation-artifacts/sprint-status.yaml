@@ -129,25 +129,25 @@ development_status:
   # Epic 17: Schema/Runtime Alignment & Bug Fixes (from audit 2026-04-21)
   # Corrige les bugs critiques documentés dans docs/plan.md §3 et ajoute un garde-fou
   # Source: docs/AUDIT_TECHNIQUE_2026-04-21.md §5 P1.2, P2.6, P3.4
-  epic-17: review
-  17-1-fix-webhook-path-endpoint-mismatch: review
-  17-2-fix-oauth2-scope-parsing: review
-  17-3-fix-sql-call-cache-key-determinism: review
-  17-4-fix-script-filter-cancellation-race: review
-  17-5-fix-http-401-retry-loop-protection: review
-  17-6-fix-sql-placeholder-conversion: review
-  17-7-add-schema-compliance-test: review
+  epic-17: done
+  17-1-fix-webhook-path-endpoint-mismatch: done
+  17-2-fix-oauth2-scope-parsing: done
+  17-3-fix-sql-call-cache-key-determinism: done
+  17-4-fix-script-filter-cancellation-race: done
+  17-5-fix-http-401-retry-loop-protection: done
+  17-6-fix-sql-placeholder-conversion: done
+  17-7-add-schema-compliance-test: done
   epic-17-retrospective: optional
 
   # Epic 18: God File Split & Module Error Harmonization (from audit 2026-04-21)
   # Découpe les fichiers > 800 LOC en fichiers ciblés par concern
   # Source: docs/AUDIT_TECHNIQUE_2026-04-21.md §5 P2.1, P2.5, §2.1
-  epic-18: backlog
-  18-1-split-http-request-output-file: backlog
-  18-2-split-http-polling-input-file: backlog
-  18-3-split-mapping-filter-file: backlog
-  18-4-harmonize-module-error-types: backlog
-  18-5-split-moduleconfig-package: backlog
+  epic-18: review
+  18-1-split-http-request-output-file: review
+  18-2-split-http-polling-input-file: review
+  18-3-split-mapping-filter-file: review
+  18-4-harmonize-module-error-types: review
+  18-5-split-moduleconfig-package: review
   epic-18-retrospective: optional
 
   # Epic 19: Observability & Developer Experience (from audit 2026-04-21)

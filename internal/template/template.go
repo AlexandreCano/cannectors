@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/cannectors/runtime/internal/logger"
-	"github.com/cannectors/runtime/internal/moduleconfig"
+	"github.com/cannectors/runtime/internal/recordpath"
 )
 
 // Template syntax constants
@@ -195,7 +195,7 @@ func (e *Evaluator) resolveVariable(v Variable, record map[string]interface{}) s
 	path := strings.TrimPrefix(v.Path, "record.")
 
 	// Get the value from the record
-	value, found := moduleconfig.GetNestedValue(record, path)
+	value, found := recordpath.Get(record, path)
 
 	// Handle missing or null values
 	if !found || value == nil {

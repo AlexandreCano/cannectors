@@ -1,4 +1,12 @@
-package moduleconfig
+// Package recordpath provides navigation helpers for nested record values
+// expressed as map[string]interface{} (decoded JSON). It supports dot
+// notation (e.g. "user.profile.name") and array indexing
+// (e.g. "items[0].label").
+//
+// recordpath is a leaf package: it has no internal dependencies, so it can
+// be imported from any module (template engine, runtime metadata, output
+// modules, filter modules, etc.) without creating cycles.
+package recordpath
 
 import (
 	"errors"
@@ -7,14 +15,14 @@ import (
 	"strings"
 )
 
-// Path parsing errors
+// Path parsing errors.
 var (
 	ErrEmptyPath         = errors.New("empty path")
 	ErrInvalidArrayIndex = errors.New("invalid array index in path")
 )
 
-// IsNestedPath checks if a path contains dot notation or array indexing.
-func IsNestedPath(path string) bool {
+// IsNested reports whether path uses dot notation or array indexing.
+func IsNested(path string) bool {
 	for _, c := range path {
 		if c == '.' || c == '[' {
 			return true
@@ -23,16 +31,17 @@ func IsNestedPath(path string) bool {
 	return false
 }
 
-// GetNestedValue extracts a value from a nested object using dot notation.
-// Supports paths like "user.profile.name" and array indexing like "items[0].name".
-func GetNestedValue(obj map[string]interface{}, path string) (interface{}, bool) {
+// Get extracts a value from a nested object using dot notation.
+// Supports paths like "user.profile.name" and array indexing like
+// "items[0].name".
+func Get(obj map[string]interface{}, path string) (interface{}, bool) {
 	value, _, ok := navigate(obj, path, false)
 	return value, ok
 }
 
-// SetNestedValue sets a value in a nested object using dot notation.
-// Creates intermediate objects as needed.
-func SetNestedValue(obj map[string]interface{}, path string, value interface{}) error {
+// Set sets a value in a nested object using dot notation. Intermediate maps
+// and arrays are created as needed.
+func Set(obj map[string]interface{}, path string, value interface{}) error {
 	if path == "" {
 		return ErrEmptyPath
 	}
@@ -41,7 +50,7 @@ func SetNestedValue(obj map[string]interface{}, path string, value interface{}) 
 	current := obj
 
 	for i := 0; i < len(parts); i++ {
-		part, index, hasIndex, err := ParsePathPart(parts[i])
+		part, index, hasIndex, err := ParsePart(parts[i])
 		if err != nil {
 			return err
 		}
@@ -65,8 +74,9 @@ func SetNestedValue(obj map[string]interface{}, path string, value interface{}) 
 	return nil
 }
 
-// DeleteNestedValue removes a value from a nested object using dot notation.
-func DeleteNestedValue(obj map[string]interface{}, path string) {
+// Delete removes a value from a nested object using dot notation. Missing
+// paths are silently ignored.
+func Delete(obj map[string]interface{}, path string) {
 	parent, lastPart, ok := navigate(obj, path, true)
 	if !ok {
 		return
@@ -74,8 +84,10 @@ func DeleteNestedValue(obj map[string]interface{}, path string) {
 	deleteLeafFromParent(parent, lastPart)
 }
 
-// ParsePathPart parses a path segment and extracts the key and optional array index.
-func ParsePathPart(part string) (key string, index int, hasIndex bool, err error) {
+// ParsePart parses a single path segment ("foo" or "foo[3]") and returns its
+// key, optional array index, and a flag indicating whether an index was
+// present.
+func ParsePart(part string) (key string, index int, hasIndex bool, err error) {
 	idx := strings.Index(part, "[")
 	if idx == -1 {
 		return part, -1, false, nil
@@ -124,7 +136,7 @@ func navigate(obj map[string]interface{}, path string, stopBeforeLast bool) (cur
 }
 
 func navigateStep(current interface{}, part string) (next interface{}, ok bool) {
-	key, arrayIdx, hasIndex, err := ParsePathPart(part)
+	key, arrayIdx, hasIndex, err := ParsePart(part)
 	if err != nil {
 		return nil, false
 	}
@@ -156,7 +168,7 @@ func getFromArray(current interface{}, index int) (interface{}, bool) {
 }
 
 func deleteLeafFromParent(parent interface{}, lastPart string) {
-	key, arrayIdx, hasIndex, err := ParsePathPart(lastPart)
+	key, arrayIdx, hasIndex, err := ParsePart(lastPart)
 	if err != nil {
 		return
 	}

@@ -1,6 +1,6 @@
 # Story 18.2: Split `input/http_polling.go` (1057 LOC) into focused files
 
-Status: backlog
+Status: review
 
 ## Story
 
@@ -67,4 +67,9 @@ Audit §5 P2.1. Le fichier est long surtout à cause des 3 stratégies de pagina
 
 ## File List
 
-(à compléter)
+- `internal/modules/input/http_polling.go` (334 LOC) — core: types, constants, constructor, Fetch, fetchSingle, parseResponse, extractDataFromField, convertToRecords, applyAuthentication, GetRetryInfo, Close, logModuleCreation
+- `internal/modules/input/http_polling_request.go` (176 LOC, NEW) — buildRequest, doRequestWithRetry, handleOAuth2Unauthorized
+- `internal/modules/input/http_polling_state.go` (103 LOC, NEW) — SetPipelineID, LoadState, GetPersistenceConfig, GetLastState, SetStateStore, buildEndpointWithState
+- `internal/modules/input/http_polling_pagination.go` (303 LOC, pre-existing)
+
+Tests inchangés. Build + 86 tests filter passent.

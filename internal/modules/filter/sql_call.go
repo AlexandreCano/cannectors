@@ -20,6 +20,7 @@ import (
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/pathutil"
+	"github.com/cannectors/runtime/internal/recordpath"
 	"github.com/cannectors/runtime/internal/template"
 	"github.com/cannectors/runtime/pkg/connector"
 )
@@ -401,7 +402,7 @@ func (m *SQLCallModule) buildParameterizedQuery(queryTemplate string, record map
 		fieldPath = strings.TrimPrefix(fieldPath, RecordFieldPrefix)
 
 		// Get value from record
-		value, _ := moduleconfig.GetNestedValue(record, fieldPath)
+		value, _ := recordpath.Get(record, fieldPath)
 
 		// Replace with positional parameter
 		paramPlaceholder := database.FormatPlaceholder(m.driver, paramIndex)

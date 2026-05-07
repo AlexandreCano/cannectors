@@ -1,6 +1,6 @@
 # Story 18.1: Split `output/http_request.go` (1641 LOC) into focused files
 
-Status: backlog
+Status: review
 
 ## Story
 
@@ -88,4 +88,12 @@ Audit §4.2 : `http_request_test.go` à 4461 LOC (111 KB) est "impossible à rel
 
 ## File List
 
-(à compléter)
+- `internal/modules/output/http_request.go` (493 LOC) — core: types, constants, constructor, Send, sendBatchMode, sendSingleRecordMode, GetRetryInfo, Close
+- `internal/modules/output/http_request_body.go` (40 LOC, NEW) — buildBodyForRecord
+- `internal/modules/output/http_request_send.go` (283 LOC, NEW) — doRequestWithHeaders, buildHTTPRequest, executeRequestAndLog, handleOAuth2Unauthorized, recordRetrySuccess/Failure, applyAuthentication, isSuccessStatusCode
+- `internal/modules/output/http_request_headers.go` (61 LOC, NEW) — extractHeadersFromRecord, buildBaseHeadersMap
+- `internal/modules/output/http_request_helpers.go` (58 LOC, pre-existing) — validateJSON, isJSONContentType, truncateString, getRecordFieldString
+- `internal/modules/output/http_request_preview.go` (181 LOC, pre-existing) — preview/masking
+- `internal/modules/output/http_request_url.go` (118 LOC, pre-existing) — resolveEndpoint*, validateURL
+
+Tests inchangés (le split source-only n'a pas nécessité de toucher `http_request_test.go`).

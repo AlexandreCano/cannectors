@@ -1,6 +1,10 @@
 # Story 18.4: Harmonize module error types via a common interface
 
-Status: backlog
+Status: review
+
+## Implementation Notes
+
+L'interface utilise des accesseurs préfixés (`ErrorCode`, `ErrorModule`, `ErrorRecordIndex`, `ErrorDetails`) plutôt que les noms simples (`Code`, etc.) demandés dans l'AC initial. Raison : Go interdit qu'un struct field et une méthode partagent le même nom, et les types existants (`MappingError.Code`, `ConditionError.RecordIndex`, etc.) exposent déjà ces fields publiquement. Le préfixe évite à la fois la collision et le breaking change sur l'API publique des structs.
 
 ## Story
 
@@ -96,4 +100,12 @@ Audit §3.3 : chaque module définit son propre type d'erreur avec des champs di
 
 ## File List
 
-(à compléter)
+- `internal/errhandling/module_error.go` (NEW) — interface ModuleError + helper AsModuleError (errors.As wrapper)
+- `internal/errhandling/module_error_test.go` (NEW) — 3 tests (direct, wrapped, not-implemented)
+- `internal/modules/filter/mapping.go` — `MappingError` implémente ModuleError (méthodes ErrorCode/ErrorModule/ErrorRecordIndex/ErrorDetails)
+- `internal/modules/filter/condition.go` — idem `ConditionError`
+- `internal/modules/filter/script.go` — idem `ScriptError`
+- `internal/modules/filter/http_call.go` — idem `HTTPCallError`
+- `internal/runtime/pipeline.go:buildExecutionError` — détecte les erreurs ModuleError via `errhandling.AsModuleError`, copie code/module/details dans `ExecutionError`
+
+`SQLCallError` n'a pas été créé (sql_call utilise des erreurs sentinelles `errors.New(...)`) — out of scope car aucune erreur typée pré-existante à adapter.

@@ -21,6 +21,7 @@ import (
 	"github.com/cannectors/runtime/internal/httpclient"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/moduleconfig"
+	"github.com/cannectors/runtime/internal/recordpath"
 	"github.com/cannectors/runtime/internal/template"
 	"github.com/cannectors/runtime/pkg/connector"
 )
@@ -118,6 +119,35 @@ type HTTPCallError struct {
 
 func (e *HTTPCallError) Error() string {
 	return e.Message
+}
+
+// ErrorCode implements errhandling.ModuleError.
+func (e *HTTPCallError) ErrorCode() string { return e.Code }
+
+// ErrorModule implements errhandling.ModuleError.
+func (e *HTTPCallError) ErrorModule() string { return "http_call" }
+
+// ErrorRecordIndex implements errhandling.ModuleError.
+func (e *HTTPCallError) ErrorRecordIndex() int { return e.RecordIndex }
+
+// ErrorDetails implements errhandling.ModuleError. Returns a copy of the
+// existing Details enriched with endpoint / status code / key value when
+// available.
+func (e *HTTPCallError) ErrorDetails() map[string]interface{} {
+	d := make(map[string]interface{}, len(e.Details)+3)
+	for k, v := range e.Details {
+		d[k] = v
+	}
+	if e.Endpoint != "" {
+		d["endpoint"] = e.Endpoint
+	}
+	if e.StatusCode != 0 {
+		d["status_code"] = e.StatusCode
+	}
+	if e.KeyValue != "" {
+		d["key_value"] = e.KeyValue
+	}
+	return d
 }
 
 // newHTTPCallError creates an HTTPCallError with context.
@@ -387,7 +417,7 @@ func (m *HTTPCallModule) processRecord(ctx context.Context, record map[string]in
 func (m *HTTPCallModule) extractKeyValues(record map[string]interface{}, recordIdx int) (map[string]string, error) {
 	result := make(map[string]string, len(m.keys))
 	for _, k := range m.keys {
-		value, found := moduleconfig.GetNestedValue(record, k.Field)
+		value, found := recordpath.Get(record, k.Field)
 		if !found {
 			return nil, newHTTPCallError(
 				ErrCodeHTTPCallKeyExtract,
@@ -430,7 +460,7 @@ func (m *HTTPCallModule) extractKeyValues(record map[string]interface{}, recordI
 // If cacheKey is not configured, uses default: endpoint + "::" + joined key values (in config order)
 func (m *HTTPCallModule) buildCacheKey(keyValues map[string]string, record map[string]interface{}) string {
 	if m.cacheKey != "" {
-		if value, found := moduleconfig.GetNestedValue(record, m.cacheKey); found {
+		if value, found := recordpath.Get(record, m.cacheKey); found {
 			return fmt.Sprintf("%v", value)
 		}
 		return m.cacheKey

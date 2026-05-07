@@ -6,7 +6,7 @@ import (
 	"mime"
 	"strings"
 
-	"github.com/cannectors/runtime/internal/moduleconfig"
+	"github.com/cannectors/runtime/internal/recordpath"
 	"github.com/cannectors/runtime/internal/template"
 )
 
@@ -50,7 +50,7 @@ func truncateString(s string, maxLen int) string {
 // path traversal with array indexing support (e.g. "user.profile.id" or
 // "items[0].name"). Returns an empty string when the value is missing.
 func getRecordFieldString(record map[string]interface{}, path string) string {
-	value, ok := moduleconfig.GetNestedValue(record, path)
+	value, ok := recordpath.Get(record, path)
 	if !ok {
 		return ""
 	}

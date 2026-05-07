@@ -1,6 +1,6 @@
 # Story 18.3: Split `filter/mapping.go` (899 LOC) into focused files
 
-Status: backlog
+Status: review
 
 ## Story
 
@@ -72,4 +72,8 @@ Le split par concern permet d'ajouter une nouvelle op sans re-scanner tout le fi
 
 ## File List
 
-(à compléter)
+- `internal/modules/filter/mapping.go` (440 LOC) — core: types (FieldMapping/TransformOp/MappingConfig/TransformConfig/MappingModule), MappingError + ModuleError accessors, Process, processRecord, getSourceValue, applyTransforms, applyTransformOp dispatch
+- `internal/modules/filter/mapping_parse.go` (185 LOC, NEW) — parseMappingConfig, ParseFieldMappings, parseFieldMappingList, parseFieldMappingMap, parseTransformOps, stringValue
+- `internal/modules/filter/mapping_transforms.go` (310 LOC, NEW) — toutes les ops (trim/lowercase/uppercase/dateFormat/replace/split/join/toString/toInt/toFloat/toBool/toArray/toObject) + convertDateFormat ; commentaire d'en-tête « comment ajouter une op »
+
+492 tests `filter` passent.

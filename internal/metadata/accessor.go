@@ -2,13 +2,13 @@
 // metadata stored as a nested map within records, separate from record data.
 // By convention, metadata field names start with an underscore (e.g. "_metadata").
 //
-// This package is leaf-level (depends only on moduleconfig for nested-path
+// This package is leaf-level (depends only on recordpath for nested-path
 // helpers), so any module package — runtime, output, filter — can import it
 // without creating a cycle.
 package metadata
 
 import (
-	"github.com/cannectors/runtime/internal/moduleconfig"
+	"github.com/cannectors/runtime/internal/recordpath"
 )
 
 // DefaultFieldName is the default field name for storing metadata in records.
@@ -44,7 +44,7 @@ func (a *Accessor) Get(record map[string]interface{}, key string) (interface{}, 
 	if metadata == nil {
 		return nil, false
 	}
-	return moduleconfig.GetNestedValue(metadata, key)
+	return recordpath.Get(metadata, key)
 }
 
 // Set sets a metadata value by key in the record, creating the metadata field
@@ -54,7 +54,7 @@ func (a *Accessor) Set(record map[string]interface{}, key string, value interfac
 		return
 	}
 	metadata := a.ensureMap(record)
-	_ = moduleconfig.SetNestedValue(metadata, key, value)
+	_ = recordpath.Set(metadata, key, value)
 }
 
 // Delete removes a metadata key from the record. Supports nested keys.
@@ -66,7 +66,7 @@ func (a *Accessor) Delete(record map[string]interface{}, key string) {
 	if metadata == nil {
 		return
 	}
-	moduleconfig.DeleteNestedValue(metadata, key)
+	recordpath.Delete(metadata, key)
 }
 
 // GetAll returns the entire metadata map. Returns nil if no metadata exists.

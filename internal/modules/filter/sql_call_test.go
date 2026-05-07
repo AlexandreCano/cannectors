@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/cannectors/runtime/internal/moduleconfig"
+	"github.com/cannectors/runtime/internal/recordpath"
 )
 
 // TestMarshalDeterministic_StableForPermutedKeys verifies AC #1 of Story 17.3:
@@ -163,9 +164,9 @@ func TestGetSQLNestedValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, _ := moduleconfig.GetNestedValue(record, tt.path)
+			got, _ := recordpath.Get(record, tt.path)
 			if got != tt.want {
-				t.Errorf("GetNestedValue(%q) = %v, want %v", tt.path, got, tt.want)
+				t.Errorf("recordpath.Get(%q) = %v, want %v", tt.path, got, tt.want)
 			}
 		})
 	}

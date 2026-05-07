@@ -1,20 +1,20 @@
-package moduleconfig_test
+package recordpath_test
 
 import (
 	"testing"
 
-	"github.com/cannectors/runtime/internal/moduleconfig"
+	"github.com/cannectors/runtime/internal/recordpath"
 )
 
-func TestGetNestedValue_Simple(t *testing.T) {
+func TestGet_Simple(t *testing.T) {
 	obj := map[string]interface{}{"name": "Alice"}
-	val, ok := moduleconfig.GetNestedValue(obj, "name")
+	val, ok := recordpath.Get(obj, "name")
 	if !ok || val != "Alice" {
-		t.Errorf("GetNestedValue(name) = %v, %v", val, ok)
+		t.Errorf("Get(name) = %v, %v", val, ok)
 	}
 }
 
-func TestGetNestedValue_Nested(t *testing.T) {
+func TestGet_Nested(t *testing.T) {
 	obj := map[string]interface{}{
 		"user": map[string]interface{}{
 			"profile": map[string]interface{}{
@@ -22,41 +22,41 @@ func TestGetNestedValue_Nested(t *testing.T) {
 			},
 		},
 	}
-	val, ok := moduleconfig.GetNestedValue(obj, "user.profile.name")
+	val, ok := recordpath.Get(obj, "user.profile.name")
 	if !ok || val != "Bob" {
-		t.Errorf("GetNestedValue(user.profile.name) = %v, %v", val, ok)
+		t.Errorf("Get(user.profile.name) = %v, %v", val, ok)
 	}
 }
 
-func TestGetNestedValue_Array(t *testing.T) {
+func TestGet_Array(t *testing.T) {
 	obj := map[string]interface{}{
 		"items": []interface{}{"a", "b", "c"},
 	}
-	val, ok := moduleconfig.GetNestedValue(obj, "items[1]")
+	val, ok := recordpath.Get(obj, "items[1]")
 	if !ok || val != "b" {
-		t.Errorf("GetNestedValue(items[1]) = %v, %v", val, ok)
+		t.Errorf("Get(items[1]) = %v, %v", val, ok)
 	}
 }
 
-func TestGetNestedValue_MissingPath(t *testing.T) {
+func TestGet_MissingPath(t *testing.T) {
 	obj := map[string]interface{}{"name": "Alice"}
-	_, ok := moduleconfig.GetNestedValue(obj, "missing.path")
+	_, ok := recordpath.Get(obj, "missing.path")
 	if ok {
 		t.Error("Expected missing path to return false")
 	}
 }
 
-func TestGetNestedValue_EmptyPath(t *testing.T) {
+func TestGet_EmptyPath(t *testing.T) {
 	obj := map[string]interface{}{"name": "Alice"}
-	_, ok := moduleconfig.GetNestedValue(obj, "")
+	_, ok := recordpath.Get(obj, "")
 	if ok {
 		t.Error("Expected empty path to return false")
 	}
 }
 
-func TestSetNestedValue_Simple(t *testing.T) {
+func TestSet_Simple(t *testing.T) {
 	obj := map[string]interface{}{}
-	if err := moduleconfig.SetNestedValue(obj, "name", "Alice"); err != nil {
+	if err := recordpath.Set(obj, "name", "Alice"); err != nil {
 		t.Fatal(err)
 	}
 	if obj["name"] != "Alice" {
@@ -64,28 +64,28 @@ func TestSetNestedValue_Simple(t *testing.T) {
 	}
 }
 
-func TestSetNestedValue_Nested(t *testing.T) {
+func TestSet_Nested(t *testing.T) {
 	obj := map[string]interface{}{}
-	if err := moduleconfig.SetNestedValue(obj, "user.profile.name", "Bob"); err != nil {
+	if err := recordpath.Set(obj, "user.profile.name", "Bob"); err != nil {
 		t.Fatal(err)
 	}
-	val, ok := moduleconfig.GetNestedValue(obj, "user.profile.name")
+	val, ok := recordpath.Get(obj, "user.profile.name")
 	if !ok || val != "Bob" {
 		t.Errorf("user.profile.name = %v, %v", val, ok)
 	}
 }
 
-func TestSetNestedValue_EmptyPath(t *testing.T) {
+func TestSet_EmptyPath(t *testing.T) {
 	obj := map[string]interface{}{}
-	err := moduleconfig.SetNestedValue(obj, "", "value")
+	err := recordpath.Set(obj, "", "value")
 	if err == nil {
 		t.Error("Expected error for empty path")
 	}
 }
 
-func TestDeleteNestedValue_Simple(t *testing.T) {
+func TestDelete_Simple(t *testing.T) {
 	obj := map[string]interface{}{"name": "Alice", "age": 30}
-	moduleconfig.DeleteNestedValue(obj, "name")
+	recordpath.Delete(obj, "name")
 	if _, ok := obj["name"]; ok {
 		t.Error("Expected name to be deleted")
 	}
@@ -94,14 +94,14 @@ func TestDeleteNestedValue_Simple(t *testing.T) {
 	}
 }
 
-func TestDeleteNestedValue_Nested(t *testing.T) {
+func TestDelete_Nested(t *testing.T) {
 	obj := map[string]interface{}{
 		"user": map[string]interface{}{
 			"name": "Bob",
 			"age":  25,
 		},
 	}
-	moduleconfig.DeleteNestedValue(obj, "user.name")
+	recordpath.Delete(obj, "user.name")
 	user, ok := obj["user"].(map[string]interface{})
 	if !ok {
 		t.Fatal("obj[\"user\"] is not map[string]interface{}")
@@ -114,13 +114,13 @@ func TestDeleteNestedValue_Nested(t *testing.T) {
 	}
 }
 
-func TestDeleteNestedValue_MissingPath(t *testing.T) {
+func TestDelete_MissingPath(t *testing.T) {
 	obj := map[string]interface{}{"name": "Alice"}
 	// Should not panic
-	moduleconfig.DeleteNestedValue(obj, "missing.path")
+	recordpath.Delete(obj, "missing.path")
 }
 
-func TestIsNestedPath(t *testing.T) {
+func TestIsNested(t *testing.T) {
 	tests := []struct {
 		path string
 		want bool
@@ -132,13 +132,13 @@ func TestIsNestedPath(t *testing.T) {
 		{"", false},
 	}
 	for _, tt := range tests {
-		if got := moduleconfig.IsNestedPath(tt.path); got != tt.want {
-			t.Errorf("IsNestedPath(%q) = %v, want %v", tt.path, got, tt.want)
+		if got := recordpath.IsNested(tt.path); got != tt.want {
+			t.Errorf("IsNested(%q) = %v, want %v", tt.path, got, tt.want)
 		}
 	}
 }
 
-func TestParsePathPart(t *testing.T) {
+func TestParsePart(t *testing.T) {
 	tests := []struct {
 		part    string
 		wantKey string
@@ -153,16 +153,16 @@ func TestParsePathPart(t *testing.T) {
 		{"bad[abc]", "", -1, false, true},
 	}
 	for _, tt := range tests {
-		key, idx, has, err := moduleconfig.ParsePathPart(tt.part)
+		key, idx, has, err := recordpath.ParsePart(tt.part)
 		if (err != nil) != tt.wantErr {
-			t.Errorf("ParsePathPart(%q) error = %v, wantErr %v", tt.part, err, tt.wantErr)
+			t.Errorf("ParsePart(%q) error = %v, wantErr %v", tt.part, err, tt.wantErr)
 			continue
 		}
 		if err != nil {
 			continue
 		}
 		if key != tt.wantKey || idx != tt.wantIdx || has != tt.wantHas {
-			t.Errorf("ParsePathPart(%q) = (%q, %d, %v), want (%q, %d, %v)",
+			t.Errorf("ParsePart(%q) = (%q, %d, %v), want (%q, %d, %v)",
 				tt.part, key, idx, has, tt.wantKey, tt.wantIdx, tt.wantHas)
 		}
 	}

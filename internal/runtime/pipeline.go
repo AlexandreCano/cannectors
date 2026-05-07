@@ -578,11 +578,38 @@ func (e *Executor) newErrorResult(startedAt time.Time) *connector.ExecutionResul
 }
 
 // buildExecutionError creates an ExecutionError with classified category and type.
+// When err implements errhandling.ModuleError, its module-specific code,
+// module name, and details are surfaced into the ExecutionError so the runtime
+// reports rich, uniform context regardless of the source module.
 func buildExecutionError(code, module string, err error) *connector.ExecutionError {
 	ex := &connector.ExecutionError{
 		Code:    code,
 		Message: err.Error(),
 		Module:  module,
+	}
+	if me, ok := errhandling.AsModuleError(err); ok {
+		if c := me.ErrorCode(); c != "" {
+			ex.Code = c
+		}
+		if m := me.ErrorModule(); m != "" {
+			ex.Module = m
+		}
+		details := me.ErrorDetails()
+		idx := me.ErrorRecordIndex()
+		if len(details) > 0 || idx >= 0 {
+			size := len(details)
+			if idx >= 0 {
+				size++
+			}
+			merged := make(map[string]interface{}, size)
+			for k, v := range details {
+				merged[k] = v
+			}
+			if idx >= 0 {
+				merged["record_index"] = idx
+			}
+			ex.Details = merged
+		}
 	}
 	cl := errhandling.ClassifyError(err)
 	ex.ErrorCategory = string(cl.Category)

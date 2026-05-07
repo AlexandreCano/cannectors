@@ -10,7 +10,7 @@ import (
 	"errors"
 
 	"github.com/cannectors/runtime/internal/logger"
-	"github.com/cannectors/runtime/internal/moduleconfig"
+	"github.com/cannectors/runtime/internal/recordpath"
 )
 
 // RemoveConfig represents the configuration for a remove filter module.
@@ -99,11 +99,11 @@ func (m *RemoveModule) processRecord(record map[string]interface{}) map[string]i
 	}
 	for _, target := range m.targets {
 		// Simple case: no dot notation (flat field)
-		if !moduleconfig.IsNestedPath(target) {
+		if !recordpath.IsNested(target) {
 			delete(record, target)
 		} else {
 			// Nested path - delete the leaf field
-			moduleconfig.DeleteNestedValue(record, target)
+			recordpath.Delete(record, target)
 		}
 	}
 	return record

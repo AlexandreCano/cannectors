@@ -132,6 +132,32 @@ func (e *ConditionError) Error() string {
 	return e.Message
 }
 
+// ErrorCode implements errhandling.ModuleError.
+func (e *ConditionError) ErrorCode() string { return e.Code }
+
+// ErrorModule implements errhandling.ModuleError.
+func (e *ConditionError) ErrorModule() string { return "condition" }
+
+// ErrorRecordIndex implements errhandling.ModuleError.
+func (e *ConditionError) ErrorRecordIndex() int { return e.RecordIndex }
+
+// ErrorDetails implements errhandling.ModuleError. Returns a copy of the
+// existing Details map enriched with the expression and field path so
+// callers get a flat view suitable for ExecutionError.Details.
+func (e *ConditionError) ErrorDetails() map[string]interface{} {
+	d := make(map[string]interface{}, len(e.Details)+2)
+	for k, v := range e.Details {
+		d[k] = v
+	}
+	if e.Expression != "" {
+		d["expression"] = e.Expression
+	}
+	if e.FieldPath != "" {
+		d["field_path"] = e.FieldPath
+	}
+	return d
+}
+
 // newConditionError creates a ConditionError with optional debugging details.
 // If underlyingErr is provided, it will be included in the Details field.
 func newConditionError(code, message, expression string, recordIdx int, fieldPath string, underlyingErr error) *ConditionError {

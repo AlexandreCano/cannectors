@@ -582,8 +582,8 @@ func (h *HTTPRequestModule) handleOAuth2Unauthorized(resp *http.Response, retryC
 
 // doRequestWithHeaders executes a single HTTP request with optional
 // record-specific headers, delegating the retry loop to httpclient.DoWithRetry.
-// Special handling for 401 with OAuth2: invalidates the token and retries
-// once with a new token via the OnAttemptFailure hook.
+// Special handling for 401 with OAuth2: invalidates the token and can retry up
+// to auth.MaxOAuth2Retries with a new token via the OnAttemptFailure hook.
 func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint string, body []byte, recordHeaders map[string]string) error {
 	startTime := time.Now()
 

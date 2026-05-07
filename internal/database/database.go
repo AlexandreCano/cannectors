@@ -287,9 +287,9 @@ func FormatPlaceholder(driver string, index int) string {
 // ConvertPlaceholders converts a query written with `?` placeholders to the
 // driver's native style (e.g. `$1, $2, ...` for Postgres). The substitution
 // walks the query character by character so that `?` characters appearing
-// inside string literals (`'...'`, `"..."`) or comments (`-- ...`,
-// `/* ... */`) are preserved verbatim. SQL string-literal escaping with a
-// doubled single quote (`''`) is supported.
+// inside string literals (single- or double-quoted) or comments (`-- ...`,
+// `/* ... */`) are preserved verbatim. SQL string-literal escaping with two
+// consecutive single-quote characters is supported.
 //
 // Limitations: Postgres dollar-quoted strings (`$tag$ ... $tag$`) are not
 // special-cased — `?` characters inside them will be substituted. None of

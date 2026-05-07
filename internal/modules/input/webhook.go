@@ -46,6 +46,7 @@ var (
 	ErrMissingSignatureSecret = errors.New("signature validation requires secret")
 	ErrUnsupportedSignature   = errors.New("unsupported signature type")
 	ErrMissingSignatureType   = errors.New("signature type is required")
+	ErrMissingPath            = errors.New("path is required")
 	ErrRateLimited            = errors.New("rate limit exceeded")
 	ErrQueueFull              = errors.New("webhook queue is full")
 	ErrInvalidQueueSize       = errors.New("queueSize must be >= 0")
@@ -143,7 +144,7 @@ func NewWebhookFromConfig(config *connector.ModuleConfig) (*Webhook, error) {
 	}
 
 	if cfg.Path == "" {
-		return nil, ErrMissingEndpoint
+		return nil, ErrMissingPath
 	}
 	endpoint := cfg.Path
 

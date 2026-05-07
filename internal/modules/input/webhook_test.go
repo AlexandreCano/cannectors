@@ -72,7 +72,7 @@ func TestNewWebhookFromConfig_NilConfig(t *testing.T) {
 	}
 }
 
-func TestNewWebhookFromConfig_MissingEndpoint(t *testing.T) {
+func TestNewWebhookFromConfig_MissingPath(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]interface{}{
@@ -82,10 +82,10 @@ func TestNewWebhookFromConfig_MissingEndpoint(t *testing.T) {
 
 	_, err := NewWebhookFromConfig(config)
 	if err == nil {
-		t.Fatal("NewWebhookFromConfig() with missing endpoint error = nil, want error")
+		t.Fatal("NewWebhookFromConfig() with missing path error = nil, want error")
 	}
-	if err != ErrMissingEndpoint {
-		t.Errorf("NewWebhookFromConfig() error = %v, want %v", err, ErrMissingEndpoint)
+	if err != ErrMissingPath {
+		t.Errorf("NewWebhookFromConfig() error = %v, want %v", err, ErrMissingPath)
 	}
 }
 

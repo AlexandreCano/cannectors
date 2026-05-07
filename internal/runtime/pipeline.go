@@ -594,12 +594,18 @@ func buildExecutionError(code, module string, err error) *connector.ExecutionErr
 		if m := me.ErrorModule(); m != "" {
 			ex.Module = m
 		}
-		if details := me.ErrorDetails(); len(details) > 0 {
-			merged := make(map[string]interface{}, len(details)+1)
+		details := me.ErrorDetails()
+		idx := me.ErrorRecordIndex()
+		if len(details) > 0 || idx >= 0 {
+			size := len(details)
+			if idx >= 0 {
+				size++
+			}
+			merged := make(map[string]interface{}, size)
 			for k, v := range details {
 				merged[k] = v
 			}
-			if idx := me.ErrorRecordIndex(); idx >= 0 {
+			if idx >= 0 {
 				merged["record_index"] = idx
 			}
 			ex.Details = merged

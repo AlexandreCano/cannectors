@@ -289,7 +289,7 @@ func FormatPlaceholder(driver string, index int) string {
 // walks the query character by character so that `?` characters appearing
 // inside string literals (`'...'`, `"..."`) or comments (`-- ...`,
 // `/* ... */`) are preserved verbatim. SQL string-literal escaping with a
-// doubled quote (`”`) is supported.
+// doubled single quote (`''`) is supported.
 //
 // Limitations: Postgres dollar-quoted strings (`$tag$ ... $tag$`) are not
 // special-cased — `?` characters inside them will be substituted. None of

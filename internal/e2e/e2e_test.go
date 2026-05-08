@@ -5,6 +5,7 @@ package e2e
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -24,6 +25,26 @@ type e2eResult struct {
 	captured  []map[string]any
 }
 
+type handlerErrors struct {
+	mu   sync.Mutex
+	errs []error
+}
+
+func (e *handlerErrors) addf(format string, args ...any) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.errs = append(e.errs, fmt.Errorf(format, args...))
+}
+
+func (e *handlerErrors) assertNoErrors(t *testing.T) {
+	t.Helper()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(e.errs) > 0 {
+		t.Fatalf("httptest handler errors: %v", e.errs)
+	}
+}
+
 func rawModuleConfig(t *testing.T, typ string, cfg map[string]any) *connector.ModuleConfig {
 	t.Helper()
 	raw, err := json.Marshal(cfg)
@@ -33,31 +54,41 @@ func rawModuleConfig(t *testing.T, typ string, cfg map[string]any) *connector.Mo
 	return &connector.ModuleConfig{Type: typ, Raw: raw}
 }
 
-func mockSourceServer(t *testing.T, records []map[string]any) *httptest.Server {
+func mockSourceServer(t *testing.T, records []map[string]any) (*httptest.Server, func()) {
 	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handlerErrs := &handlerErrors{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
-			t.Fatalf("source method = %s, want GET", r.Method)
+			handlerErrs.addf("source method = %s, want GET", r.Method)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(records); err != nil {
-			t.Fatalf("encode source response: %v", err)
+			handlerErrs.addf("encode source response: %v", err)
+			return
 		}
 	}))
+	return server, func() { handlerErrs.assertNoErrors(t) }
 }
 
-func mockDestinationServer(t *testing.T) (*httptest.Server, func() []map[string]any) {
+func mockDestinationServer(t *testing.T) (*httptest.Server, func() []map[string]any, func()) {
 	t.Helper()
 	var mu sync.Mutex
 	captured := make([]map[string]any, 0)
+	handlerErrs := &handlerErrors{}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			t.Fatalf("destination method = %s, want POST", r.Method)
+			handlerErrs.addf("destination method = %s, want POST", r.Method)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
 		}
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			t.Fatalf("read destination body: %v", err)
+			handlerErrs.addf("read destination body: %v", err)
+			http.Error(w, "read body failed", http.StatusBadRequest)
+			return
 		}
 
 		var batch []map[string]any
@@ -71,7 +102,9 @@ func mockDestinationServer(t *testing.T) (*httptest.Server, func() []map[string]
 
 		var single map[string]any
 		if err := json.Unmarshal(body, &single); err != nil {
-			t.Fatalf("decode destination body %s: %v", string(body), err)
+			handlerErrs.addf("decode destination body %s: %v", string(body), err)
+			http.Error(w, "invalid json", http.StatusBadRequest)
+			return
 		}
 		mu.Lock()
 		captured = append(captured, single)
@@ -87,15 +120,15 @@ func mockDestinationServer(t *testing.T) (*httptest.Server, func() []map[string]
 		return out
 	}
 
-	return server, snapshot
+	return server, snapshot, func() { handlerErrs.assertNoErrors(t) }
 }
 
 func runHTTPPipeline(t *testing.T, name string, records []map[string]any, filters []filter.Module) e2eResult {
 	t.Helper()
 
-	source := mockSourceServer(t, records)
+	source, assertSource := mockSourceServer(t, records)
 	defer source.Close()
-	destination, captured := mockDestinationServer(t)
+	destination, captured, assertDestination := mockDestinationServer(t)
 	defer destination.Close()
 
 	inputModule, err := input.NewHTTPPollingFromConfig(rawModuleConfig(t, "httpPolling", map[string]any{
@@ -127,6 +160,8 @@ func runHTTPPipeline(t *testing.T, name string, records []map[string]any, filter
 	defer cancel()
 
 	result, err := executor.ExecuteWithContext(ctx, pipeline)
+	assertSource()
+	assertDestination()
 	if err != nil {
 		t.Fatalf("%s: ExecuteWithContext() error = %v", name, err)
 	}

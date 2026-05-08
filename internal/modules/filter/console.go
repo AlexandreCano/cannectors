@@ -189,9 +189,9 @@ func (c *jsConsole) formatValue(val goja.Value, depth int, path *formatPath) str
 		return v
 	case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
 		return fmt.Sprintf("%v", v)
-	case []interface{}:
+	case []any:
 		return c.formatArray(val, depth, path)
-	case map[string]interface{}:
+	case map[string]any:
 		return c.formatObject(v, depth, path)
 	default:
 		if obj, ok := val.(*goja.Object); ok {
@@ -246,13 +246,13 @@ func (c *jsConsole) formatArray(val goja.Value, depth int, path *formatPath) str
 }
 
 // formatObject formats a Go map to JSON-like string with circular reference handling.
-func (c *jsConsole) formatObject(obj map[string]interface{}, depth int, path *formatPath) string {
+func (c *jsConsole) formatObject(obj map[string]any, depth int, path *formatPath) string {
 	return c.formatMapSafe(obj, depth, path)
 }
 
 // formatMapSafe serializes a map with circular reference detection.
 // Tracks path (push before descend, pop on return) so only true cycles become [Circular].
-func (c *jsConsole) formatMapSafe(m map[string]interface{}, depth int, path *formatPath) string {
+func (c *jsConsole) formatMapSafe(m map[string]any, depth int, path *formatPath) string {
 	if depth > MaxObjectDepth {
 		return placeholderObject
 	}
@@ -288,7 +288,7 @@ func quoteJSONKey(s string) string {
 }
 
 // formatGoValue formats a Go value (from Export) for logging.
-func (c *jsConsole) formatGoValue(v interface{}, depth int, path *formatPath) string {
+func (c *jsConsole) formatGoValue(v any, depth int, path *formatPath) string {
 	if depth > MaxObjectDepth {
 		return placeholderObject
 	}
@@ -300,9 +300,9 @@ func (c *jsConsole) formatGoValue(v interface{}, depth int, path *formatPath) st
 		return string(data)
 	case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
 		return fmt.Sprintf("%v", x)
-	case []interface{}:
+	case []any:
 		return c.formatSliceSafe(x, depth, path)
-	case map[string]interface{}:
+	case map[string]any:
 		return c.formatMapSafe(x, depth, path)
 	default:
 		data, err := json.Marshal(v)
@@ -316,7 +316,7 @@ func (c *jsConsole) formatGoValue(v interface{}, depth int, path *formatPath) st
 // formatSliceSafe serializes a slice with circular reference detection.
 // Short-circuits for len==0; skips path-tracking when ptr==0 (empty/nil slices).
 // Tracks path (push before descend, pop on return) so only true cycles become [Circular].
-func (c *jsConsole) formatSliceSafe(s []interface{}, depth int, path *formatPath) string {
+func (c *jsConsole) formatSliceSafe(s []any, depth int, path *formatPath) string {
 	if depth > MaxObjectDepth {
 		return placeholderObject
 	}
@@ -346,7 +346,7 @@ func (c *jsConsole) formatGojaObject(obj *goja.Object, depth int, path *formatPa
 	}
 
 	exported := obj.Export()
-	if m, ok := exported.(map[string]interface{}); ok {
+	if m, ok := exported.(map[string]any); ok {
 		return c.formatObject(m, depth, path)
 	}
 	return c.formatGoValue(exported, depth, path)

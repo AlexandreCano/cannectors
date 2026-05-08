@@ -88,7 +88,7 @@ type ScriptError struct {
 	Message     string
 	RecordIndex int
 	StackTrace  string
-	Details     map[string]interface{}
+	Details     map[string]any
 }
 
 func (e *ScriptError) Error() string {
@@ -106,8 +106,8 @@ func (e *ScriptError) ErrorRecordIndex() int { return e.RecordIndex }
 
 // ErrorDetails implements errhandling.ModuleError. Returns a copy of the
 // existing Details map enriched with the JS stack trace when present.
-func (e *ScriptError) ErrorDetails() map[string]interface{} {
-	d := make(map[string]interface{}, len(e.Details)+1)
+func (e *ScriptError) ErrorDetails() map[string]any {
+	d := make(map[string]any, len(e.Details)+1)
 	for k, v := range e.Details {
 		d[k] = v
 	}
@@ -119,7 +119,7 @@ func (e *ScriptError) ErrorDetails() map[string]interface{} {
 
 // newScriptError creates a ScriptError with optional details.
 func newScriptError(code, message string, recordIdx int, stackTrace string, err error) *ScriptError {
-	details := make(map[string]interface{})
+	details := make(map[string]any)
 	if err != nil {
 		details["underlying_error"] = err.Error()
 	}
@@ -323,7 +323,7 @@ func getTransformFunction(vm *goja.Runtime) (goja.Callable, error) {
 
 // ParseScriptConfig parses a script filter configuration from raw config.
 // Supports both inline script and script file path.
-func ParseScriptConfig(cfg map[string]interface{}) (ScriptConfig, error) {
+func ParseScriptConfig(cfg map[string]any) (ScriptConfig, error) {
 	config := ScriptConfig{}
 
 	script, hasScript := cfg["script"].(string)
@@ -370,7 +370,7 @@ func ParseScriptConfig(cfg map[string]interface{}) (ScriptConfig, error) {
 // The context is checked before processing to respect cancellation.
 // A single goroutine monitors context cancellation for the entire Process() call
 // to avoid creating a goroutine per record.
-func (m *ScriptModule) Process(ctx context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (m *ScriptModule) Process(ctx context.Context, records []map[string]any) ([]map[string]any, error) {
 	// Check context cancellation before processing
 	select {
 	case <-ctx.Done():
@@ -379,7 +379,7 @@ func (m *ScriptModule) Process(ctx context.Context, records []map[string]interfa
 	}
 
 	if records == nil {
-		return []map[string]interface{}{}, nil
+		return []map[string]any{}, nil
 	}
 
 	startTime := time.Now()
@@ -420,7 +420,7 @@ func (m *ScriptModule) Process(ctx context.Context, records []map[string]interfa
 		m.interruptMu.Unlock()
 	}()
 
-	result := make([]map[string]interface{}, 0, len(records))
+	result := make([]map[string]any, 0, len(records))
 	skippedCount := 0
 	errorCount := 0
 
@@ -485,7 +485,7 @@ func (m *ScriptModule) Process(ctx context.Context, records []map[string]interfa
 // processRecord transforms a single record using the JavaScript function.
 // Context cancellation is handled at the Process() level via context.AfterFunc.
 // The ctx parameter is used to check for context errors in the returned error.
-func (m *ScriptModule) processRecord(ctx context.Context, record map[string]interface{}, recordIdx int) (map[string]interface{}, error) {
+func (m *ScriptModule) processRecord(ctx context.Context, record map[string]any, recordIdx int) (map[string]any, error) {
 	// Set record index for console logging context
 	if m.console != nil {
 		m.console.SetRecordIndex(recordIdx)
@@ -547,7 +547,7 @@ func (m *ScriptModule) handleJSError(err error, recordIdx int) error {
 
 // exportToGoMap converts a JavaScript value back to a Go map.
 // The transform function must return an object (map), not a primitive or array.
-func (m *ScriptModule) exportToGoMap(value goja.Value, recordIdx int) (map[string]interface{}, error) {
+func (m *ScriptModule) exportToGoMap(value goja.Value, recordIdx int) (map[string]any, error) {
 	if value == nil || goja.IsUndefined(value) || goja.IsNull(value) {
 		return nil, newScriptError(ErrCodeExecutionFailed, fmt.Sprintf("script at record %d returned null or undefined - transform function must return an object", recordIdx), recordIdx, "", nil)
 	}
@@ -556,7 +556,7 @@ func (m *ScriptModule) exportToGoMap(value goja.Value, recordIdx int) (map[strin
 
 	// Explicitly detect and reject arrays before attempting ExportTo
 	// Arrays should not be accepted as valid return types
-	if arr, ok := exported.([]interface{}); ok {
+	if arr, ok := exported.([]any); ok {
 		return nil, newScriptError(ErrCodeExecutionFailed, fmt.Sprintf("script at record %d returned an array (length %d) - transform function must return an object, not an array", recordIdx, len(arr)), recordIdx, "", nil)
 	}
 	// Also check for []any (Go 1.18+ type alias)
@@ -565,7 +565,7 @@ func (m *ScriptModule) exportToGoMap(value goja.Value, recordIdx int) (map[strin
 	}
 
 	// If already a Go map, return it directly
-	if result, ok := exported.(map[string]interface{}); ok {
+	if result, ok := exported.(map[string]any); ok {
 		return result, nil
 	}
 

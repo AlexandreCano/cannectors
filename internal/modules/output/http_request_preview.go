@@ -26,7 +26,7 @@ const maxBodyPreviewSize = 1 * 1024 * 1024
 //
 // By default, authentication headers are masked. Set opts.ShowCredentials
 // to true to display actual credential values (debugging only).
-func (h *HTTPRequestModule) PreviewRequest(records []map[string]interface{}, opts PreviewOptions) ([]RequestPreview, error) {
+func (h *HTTPRequestModule) PreviewRequest(records []map[string]any, opts PreviewOptions) ([]RequestPreview, error) {
 	if len(records) == 0 {
 		return []RequestPreview{}, nil
 	}
@@ -36,7 +36,7 @@ func (h *HTTPRequestModule) PreviewRequest(records []map[string]interface{}, opt
 	return h.previewBatchMode(records, opts)
 }
 
-func (h *HTTPRequestModule) previewBatchMode(records []map[string]interface{}, opts PreviewOptions) ([]RequestPreview, error) {
+func (h *HTTPRequestModule) previewBatchMode(records []map[string]any, opts PreviewOptions) ([]RequestPreview, error) {
 	endpoint := h.resolveEndpointForBatch(h.endpoint, records)
 	bodyPreview, err := formatJSONPreview(records)
 	if err != nil {
@@ -56,7 +56,7 @@ func (h *HTTPRequestModule) previewBatchMode(records []map[string]interface{}, o
 	}}, nil
 }
 
-func (h *HTTPRequestModule) previewSingleRecordMode(records []map[string]interface{}, opts PreviewOptions) ([]RequestPreview, error) {
+func (h *HTTPRequestModule) previewSingleRecordMode(records []map[string]any, opts PreviewOptions) ([]RequestPreview, error) {
 	previews := make([]RequestPreview, 0, len(records))
 	for _, record := range records {
 		endpoint := h.resolveEndpointForRecord(record)
@@ -164,7 +164,7 @@ func maskValue(valueType string) string {
 // formatJSONPreview formats data as indented JSON. If the result exceeds
 // maxBodyPreviewSize, it truncates at the nearest line boundary and appends
 // a "(truncated, X bytes total)" marker.
-func formatJSONPreview(data interface{}) (string, error) {
+func formatJSONPreview(data any) (string, error) {
 	formatted, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return "", err

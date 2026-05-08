@@ -63,7 +63,7 @@ import "context"
 //
 // # Record Format
 //
-// Send() receives []map[string]interface{} where:
+// Send() receives []map[string]any where:
 //   - Each map represents a single record/entity
 //   - Keys are field names (strings)
 //   - Values can be any JSON-serializable type
@@ -96,7 +96,7 @@ import "context"
 //	    endpoint string
 //	}
 //
-//	func (m *MyOutputModule) Send(ctx context.Context, records []map[string]interface{}) (int, error) {
+//	func (m *MyOutputModule) Send(ctx context.Context, records []map[string]any) (int, error) {
 //	    // Respect context cancellation
 //	    select {
 //	    case <-ctx.Done():
@@ -146,7 +146,7 @@ type Module interface {
 	// The records parameter contains the data to send.
 	// Returns the number of records successfully sent and any error.
 	// If partial success occurs, return the count of successful sends and an error.
-	Send(ctx context.Context, records []map[string]interface{}) (int, error)
+	Send(ctx context.Context, records []map[string]any) (int, error)
 
 	// Close releases any resources held by the module.
 	//
@@ -254,5 +254,5 @@ type PreviewableModule interface {
 	//     When false (default), authentication headers are masked for security.
 	//
 	// Implementations should respect ShowCredentials to avoid exposing sensitive data.
-	PreviewRequest(records []map[string]interface{}, opts PreviewOptions) ([]RequestPreview, error)
+	PreviewRequest(records []map[string]any, opts PreviewOptions) ([]RequestPreview, error)
 }

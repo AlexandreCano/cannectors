@@ -550,7 +550,7 @@ func TestSecurity_ValidCredentialsNotInErrors(t *testing.T) {
 	}
 }
 
-func toJSON(t *testing.T, v interface{}) json.RawMessage {
+func toJSON(t *testing.T, v any) json.RawMessage {
 	t.Helper()
 	b, err := json.Marshal(v)
 	if err != nil {

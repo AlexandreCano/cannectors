@@ -146,7 +146,7 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 		h.stateStore = persistence.NewStateStore(storagePath)
 
 		logger.Debug("state persistence enabled for HTTP polling module",
-			"endpoint", cfg.Endpoint,
+			"endpoint", httpclient.SanitizeURL(cfg.Endpoint),
 			"timestamp_enabled", cfg.StatePersistence.TimestampEnabled(),
 			"id_enabled", cfg.StatePersistence.IDEnabled(),
 			"storage_path", storagePath,
@@ -161,7 +161,7 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 // logModuleCreation logs module creation details.
 func logModuleCreation(endpoint string, timeout time.Duration, authHandler auth.Handler, pagination *moduleconfig.PaginationConfig, retryConfig connector.RetryConfig) {
 	logger.Debug("http polling module created",
-		"endpoint", endpoint,
+		"endpoint", httpclient.SanitizeURL(endpoint),
 		"timeout", timeout.String(),
 		"has_auth", authHandler != nil,
 		"has_pagination", pagination != nil,
@@ -179,9 +179,9 @@ func logModuleCreation(endpoint string, timeout time.Duration, authHandler auth.
 // The context can be used to cancel long-running operations.
 //
 // Returns:
-//   - []map[string]interface{}: The fetched records
+//   - []map[string]any: The fetched records
 //   - error: Any error encountered during fetching
-func (h *HTTPPolling) Fetch(ctx context.Context) ([]map[string]interface{}, error) {
+func (h *HTTPPolling) Fetch(ctx context.Context) ([]map[string]any, error) {
 	startTime := time.Now()
 
 	// Reset OAuth2 retry tracking for this fetch cycle
@@ -192,7 +192,7 @@ func (h *HTTPPolling) Fetch(ctx context.Context) ([]map[string]interface{}, erro
 	if err != nil {
 		logger.Error("failed to build endpoint with state params",
 			"module_type", "httpPolling",
-			"endpoint", h.endpoint,
+			"endpoint", httpclient.SanitizeURL(h.endpoint),
 			"error", err.Error(),
 		)
 		return nil, fmt.Errorf("building endpoint with state: %w", err)
@@ -201,15 +201,15 @@ func (h *HTTPPolling) Fetch(ctx context.Context) ([]map[string]interface{}, erro
 	// Log fetch start with configuration summary
 	logger.Info("input fetch started",
 		"module_type", "httpPolling",
-		"endpoint", endpoint,
-		"original_endpoint", h.endpoint,
+		"endpoint", httpclient.SanitizeURL(endpoint),
+		"original_endpoint", httpclient.SanitizeURL(h.endpoint),
 		"timeout", h.timeout.String(),
 		"has_pagination", h.pagination != nil,
 		"has_auth", h.authHandler != nil,
 		"has_state_persistence", h.persistenceConfig != nil && h.persistenceConfig.IsEnabled(),
 	)
 
-	var records []map[string]interface{}
+	var records []map[string]any
 
 	// Handle pagination if configured
 	if h.pagination != nil {
@@ -224,7 +224,7 @@ func (h *HTTPPolling) Fetch(ctx context.Context) ([]map[string]interface{}, erro
 	if err != nil {
 		logger.Error("input fetch failed",
 			"module_type", "httpPolling",
-			"endpoint", h.endpoint,
+			"endpoint", httpclient.SanitizeURL(h.endpoint),
 			"duration", duration,
 			"error", err.Error(),
 		)
@@ -234,7 +234,7 @@ func (h *HTTPPolling) Fetch(ctx context.Context) ([]map[string]interface{}, erro
 	// Log successful completion with metrics
 	logger.Info("input fetch completed",
 		"module_type", "httpPolling",
-		"endpoint", h.endpoint,
+		"endpoint", httpclient.SanitizeURL(h.endpoint),
 		"record_count", len(records),
 		"duration", duration,
 		"has_pagination", h.pagination != nil,
@@ -250,7 +250,7 @@ func (h *HTTPPolling) GetRetryInfo() *connector.RetryInfo {
 }
 
 // fetchSingle executes a single HTTP GET request and returns the records
-func (h *HTTPPolling) fetchSingle(ctx context.Context, endpoint string) ([]map[string]interface{}, error) {
+func (h *HTTPPolling) fetchSingle(ctx context.Context, endpoint string) ([]map[string]any, error) {
 	body, err := h.doRequestWithRetry(ctx, endpoint)
 	if err != nil {
 		return nil, err
@@ -259,15 +259,15 @@ func (h *HTTPPolling) fetchSingle(ctx context.Context, endpoint string) ([]map[s
 }
 
 // parseResponse parses JSON response and extracts records
-func (h *HTTPPolling) parseResponse(body []byte) ([]map[string]interface{}, error) {
+func (h *HTTPPolling) parseResponse(body []byte) ([]map[string]any, error) {
 	// Try parsing as array first
-	var arrayResult []map[string]interface{}
+	var arrayResult []map[string]any
 	if err := json.Unmarshal(body, &arrayResult); err == nil {
 		return arrayResult, nil
 	}
 
 	// Try parsing as object
-	var objectResult map[string]interface{}
+	var objectResult map[string]any
 	if err := json.Unmarshal(body, &objectResult); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrJSONParse, err)
 	}
@@ -287,11 +287,11 @@ func (h *HTTPPolling) parseResponse(body []byte) ([]map[string]interface{}, erro
 	}
 
 	// Return single object as single-element array
-	return []map[string]interface{}{objectResult}, nil
+	return []map[string]any{objectResult}, nil
 }
 
 // extractDataFromField extracts array data from a specific field in the response object
-func (h *HTTPPolling) extractDataFromField(obj map[string]interface{}, field string) ([]map[string]interface{}, error) {
+func (h *HTTPPolling) extractDataFromField(obj map[string]any, field string) ([]map[string]any, error) {
 	data, ok := obj[field]
 	if !ok {
 		return nil, fmt.Errorf("%w: field '%s' not found", ErrInvalidDataField, field)
@@ -300,18 +300,18 @@ func (h *HTTPPolling) extractDataFromField(obj map[string]interface{}, field str
 	return h.convertToRecords(data)
 }
 
-// convertToRecords converts interface{} to []map[string]interface{}
-func (h *HTTPPolling) convertToRecords(data interface{}) ([]map[string]interface{}, error) {
+// convertToRecords converts any to []map[string]any
+func (h *HTTPPolling) convertToRecords(data any) ([]map[string]any, error) {
 	switch v := data.(type) {
-	case []interface{}:
-		records := make([]map[string]interface{}, 0, len(v))
+	case []any:
+		records := make([]map[string]any, 0, len(v))
 		for _, item := range v {
-			if record, ok := item.(map[string]interface{}); ok {
+			if record, ok := item.(map[string]any); ok {
 				records = append(records, record)
 			}
 		}
 		return records, nil
-	case []map[string]interface{}:
+	case []map[string]any:
 		return v, nil
 	default:
 		return nil, fmt.Errorf("%w: expected array, got %T", ErrInvalidDataField, data)

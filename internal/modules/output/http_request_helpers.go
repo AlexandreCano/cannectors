@@ -15,7 +15,7 @@ func validateJSON(data []byte) error {
 	if len(data) == 0 {
 		return fmt.Errorf("empty JSON")
 	}
-	var v interface{}
+	var v any
 	if err := json.Unmarshal(data, &v); err != nil {
 		return fmt.Errorf("invalid JSON: %w", err)
 	}
@@ -49,7 +49,7 @@ func truncateString(s string, maxLen int) string {
 // getRecordFieldString extracts a string value from a record using dot-notation
 // path traversal with array indexing support (e.g. "user.profile.id" or
 // "items[0].name"). Returns an empty string when the value is missing.
-func getRecordFieldString(record map[string]interface{}, path string) string {
+func getRecordFieldString(record map[string]any, path string) string {
 	value, ok := recordpath.Get(record, path)
 	if !ok {
 		return ""

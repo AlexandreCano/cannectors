@@ -21,7 +21,7 @@ func Example() {
 	}
 
 	// Input records
-	inputRecords := []map[string]interface{}{
+	inputRecords := []map[string]any{
 		{"id": 1, "name": "Alice", "email": "alice@example.com"},
 		{"id": 2, "name": "Bob", "email": "bob@example.com"},
 	}
@@ -52,7 +52,7 @@ type ExampleFilterModule struct {
 	mappings map[string]string // source -> target field mappings
 }
 
-func (f *ExampleFilterModule) Process(ctx context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (f *ExampleFilterModule) Process(ctx context.Context, records []map[string]any) ([]map[string]any, error) {
 	// Respect context cancellation
 	select {
 	case <-ctx.Done():
@@ -61,9 +61,9 @@ func (f *ExampleFilterModule) Process(ctx context.Context, records []map[string]
 	}
 
 	// Transform records
-	result := make([]map[string]interface{}, len(records))
+	result := make([]map[string]any, len(records))
 	for i, record := range records {
-		transformed := make(map[string]interface{})
+		transformed := make(map[string]any)
 		for sourceField, targetField := range f.mappings {
 			if value, exists := record[sourceField]; exists {
 				transformed[targetField] = value

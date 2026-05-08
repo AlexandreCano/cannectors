@@ -13,11 +13,11 @@ import (
 type Cache interface {
 	// Get retrieves a value from the cache.
 	// Returns the value and true if found and not expired, nil and false otherwise.
-	Get(key string) (interface{}, bool)
+	Get(key string) (any, bool)
 
 	// Set stores a value in the cache with the specified TTL.
 	// If the cache is at capacity, the least recently used entry is evicted.
-	Set(key string, value interface{}, ttl time.Duration)
+	Set(key string, value any, ttl time.Duration)
 
 	// Delete removes a value from the cache.
 	Delete(key string)
@@ -41,7 +41,7 @@ type Stats struct {
 
 // cacheItem represents a single cache entry with expiration and access tracking.
 type cacheItem struct {
-	value     interface{}
+	value     any
 	expiresAt time.Time
 	lastUsed  time.Time
 }
@@ -84,7 +84,7 @@ func NewLRUCache(maxSize int, defaultTTL time.Duration) *LRUCache {
 // Get retrieves a value from the cache.
 // Returns the value and true if found and not expired.
 // Updates the lastUsed time for LRU tracking on cache hit.
-func (c *LRUCache) Get(key string) (interface{}, bool) {
+func (c *LRUCache) Get(key string) (any, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -112,7 +112,7 @@ func (c *LRUCache) Get(key string) (interface{}, bool) {
 // Set stores a value in the cache with the specified TTL.
 // If ttl is 0, uses the default TTL.
 // If the cache is at capacity and the key doesn't exist, evicts the LRU entry.
-func (c *LRUCache) Set(key string, value interface{}, ttl time.Duration) {
+func (c *LRUCache) Set(key string, value any, ttl time.Duration) {
 	if ttl <= 0 {
 		ttl = c.defaultTTL
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/cannectors/runtime/internal/httpclient"
 	"github.com/cannectors/runtime/internal/logger"
 )
 
@@ -27,10 +28,10 @@ func NewStub(moduleType, endpoint, method string) *StubModule {
 }
 
 // Send simulates sending records (stub behavior).
-func (m *StubModule) Send(_ context.Context, records []map[string]interface{}) (int, error) {
+func (m *StubModule) Send(_ context.Context, records []map[string]any) (int, error) {
 	logger.Info("Output module sending data",
 		slog.String("type", m.ModuleType),
-		slog.String("endpoint", m.Endpoint),
+		slog.String("endpoint", httpclient.SanitizeURL(m.Endpoint)),
 		slog.String("method", m.Method),
 		slog.Int("records", len(records)))
 
@@ -43,7 +44,7 @@ func (m *StubModule) Close() error {
 }
 
 // PreviewRequest generates a preview of what would be sent (for dry-run mode).
-func (m *StubModule) PreviewRequest(records []map[string]interface{}, _ PreviewOptions) ([]RequestPreview, error) {
+func (m *StubModule) PreviewRequest(records []map[string]any, _ PreviewOptions) ([]RequestPreview, error) {
 	if len(records) == 0 {
 		return nil, nil
 	}

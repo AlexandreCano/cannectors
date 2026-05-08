@@ -227,7 +227,7 @@ func TestJSConsole_EmptySlicesNotCircular(t *testing.T) {
 	vm := goja.New()
 	c := mustJSConsole(t, vm)
 	// Use formatGoValue so we hit formatSliceSafe (Go slices); formatValue->formatArray uses path.objs for JS arrays.
-	inner := []interface{}{[]interface{}{}, []interface{}{}}
+	inner := []any{[]any{}, []any{}}
 	out := c.formatGoValue(inner, 0, newFormatPath())
 	if strings.Contains(out, placeholderCircular) {
 		t.Errorf("[[], []] must not contain %q; got %q", placeholderCircular, out)

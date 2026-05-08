@@ -64,7 +64,7 @@ func getCompiledSchema() (*jsonschema.Schema, error) {
 
 		// Add all schema files to the compiler
 		for schemaURL, schemaBytes := range schemaFiles {
-			var schemaDoc interface{}
+			var schemaDoc any
 			if err := json.Unmarshal(*schemaBytes, &schemaDoc); err != nil {
 				schemaInitErr = fmt.Errorf("failed to parse schema %s: %w", schemaURL, err)
 				return
@@ -92,7 +92,7 @@ func getCompiledSchema() (*jsonschema.Schema, error) {
 
 // ValidateConfig validates a parsed configuration against the pipeline schema.
 // Returns a ValidationResult with validation status and any errors.
-func ValidateConfig(data map[string]interface{}) *ValidationResult {
+func ValidateConfig(data map[string]any) *ValidationResult {
 	result := &ValidationResult{
 		Valid: true,
 	}

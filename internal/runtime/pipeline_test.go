@@ -29,18 +29,18 @@ func strPtrRuntime(s string) *string {
 
 // MockInputModule is a test mock for input.Module interface
 type MockInputModule struct {
-	data        []map[string]interface{}
+	data        []map[string]any
 	err         error
 	fetchCalled bool
 	closed      bool
 	closeErr    error
 }
 
-func NewMockInputModule(data []map[string]interface{}, err error) *MockInputModule {
+func NewMockInputModule(data []map[string]any, err error) *MockInputModule {
 	return &MockInputModule{data: data, err: err}
 }
 
-func (m *MockInputModule) Fetch(_ context.Context) ([]map[string]interface{}, error) {
+func (m *MockInputModule) Fetch(_ context.Context) ([]map[string]any, error) {
 	m.fetchCalled = true
 	if m.err != nil {
 		return nil, m.err
@@ -58,13 +58,13 @@ var _ input.Module = (*MockInputModule)(nil)
 
 // MockFilterModule is a test mock for filter.Module interface
 type MockFilterModule struct {
-	transformer     func([]map[string]interface{}) ([]map[string]interface{}, error)
+	transformer     func([]map[string]any) ([]map[string]any, error)
 	err             error
 	processCalled   bool
-	recordsReceived []map[string]interface{}
+	recordsReceived []map[string]any
 }
 
-func NewMockFilterModule(transformer func([]map[string]interface{}) ([]map[string]interface{}, error)) *MockFilterModule {
+func NewMockFilterModule(transformer func([]map[string]any) ([]map[string]any, error)) *MockFilterModule {
 	return &MockFilterModule{transformer: transformer}
 }
 
@@ -72,7 +72,7 @@ func NewMockFilterModuleWithError(err error) *MockFilterModule {
 	return &MockFilterModule{err: err}
 }
 
-func (m *MockFilterModule) Process(_ context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (m *MockFilterModule) Process(_ context.Context, records []map[string]any) ([]map[string]any, error) {
 	m.processCalled = true
 	m.recordsReceived = records
 	if m.err != nil {
@@ -89,7 +89,7 @@ var _ filter.Module = (*MockFilterModule)(nil)
 
 // MockOutputModule is a test mock for output.Module interface
 type MockOutputModule struct {
-	sentRecords []map[string]interface{}
+	sentRecords []map[string]any
 	err         error
 	sendCalled  bool
 	closed      bool
@@ -99,7 +99,7 @@ func NewMockOutputModule(err error) *MockOutputModule {
 	return &MockOutputModule{err: err}
 }
 
-func (m *MockOutputModule) Send(_ context.Context, records []map[string]interface{}) (int, error) {
+func (m *MockOutputModule) Send(_ context.Context, records []map[string]any) (int, error) {
 	m.sendCalled = true
 	if m.err != nil {
 		return 0, m.err
@@ -122,7 +122,7 @@ var _ output.Module = (*MockOutputModule)(nil)
 
 func TestExecutor_Execute_Success(t *testing.T) {
 	// Arrange
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test 1"},
 		{"id": "2", "name": "Test 2"},
 	}
@@ -183,10 +183,10 @@ func TestExecutor_Execute_Success(t *testing.T) {
 }
 
 func TestExecutor_Execute_MappingFilterIntegration(t *testing.T) {
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{
 			"id": "12",
-			"user": map[string]interface{}{
+			"user": map[string]any{
 				"name": "  Alice  ",
 			},
 		},
@@ -237,7 +237,7 @@ func TestExecutor_Execute_MappingFilterIntegration(t *testing.T) {
 		return
 	}
 
-	contact, ok := mockOutput.sentRecords[0]["contact"].(map[string]interface{})
+	contact, ok := mockOutput.sentRecords[0]["contact"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected contact map, got %T", mockOutput.sentRecords[0]["contact"])
 		return
@@ -253,7 +253,7 @@ func TestExecutor_Execute_MappingFilterIntegration(t *testing.T) {
 }
 
 func TestExecutor_Execute_ConditionFilterIntegration(t *testing.T) {
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "value": 5},
 		{"id": "2", "value": 20},
 		{"id": "3", "value": 10},
@@ -299,7 +299,7 @@ func TestExecutor_Execute_ConditionFilterIntegration(t *testing.T) {
 }
 
 func TestExecutor_Execute_MappingThenConditionIntegration(t *testing.T) {
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "amount": 150},
 		{"id": "2", "amount": 50},
 	}
@@ -353,7 +353,7 @@ func TestExecutor_Execute_MappingThenConditionIntegration(t *testing.T) {
 }
 
 func TestExecutor_ExecuteWithRecords_Success(t *testing.T) {
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": "1", "name": "Record 1"},
 		{"id": "2", "name": "Record 2"},
 	}
@@ -394,16 +394,16 @@ func TestExecutor_ExecuteWithRecords_Success(t *testing.T) {
 
 func TestExecutor_Execute_WithFilters(t *testing.T) {
 	// Arrange
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "value": 10},
 		{"id": "2", "value": 20},
 	}
 
 	// Filter that doubles the value
-	doubleFilter := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
-		result := make([]map[string]interface{}, len(records))
+	doubleFilter := NewMockFilterModule(func(records []map[string]any) ([]map[string]any, error) {
+		result := make([]map[string]any, len(records))
 		for i, r := range records {
-			newRecord := make(map[string]interface{})
+			newRecord := make(map[string]any)
 			for k, v := range r {
 				newRecord[k] = v
 			}
@@ -416,10 +416,10 @@ func TestExecutor_Execute_WithFilters(t *testing.T) {
 	})
 
 	// Filter that adds a field
-	addFieldFilter := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
-		result := make([]map[string]interface{}, len(records))
+	addFieldFilter := NewMockFilterModule(func(records []map[string]any) ([]map[string]any, error) {
+		result := make([]map[string]any, len(records))
 		for i, r := range records {
-			newRecord := make(map[string]interface{})
+			newRecord := make(map[string]any)
 			for k, v := range r {
 				newRecord[k] = v
 			}
@@ -492,7 +492,7 @@ func TestExecutor_Execute_WithFilters(t *testing.T) {
 
 func TestExecutor_Execute_EmptyInputData(t *testing.T) {
 	// Arrange
-	emptyData := []map[string]interface{}{}
+	emptyData := []map[string]any{}
 	mockInput := NewMockInputModule(emptyData, nil)
 	mockOutput := NewMockOutputModule(nil)
 
@@ -530,7 +530,7 @@ func TestExecutor_Execute_EmptyInputData(t *testing.T) {
 
 func TestExecutor_Execute_DeterministicExecution(t *testing.T) {
 	// Test that same input produces same output (deterministic)
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test"},
 	}
 
@@ -569,7 +569,7 @@ func TestExecutor_Execute_DeterministicExecution(t *testing.T) {
 
 func TestExecutor_Execute_TimestampTracking(t *testing.T) {
 	// Arrange
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1"},
 	}
 	mockInput := NewMockInputModule(inputData, nil)
@@ -659,7 +659,7 @@ func TestExecutor_Execute_InputError(t *testing.T) {
 
 func TestExecutor_Execute_FilterError(t *testing.T) {
 	// Arrange
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test"},
 	}
 	filterErr := errors.New("transformation failed")
@@ -711,7 +711,7 @@ func TestExecutor_Execute_FilterError(t *testing.T) {
 
 func TestExecutor_Execute_OutputError(t *testing.T) {
 	// Arrange
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test"},
 	}
 	outputErr := errors.New("failed to send data to destination")
@@ -759,22 +759,22 @@ func TestExecutor_Execute_MultipleFiltersSequence(t *testing.T) {
 	// Test that filters are executed in correct order
 	var executionOrder []int
 
-	filter1 := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
+	filter1 := NewMockFilterModule(func(records []map[string]any) ([]map[string]any, error) {
 		executionOrder = append(executionOrder, 1)
 		return records, nil
 	})
 
-	filter2 := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
+	filter2 := NewMockFilterModule(func(records []map[string]any) ([]map[string]any, error) {
 		executionOrder = append(executionOrder, 2)
 		return records, nil
 	})
 
-	filter3 := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
+	filter3 := NewMockFilterModule(func(records []map[string]any) ([]map[string]any, error) {
 		executionOrder = append(executionOrder, 3)
 		return records, nil
 	})
 
-	inputData := []map[string]interface{}{{"id": "1"}}
+	inputData := []map[string]any{{"id": "1"}}
 	mockInput := NewMockInputModule(inputData, nil)
 	mockOutput := NewMockOutputModule(nil)
 
@@ -813,7 +813,7 @@ func TestExecutor_Execute_FilterErrorStopsExecution(t *testing.T) {
 	// Test that error in second filter prevents third filter from running
 	var executionOrder []int
 
-	filter1 := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
+	filter1 := NewMockFilterModule(func(records []map[string]any) ([]map[string]any, error) {
 		executionOrder = append(executionOrder, 1)
 		return records, nil
 	})
@@ -822,12 +822,12 @@ func TestExecutor_Execute_FilterErrorStopsExecution(t *testing.T) {
 		err: errors.New("filter 2 error"),
 	}
 
-	filter3 := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
+	filter3 := NewMockFilterModule(func(records []map[string]any) ([]map[string]any, error) {
 		executionOrder = append(executionOrder, 3) // Should NOT be called
 		return records, nil
 	})
 
-	inputData := []map[string]interface{}{{"id": "1"}}
+	inputData := []map[string]any{{"id": "1"}}
 	mockInput := NewMockInputModule(inputData, nil)
 	mockOutput := NewMockOutputModule(nil)
 
@@ -866,7 +866,7 @@ func TestExecutor_Execute_FilterErrorStopsExecution(t *testing.T) {
 
 func TestExecutor_DryRun(t *testing.T) {
 	// Arrange
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test"},
 	}
 	mockInput := NewMockInputModule(inputData, nil)
@@ -937,7 +937,7 @@ func TestExecutor_Execute_NilPipeline(t *testing.T) {
 
 func TestExecutor_Execute_ClosesOutputModuleOnSuccess(t *testing.T) {
 	// Arrange
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test"},
 	}
 	mockInput := NewMockInputModule(inputData, nil)
@@ -997,7 +997,7 @@ func TestExecutor_Execute_ClosesOutputModuleOnInputError(t *testing.T) {
 
 func TestExecutor_Execute_ClosesOutputModuleOnFilterError(t *testing.T) {
 	// Arrange
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test"},
 	}
 	filterErr := errors.New("filter processing failed")
@@ -1031,7 +1031,7 @@ func TestExecutor_Execute_ClosesOutputModuleOnFilterError(t *testing.T) {
 
 func TestExecutor_Execute_ClosesOutputModuleOnOutputError(t *testing.T) {
 	// Arrange
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test"},
 	}
 	outputErr := errors.New("output send failed")
@@ -1068,7 +1068,7 @@ func TestExecutor_Execute_ClosesOutputModuleOnOutputError(t *testing.T) {
 
 func TestExecutor_Execute_ClosesInputModuleAfterInputExecution(t *testing.T) {
 	// Verify that input module is closed after successful input execution
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test"},
 	}
 	mockInput := NewMockInputModule(inputData, nil)
@@ -1134,7 +1134,7 @@ type MockFilterModuleWithCloseCheck struct {
 	processCalled       bool
 }
 
-func (m *MockFilterModuleWithCloseCheck) Process(_ context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (m *MockFilterModuleWithCloseCheck) Process(_ context.Context, records []map[string]any) ([]map[string]any, error) {
 	m.processCalled = true
 	// Check if input was closed when filter starts processing
 	m.inputClosedOnFilter = m.inputModule.closed
@@ -1143,7 +1143,7 @@ func (m *MockFilterModuleWithCloseCheck) Process(_ context.Context, records []ma
 
 func TestExecutor_Execute_ClosesInputModuleBeforeFilters(t *testing.T) {
 	// Verify that input module is closed BEFORE filter execution begins
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test"},
 	}
 	mockInput := NewMockInputModule(inputData, nil)
@@ -1182,15 +1182,15 @@ func TestExecutor_Execute_ClosesInputModuleBeforeFilters(t *testing.T) {
 
 func TestExecutor_Execute_InputClosedButRecordsStillAvailable(t *testing.T) {
 	// Verify that after input module is closed, records are still available for filters and output
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test 1"},
 		{"id": "2", "name": "Test 2"},
 	}
 	mockInput := NewMockInputModule(inputData, nil)
 
 	// Filter that verifies it receives the correct records
-	var recordsReceivedByFilter []map[string]interface{}
-	verifyFilter := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
+	var recordsReceivedByFilter []map[string]any
+	verifyFilter := NewMockFilterModule(func(records []map[string]any) ([]map[string]any, error) {
 		recordsReceivedByFilter = records
 		return records, nil
 	})
@@ -1238,7 +1238,7 @@ func TestExecutor_Execute_InputClosedButRecordsStillAvailable(t *testing.T) {
 
 func TestExecutor_Execute_NoDoubleCloseOnInputModule(t *testing.T) {
 	// Verify that input module is not closed twice (no double-close)
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test"},
 	}
 
@@ -1274,12 +1274,12 @@ func TestExecutor_Execute_NoDoubleCloseOnInputModule(t *testing.T) {
 
 // MockInputModuleWithCloseCount tracks how many times Close() is called
 type MockInputModuleWithCloseCount struct {
-	data       []map[string]interface{}
+	data       []map[string]any
 	err        error
 	closeCount *int
 }
 
-func (m *MockInputModuleWithCloseCount) Fetch(_ context.Context) ([]map[string]interface{}, error) {
+func (m *MockInputModuleWithCloseCount) Fetch(_ context.Context) ([]map[string]any, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -1303,13 +1303,13 @@ var _ filter.Module = (*MockFilterModuleWithCloseCheck)(nil)
 
 // MockPreviewableOutputModule is a mock for output.PreviewableModule
 type MockPreviewableOutputModule struct {
-	sentRecords      []map[string]interface{}
+	sentRecords      []map[string]any
 	err              error
 	sendCalled       bool
 	previewCalled    bool
 	closed           bool
 	previewErr       error
-	previewRecords   []map[string]interface{}
+	previewRecords   []map[string]any
 	previewResponses []output.RequestPreview
 }
 
@@ -1319,7 +1319,7 @@ func NewMockPreviewableOutputModule(previewResponses []output.RequestPreview) *M
 	}
 }
 
-func (m *MockPreviewableOutputModule) Send(_ context.Context, records []map[string]interface{}) (int, error) {
+func (m *MockPreviewableOutputModule) Send(_ context.Context, records []map[string]any) (int, error) {
 	m.sendCalled = true
 	if m.err != nil {
 		return 0, m.err
@@ -1333,7 +1333,7 @@ func (m *MockPreviewableOutputModule) Close() error {
 	return nil
 }
 
-func (m *MockPreviewableOutputModule) PreviewRequest(records []map[string]interface{}, _ output.PreviewOptions) ([]output.RequestPreview, error) {
+func (m *MockPreviewableOutputModule) PreviewRequest(records []map[string]any, _ output.PreviewOptions) ([]output.RequestPreview, error) {
 	m.previewCalled = true
 	m.previewRecords = records
 	if m.previewErr != nil {
@@ -1347,7 +1347,7 @@ var _ output.PreviewableModule = (*MockPreviewableOutputModule)(nil)
 
 func TestExecutor_DryRun_CallsPreview(t *testing.T) {
 	// Arrange
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test 1"},
 		{"id": "2", "name": "Test 2"},
 	}
@@ -1418,16 +1418,16 @@ func TestExecutor_DryRun_CallsPreview(t *testing.T) {
 
 func TestExecutor_DryRun_WithFilters_CallsPreview(t *testing.T) {
 	// Arrange
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "value": 10},
 		{"id": "2", "value": 20},
 	}
 
 	// Filter that doubles the value
-	doubleFilter := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
-		result := make([]map[string]interface{}, len(records))
+	doubleFilter := NewMockFilterModule(func(records []map[string]any) ([]map[string]any, error) {
+		result := make([]map[string]any, len(records))
 		for i, r := range records {
-			newRecord := make(map[string]interface{})
+			newRecord := make(map[string]any)
 			for k, v := range r {
 				newRecord[k] = v
 			}
@@ -1493,7 +1493,7 @@ func TestExecutor_DryRun_WithFilters_CallsPreview(t *testing.T) {
 
 func TestExecutor_DryRun_NonPreviewableModule_SkipsPreview(t *testing.T) {
 	// Test that dry-run works with output modules that don't implement PreviewableModule
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test"},
 	}
 	mockInput := NewMockInputModule(inputData, nil)
@@ -1534,7 +1534,7 @@ func TestExecutor_DryRun_NonPreviewableModule_SkipsPreview(t *testing.T) {
 
 func TestExecutor_DryRun_PreviewError_ReportsError(t *testing.T) {
 	// Test that preview errors are reported correctly
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test"},
 	}
 	mockInput := NewMockInputModule(inputData, nil)
@@ -1581,7 +1581,7 @@ func TestExecutor_DryRun_PreviewError_ReportsError(t *testing.T) {
 
 func TestExecutor_DryRun_RecordsProcessedCount(t *testing.T) {
 	// Verify RecordsProcessed correctly reflects what WOULD have been sent
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1"},
 		{"id": "2"},
 		{"id": "3"},
@@ -1625,7 +1625,7 @@ func TestExecutor_DryRun_RecordsProcessedCount(t *testing.T) {
 
 func TestExecutor_DryRun_EmptyRecords(t *testing.T) {
 	// Test dry-run with empty input data
-	emptyData := []map[string]interface{}{}
+	emptyData := []map[string]any{}
 	mockInput := NewMockInputModule(emptyData, nil)
 	mockOutput := NewMockPreviewableOutputModule([]output.RequestPreview{})
 
@@ -1658,7 +1658,7 @@ func TestExecutor_DryRun_EmptyRecords(t *testing.T) {
 
 func TestExecutor_ExecuteWithRecords_DryRun_CallsPreview(t *testing.T) {
 	// Test ExecuteWithRecords also supports dry-run preview
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": "1", "name": "Record 1"},
 		{"id": "2", "name": "Record 2"},
 	}
@@ -1715,7 +1715,7 @@ func TestExecutor_ExecuteWithRecords_DryRun_CallsPreview(t *testing.T) {
 
 func TestExecutor_DryRun_InputModuleExecutesNormally(t *testing.T) {
 	// Verify input module executes normally in dry-run mode (data is fetched)
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test 1"},
 		{"id": "2", "name": "Test 2"},
 		{"id": "3", "name": "Test 3"},
@@ -1756,17 +1756,17 @@ func TestExecutor_DryRun_InputModuleExecutesNormally(t *testing.T) {
 
 func TestExecutor_DryRun_FilterModulesExecuteNormally(t *testing.T) {
 	// Verify filter modules execute normally in dry-run mode (data is transformed)
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "value": 10},
 		{"id": "2", "value": 20},
 	}
 
 	transformCalled := false
-	transformFilter := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
+	transformFilter := NewMockFilterModule(func(records []map[string]any) ([]map[string]any, error) {
 		transformCalled = true
-		result := make([]map[string]interface{}, len(records))
+		result := make([]map[string]any, len(records))
 		for i, r := range records {
-			newRecord := make(map[string]interface{})
+			newRecord := make(map[string]any)
 			for k, v := range r {
 				newRecord[k] = v
 			}
@@ -1870,7 +1870,7 @@ func TestExecutor_DryRun_InputError_ReportedCorrectly(t *testing.T) {
 
 func TestExecutor_DryRun_FilterError_ReportedCorrectly(t *testing.T) {
 	// Verify filter errors are reported the same in dry-run as normal mode
-	inputData := []map[string]interface{}{{"id": "1"}}
+	inputData := []map[string]any{{"id": "1"}}
 	filterErr := errors.New("transformation failed")
 
 	mockInput := NewMockInputModule(inputData, nil)
@@ -1920,22 +1920,22 @@ func TestExecutor_DryRun_MultipleFiltersSequence(t *testing.T) {
 	// Test that multiple filters execute in correct order in dry-run mode
 	var executionOrder []int
 
-	filter1 := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
+	filter1 := NewMockFilterModule(func(records []map[string]any) ([]map[string]any, error) {
 		executionOrder = append(executionOrder, 1)
 		return records, nil
 	})
 
-	filter2 := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
+	filter2 := NewMockFilterModule(func(records []map[string]any) ([]map[string]any, error) {
 		executionOrder = append(executionOrder, 2)
 		return records, nil
 	})
 
-	filter3 := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
+	filter3 := NewMockFilterModule(func(records []map[string]any) ([]map[string]any, error) {
 		executionOrder = append(executionOrder, 3)
 		return records, nil
 	})
 
-	inputData := []map[string]interface{}{{"id": "1"}}
+	inputData := []map[string]any{{"id": "1"}}
 	mockInput := NewMockInputModule(inputData, nil)
 	mockOutput := NewMockPreviewableOutputModule([]output.RequestPreview{
 		{Endpoint: "https://api.example.com", Method: "POST", RecordCount: 1},
@@ -1975,15 +1975,15 @@ func TestExecutor_DryRun_MultipleFiltersSequence(t *testing.T) {
 
 func TestExecutor_DryRun_CompletePipelineFlow(t *testing.T) {
 	// Integration test: complete Input → Filter → Preview flow
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Alice", "score": 85},
 		{"id": "2", "name": "Bob", "score": 92},
 		{"id": "3", "name": "Charlie", "score": 78},
 	}
 
 	// Filter: only keep scores > 80
-	filterAbove80 := NewMockFilterModule(func(records []map[string]interface{}) ([]map[string]interface{}, error) {
-		var result []map[string]interface{}
+	filterAbove80 := NewMockFilterModule(func(records []map[string]any) ([]map[string]any, error) {
+		var result []map[string]any
 		for _, r := range records {
 			if score, ok := r["score"].(int); ok && score > 80 {
 				result = append(result, r)
@@ -2111,7 +2111,7 @@ func TestExecutor_DryRun_InputErrorDetails(t *testing.T) {
 
 func TestExecutor_DryRun_FilterErrorDetails(t *testing.T) {
 	// Test that filter error details include filter index
-	inputData := []map[string]interface{}{{"id": "1"}}
+	inputData := []map[string]any{{"id": "1"}}
 	filterErr := errors.New("invalid expression: missing operand")
 
 	mockInput := NewMockInputModule(inputData, nil)
@@ -2160,7 +2160,7 @@ func TestExecutor_DryRun_FilterErrorDetails(t *testing.T) {
 
 func TestExecutor_DryRun_PreviewError_DoesNotFailExecution(t *testing.T) {
 	// Test that preview errors don't fail the execution (informational only)
-	inputData := []map[string]interface{}{{"id": "1"}}
+	inputData := []map[string]any{{"id": "1"}}
 	mockInput := NewMockInputModule(inputData, nil)
 
 	mockOutput := NewMockPreviewableOutputModule(nil)
@@ -2244,7 +2244,7 @@ func TestExecutor_DryRun_NilPipeline_ErrorDetails(t *testing.T) {
 
 func TestExecutor_DryRun_ShowCredentials_EndToEnd(t *testing.T) {
 	// Test that DryRunOptions.ShowCredentials from pipeline config is respected end-to-end
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test"},
 	}
 	mockInput := NewMockInputModule(inputData, nil)
@@ -2300,7 +2300,7 @@ type MockPreviewableOutputModuleWithOpts struct {
 	receivedOpts     *output.PreviewOptions
 }
 
-func (m *MockPreviewableOutputModuleWithOpts) Send(_ context.Context, records []map[string]interface{}) (int, error) {
+func (m *MockPreviewableOutputModuleWithOpts) Send(_ context.Context, records []map[string]any) (int, error) {
 	return len(records), nil
 }
 
@@ -2308,7 +2308,7 @@ func (m *MockPreviewableOutputModuleWithOpts) Close() error {
 	return nil
 }
 
-func (m *MockPreviewableOutputModuleWithOpts) PreviewRequest(records []map[string]interface{}, opts output.PreviewOptions) ([]output.RequestPreview, error) {
+func (m *MockPreviewableOutputModuleWithOpts) PreviewRequest(records []map[string]any, opts output.PreviewOptions) ([]output.RequestPreview, error) {
 	*m.receivedOpts = opts // Capture the options
 	return m.previewResponses, nil
 }
@@ -2373,7 +2373,7 @@ func TestExecutor_Execute_LogsExecutionStart(t *testing.T) {
 	}))
 
 	// Arrange
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test 1"},
 	}
 	mockInput := NewMockInputModule(inputData, nil)
@@ -2408,7 +2408,7 @@ func TestExecutor_Execute_LogsExecutionStart(t *testing.T) {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		var logEntry map[string]interface{}
+		var logEntry map[string]any
 		if err := json.Unmarshal([]byte(line), &logEntry); err == nil {
 			if logEntry["msg"] == "execution started" {
 				found = true
@@ -2439,7 +2439,7 @@ func TestExecutor_Execute_LogsStageStart(t *testing.T) {
 	}))
 
 	// Arrange
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test 1"},
 	}
 	mockInput := NewMockInputModule(inputData, nil)
@@ -2476,7 +2476,7 @@ func TestExecutor_Execute_LogsStageStart(t *testing.T) {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		var logEntry map[string]interface{}
+		var logEntry map[string]any
 		if err := json.Unmarshal([]byte(line), &logEntry); err == nil {
 			if logEntry["msg"] == "stage started" {
 				if stage, ok := logEntry["stage"].(string); ok {
@@ -2507,7 +2507,7 @@ func TestExecutor_Execute_LogsExecutionEnd(t *testing.T) {
 	}))
 
 	// Arrange
-	inputData := []map[string]interface{}{
+	inputData := []map[string]any{
 		{"id": "1", "name": "Test 1"},
 	}
 	mockInput := NewMockInputModule(inputData, nil)
@@ -2542,7 +2542,7 @@ func TestExecutor_Execute_LogsExecutionEnd(t *testing.T) {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		var logEntry map[string]interface{}
+		var logEntry map[string]any
 		if err := json.Unmarshal([]byte(line), &logEntry); err == nil {
 			if logEntry["msg"] == "execution completed" {
 				found = true

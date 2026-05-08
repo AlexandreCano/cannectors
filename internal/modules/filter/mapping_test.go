@@ -97,15 +97,15 @@ func TestNewMappingFromConfig(t *testing.T) {
 
 func TestParseFieldMappings(t *testing.T) {
 	t.Run("valid mapping with transforms", func(t *testing.T) {
-		raw := []interface{}{
-			map[string]interface{}{
+		raw := []any{
+			map[string]any{
 				"source":       "name",
 				"target":       "fullName",
 				"defaultValue": "unknown",
 				"onMissing":    "useDefault",
-				"transforms": []interface{}{
+				"transforms": []any{
 					"trim",
-					map[string]interface{}{"op": "lowercase"},
+					map[string]any{"op": "lowercase"},
 				},
 			},
 		}
@@ -139,12 +139,12 @@ func TestParseFieldMappings(t *testing.T) {
 	})
 
 	t.Run("invalid transform op missing", func(t *testing.T) {
-		raw := []interface{}{
-			map[string]interface{}{
+		raw := []any{
+			map[string]any{
 				"source": "name",
 				"target": "fullName",
-				"transforms": []interface{}{
-					map[string]interface{}{"format": "YYYY-MM-DD"}, // missing op
+				"transforms": []any{
+					map[string]any{"format": "YYYY-MM-DD"}, // missing op
 				},
 			},
 		}
@@ -158,7 +158,7 @@ func TestParseFieldMappings(t *testing.T) {
 	})
 
 	t.Run("invalid mapping type returns error", func(t *testing.T) {
-		raw := []interface{}{
+		raw := []any{
 			"not a mapping object",
 		}
 		_, err := ParseFieldMappings(raw)
@@ -181,8 +181,8 @@ func TestMapping_Process_BasicMappings(t *testing.T) {
 	tests := []struct {
 		name     string
 		mappings []FieldMapping
-		input    []map[string]interface{}
-		want     []map[string]interface{}
+		input    []map[string]any
+		want     []map[string]any
 		wantErr  bool
 	}{
 		{
@@ -191,10 +191,10 @@ func TestMapping_Process_BasicMappings(t *testing.T) {
 				{Source: strPtr("name"), Target: "fullName"},
 				{Source: strPtr("email"), Target: "emailAddress"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"name": "John Doe", "email": "john@example.com"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"name": "John Doe", "email": "john@example.com", "fullName": "John Doe", "emailAddress": "john@example.com"},
 			},
 			wantErr: false,
@@ -205,12 +205,12 @@ func TestMapping_Process_BasicMappings(t *testing.T) {
 				{Source: strPtr("id"), Target: "userId"},
 				{Source: strPtr("name"), Target: "userName"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"id": 1, "name": "Alice"},
 				{"id": 2, "name": "Bob"},
 				{"id": 3, "name": "Charlie"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"id": 1, "name": "Alice", "userId": 1, "userName": "Alice"},
 				{"id": 2, "name": "Bob", "userId": 2, "userName": "Bob"},
 				{"id": 3, "name": "Charlie", "userId": 3, "userName": "Charlie"},
@@ -220,24 +220,24 @@ func TestMapping_Process_BasicMappings(t *testing.T) {
 		{
 			name:     "empty input returns empty output",
 			mappings: []FieldMapping{{Source: strPtr("name"), Target: "fullName"}},
-			input:    []map[string]interface{}{},
-			want:     []map[string]interface{}{},
+			input:    []map[string]any{},
+			want:     []map[string]any{},
 			wantErr:  false,
 		},
 		{
 			name:     "nil input returns empty output",
 			mappings: []FieldMapping{{Source: strPtr("name"), Target: "fullName"}},
 			input:    nil,
-			want:     []map[string]interface{}{},
+			want:     []map[string]any{},
 			wantErr:  false,
 		},
 		{
 			name:     "empty mappings preserves all fields",
 			mappings: []FieldMapping{},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"name": "John", "email": "john@example.com"},
 			},
-			want:    []map[string]interface{}{{"name": "John", "email": "john@example.com"}},
+			want:    []map[string]any{{"name": "John", "email": "john@example.com"}},
 			wantErr: false,
 		},
 		{
@@ -249,7 +249,7 @@ func TestMapping_Process_BasicMappings(t *testing.T) {
 				{Source: strPtr("bool_field"), Target: "flag"},
 				{Source: strPtr("null_field"), Target: "nil_val"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{
 					"string_field": "hello",
 					"int_field":    42,
@@ -258,7 +258,7 @@ func TestMapping_Process_BasicMappings(t *testing.T) {
 					"null_field":   nil,
 				},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{
 					"string_field": "hello",
 					"int_field":    42,
@@ -280,18 +280,18 @@ func TestMapping_Process_BasicMappings(t *testing.T) {
 				{Source: strPtr("tags"), Target: "labels"},
 				{Source: strPtr("metadata"), Target: "meta"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{
-					"tags":     []interface{}{"tag1", "tag2"},
-					"metadata": map[string]interface{}{"key": "value"},
+					"tags":     []any{"tag1", "tag2"},
+					"metadata": map[string]any{"key": "value"},
 				},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{
-					"tags":     []interface{}{"tag1", "tag2"},
-					"metadata": map[string]interface{}{"key": "value"},
-					"labels":   []interface{}{"tag1", "tag2"},
-					"meta":     map[string]interface{}{"key": "value"},
+					"tags":     []any{"tag1", "tag2"},
+					"metadata": map[string]any{"key": "value"},
+					"labels":   []any{"tag1", "tag2"},
+					"meta":     map[string]any{"key": "value"},
 				},
 			},
 			wantErr: false,
@@ -329,8 +329,8 @@ func TestMapping_Process_NestedPaths(t *testing.T) {
 	tests := []struct {
 		name     string
 		mappings []FieldMapping
-		input    []map[string]interface{}
-		want     []map[string]interface{}
+		input    []map[string]any
+		want     []map[string]any
 		wantErr  bool
 	}{
 		{
@@ -339,17 +339,17 @@ func TestMapping_Process_NestedPaths(t *testing.T) {
 				{Source: strPtr("user.name"), Target: "fullName"},
 				{Source: strPtr("user.email"), Target: "emailAddress"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{
-					"user": map[string]interface{}{
+					"user": map[string]any{
 						"name":  "John Doe",
 						"email": "john@example.com",
 					},
 				},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{
-					"user": map[string]interface{}{
+					"user": map[string]any{
 						"name":  "John Doe",
 						"email": "john@example.com",
 					},
@@ -364,22 +364,22 @@ func TestMapping_Process_NestedPaths(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("data.user.profile.name"), Target: "name"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{
-					"data": map[string]interface{}{
-						"user": map[string]interface{}{
-							"profile": map[string]interface{}{
+					"data": map[string]any{
+						"user": map[string]any{
+							"profile": map[string]any{
 								"name": "Deep Value",
 							},
 						},
 					},
 				},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{
-					"data": map[string]interface{}{
-						"user": map[string]interface{}{
-							"profile": map[string]interface{}{
+					"data": map[string]any{
+						"user": map[string]any{
+							"profile": map[string]any{
 								"name": "Deep Value",
 							},
 						},
@@ -395,15 +395,15 @@ func TestMapping_Process_NestedPaths(t *testing.T) {
 				{Source: strPtr("firstName"), Target: "user.name.first"},
 				{Source: strPtr("lastName"), Target: "user.name.last"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"firstName": "John", "lastName": "Doe"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{
 					"firstName": "John",
 					"lastName":  "Doe",
-					"user": map[string]interface{}{
-						"name": map[string]interface{}{
+					"user": map[string]any{
+						"name": map[string]any{
 							"first": "John",
 							"last":  "Doe",
 						},
@@ -417,24 +417,24 @@ func TestMapping_Process_NestedPaths(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("input.data.value"), Target: "output.result.value"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{
-					"input": map[string]interface{}{
-						"data": map[string]interface{}{
+					"input": map[string]any{
+						"data": map[string]any{
 							"value": 42,
 						},
 					},
 				},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{
-					"input": map[string]interface{}{
-						"data": map[string]interface{}{
+					"input": map[string]any{
+						"data": map[string]any{
 							"value": 42,
 						},
 					},
-					"output": map[string]interface{}{
-						"result": map[string]interface{}{
+					"output": map[string]any{
+						"result": map[string]any{
 							"value": 42,
 						},
 					},
@@ -475,8 +475,8 @@ func TestMapping_Process_ArrayIndexing(t *testing.T) {
 	tests := []struct {
 		name     string
 		mappings []FieldMapping
-		input    []map[string]interface{}
-		want     []map[string]interface{}
+		input    []map[string]any
+		want     []map[string]any
 		wantErr  bool
 	}{
 		{
@@ -484,19 +484,19 @@ func TestMapping_Process_ArrayIndexing(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("items[0].name"), Target: "firstName"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{
-					"items": []interface{}{
-						map[string]interface{}{"name": "Alice"},
-						map[string]interface{}{"name": "Bob"},
+					"items": []any{
+						map[string]any{"name": "Alice"},
+						map[string]any{"name": "Bob"},
 					},
 				},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{
-					"items": []interface{}{
-						map[string]interface{}{"name": "Alice"},
-						map[string]interface{}{"name": "Bob"},
+					"items": []any{
+						map[string]any{"name": "Alice"},
+						map[string]any{"name": "Bob"},
 					},
 					"firstName": "Alice",
 				},
@@ -508,19 +508,19 @@ func TestMapping_Process_ArrayIndexing(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("items[1].name"), Target: "secondName"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{
-					"items": []interface{}{
-						map[string]interface{}{"name": "Alice"},
-						map[string]interface{}{"name": "Bob"},
+					"items": []any{
+						map[string]any{"name": "Alice"},
+						map[string]any{"name": "Bob"},
 					},
 				},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{
-					"items": []interface{}{
-						map[string]interface{}{"name": "Alice"},
-						map[string]interface{}{"name": "Bob"},
+					"items": []any{
+						map[string]any{"name": "Alice"},
+						map[string]any{"name": "Bob"},
 					},
 					"secondName": "Bob",
 				},
@@ -532,17 +532,17 @@ func TestMapping_Process_ArrayIndexing(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("items[5].name"), Target: "missing", OnMissing: "setNull"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{
-					"items": []interface{}{
-						map[string]interface{}{"name": "Alice"},
+					"items": []any{
+						map[string]any{"name": "Alice"},
 					},
 				},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{
-					"items": []interface{}{
-						map[string]interface{}{"name": "Alice"},
+					"items": []any{
+						map[string]any{"name": "Alice"},
 					},
 					"missing": nil,
 				},
@@ -554,12 +554,12 @@ func TestMapping_Process_ArrayIndexing(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("data.users[0].address.city"), Target: "city"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{
-					"data": map[string]interface{}{
-						"users": []interface{}{
-							map[string]interface{}{
-								"address": map[string]interface{}{
+					"data": map[string]any{
+						"users": []any{
+							map[string]any{
+								"address": map[string]any{
 									"city": "Paris",
 								},
 							},
@@ -567,12 +567,12 @@ func TestMapping_Process_ArrayIndexing(t *testing.T) {
 					},
 				},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{
-					"data": map[string]interface{}{
-						"users": []interface{}{
-							map[string]interface{}{
-								"address": map[string]interface{}{
+					"data": map[string]any{
+						"users": []any{
+							map[string]any{
+								"address": map[string]any{
 									"city": "Paris",
 								},
 							},
@@ -588,14 +588,14 @@ func TestMapping_Process_ArrayIndexing(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("numbers[0]"), Target: "first"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{
-					"numbers": []interface{}{1, 2, 3},
+					"numbers": []any{1, 2, 3},
 				},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{
-					"numbers": []interface{}{1, 2, 3},
+					"numbers": []any{1, 2, 3},
 					"first":   1,
 				},
 			},
@@ -606,14 +606,14 @@ func TestMapping_Process_ArrayIndexing(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("name"), Target: "items[0].name"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"name": "Alice"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{
 					"name": "Alice",
-					"items": []interface{}{
-						map[string]interface{}{"name": "Alice"},
+					"items": []any{
+						map[string]any{"name": "Alice"},
 					},
 				},
 			},
@@ -624,13 +624,13 @@ func TestMapping_Process_ArrayIndexing(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("id"), Target: "ids[1]"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"id": 7},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{
 					"id":  7,
-					"ids": []interface{}{nil, 7},
+					"ids": []any{nil, 7},
 				},
 			},
 			wantErr: false,
@@ -668,8 +668,8 @@ func TestMapping_Process_MissingIntermediatePaths(t *testing.T) {
 	tests := []struct {
 		name     string
 		mappings []FieldMapping
-		input    []map[string]interface{}
-		want     []map[string]interface{}
+		input    []map[string]any
+		want     []map[string]any
 		wantErr  bool
 	}{
 		{
@@ -677,11 +677,11 @@ func TestMapping_Process_MissingIntermediatePaths(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("user.profile.name"), Target: "name", OnMissing: "setNull"},
 			},
-			input: []map[string]interface{}{
-				{"user": map[string]interface{}{}}, // profile doesn't exist
+			input: []map[string]any{
+				{"user": map[string]any{}},
 			},
-			want: []map[string]interface{}{
-				{"user": map[string]interface{}{}, "name": nil},
+			want: []map[string]any{
+				{"user": map[string]any{}, "name": nil},
 			},
 			wantErr: false,
 		},
@@ -690,10 +690,10 @@ func TestMapping_Process_MissingIntermediatePaths(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("user.profile.name"), Target: "name", OnMissing: "skipField"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"other": "value"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"other": "value"},
 			},
 			wantErr: false,
@@ -703,10 +703,10 @@ func TestMapping_Process_MissingIntermediatePaths(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("user.profile.name"), Target: "name", OnMissing: "setNull"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"user": "not an object"}, // user is a string, not an object
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"user": "not an object", "name": nil},
 			},
 			wantErr: false,
@@ -744,8 +744,8 @@ func TestMapping_Process_OnMissing(t *testing.T) {
 	tests := []struct {
 		name     string
 		mappings []FieldMapping
-		input    []map[string]interface{}
-		want     []map[string]interface{}
+		input    []map[string]any
+		want     []map[string]any
 		wantErr  bool
 	}{
 		{
@@ -754,10 +754,10 @@ func TestMapping_Process_OnMissing(t *testing.T) {
 				{Source: strPtr("name"), Target: "fullName", OnMissing: "setNull"},
 				{Source: strPtr("missing"), Target: "missingField", OnMissing: "setNull"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"name": "John"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"name": "John", "fullName": "John", "missingField": nil},
 			},
 			wantErr: false,
@@ -768,10 +768,10 @@ func TestMapping_Process_OnMissing(t *testing.T) {
 				{Source: strPtr("name"), Target: "fullName"},
 				{Source: strPtr("missing"), Target: "missingField", OnMissing: "skipField"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"name": "John"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"name": "John", "fullName": "John"},
 			},
 			wantErr: false,
@@ -782,10 +782,10 @@ func TestMapping_Process_OnMissing(t *testing.T) {
 				{Source: strPtr("name"), Target: "fullName"},
 				{Source: strPtr("missing"), Target: "status", OnMissing: "useDefault", DefaultValue: "active"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"name": "John"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"name": "John", "fullName": "John", "status": "active"},
 			},
 			wantErr: false,
@@ -795,10 +795,10 @@ func TestMapping_Process_OnMissing(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("missing"), Target: "count", OnMissing: "useDefault", DefaultValue: 0},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"other": "value"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"other": "value", "count": 0},
 			},
 			wantErr: false,
@@ -808,10 +808,10 @@ func TestMapping_Process_OnMissing(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("missing"), Target: "enabled", OnMissing: "useDefault", DefaultValue: true},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"other": "value"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"other": "value", "enabled": true},
 			},
 			wantErr: false,
@@ -822,7 +822,7 @@ func TestMapping_Process_OnMissing(t *testing.T) {
 				{Source: strPtr("name"), Target: "fullName"},
 				{Source: strPtr("required_field"), Target: "required", OnMissing: "fail"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"name": "John"},
 			},
 			want:    nil,
@@ -833,10 +833,10 @@ func TestMapping_Process_OnMissing(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("missing"), Target: "field"}, // No onMissing specified
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"other": "value"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"other": "value", "field": nil},
 			},
 			wantErr: false,
@@ -846,10 +846,10 @@ func TestMapping_Process_OnMissing(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("nullField"), Target: "output", OnMissing: "fail"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"nullField": nil},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"nullField": nil, "output": nil},
 			},
 			wantErr: false,
@@ -860,12 +860,12 @@ func TestMapping_Process_OnMissing(t *testing.T) {
 				{Source: strPtr("name"), Target: "fullName", OnMissing: "setNull"},
 				{Source: strPtr("email"), Target: "emailAddress", OnMissing: "skipField"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"name": "John", "email": "john@example.com"},
 				{"name": "Jane"},     // missing email
 				{"email": "x@y.com"}, // missing name
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"name": "John", "email": "john@example.com", "fullName": "John", "emailAddress": "john@example.com"},
 				{"name": "Jane", "fullName": "Jane"},                             // email skipped
 				{"email": "x@y.com", "fullName": nil, "emailAddress": "x@y.com"}, // name is null
@@ -906,7 +906,7 @@ func TestMapping_Process_OnError(t *testing.T) {
 		name     string
 		mappings []FieldMapping
 		onError  string
-		input    []map[string]interface{}
+		input    []map[string]any
 		wantLen  int
 		wantErr  bool
 	}{
@@ -916,7 +916,7 @@ func TestMapping_Process_OnError(t *testing.T) {
 				{Source: strPtr("required"), Target: "output", OnMissing: "fail"},
 			},
 			onError: "fail",
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"other": "value"},
 			},
 			wantLen: 0,
@@ -928,7 +928,7 @@ func TestMapping_Process_OnError(t *testing.T) {
 				{Source: strPtr("required"), Target: "output", OnMissing: "fail"},
 			},
 			onError: "skip",
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"required": "value1"},
 				{"other": "value"}, // This will fail and be skipped
 				{"required": "value2"},
@@ -943,7 +943,7 @@ func TestMapping_Process_OnError(t *testing.T) {
 				{Source: strPtr("required"), Target: "output", OnMissing: "fail"},
 			},
 			onError: "log",
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"name": "John"}, // Will fail on required but continue
 			},
 			wantLen: 1, // Partial result included
@@ -982,8 +982,8 @@ func TestMapping_Process_Transforms(t *testing.T) {
 	tests := []struct {
 		name     string
 		mappings []FieldMapping
-		input    []map[string]interface{}
-		want     []map[string]interface{}
+		input    []map[string]any
+		want     []map[string]any
 		wantErr  bool
 	}{
 		// Single transforms
@@ -992,10 +992,10 @@ func TestMapping_Process_Transforms(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("name"), Target: "fullName", Transforms: []TransformOp{{Op: "trim"}}},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"name": "  John Doe  "},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"name": "  John Doe  ", "fullName": "John Doe"},
 			},
 		},
@@ -1004,10 +1004,10 @@ func TestMapping_Process_Transforms(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("name"), Target: "lowername", Transforms: []TransformOp{{Op: "lowercase"}}},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"name": "John DOE"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"name": "John DOE", "lowername": "john doe"},
 			},
 		},
@@ -1016,10 +1016,10 @@ func TestMapping_Process_Transforms(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("name"), Target: "uppername", Transforms: []TransformOp{{Op: "uppercase"}}},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"name": "John Doe"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"name": "John Doe", "uppername": "JOHN DOE"},
 			},
 		},
@@ -1028,10 +1028,10 @@ func TestMapping_Process_Transforms(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("count"), Target: "countInt", Transforms: []TransformOp{{Op: "toInt"}}},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"count": "42"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"count": "42", "countInt": 42},
 			},
 		},
@@ -1040,10 +1040,10 @@ func TestMapping_Process_Transforms(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("count"), Target: "countInt", Transforms: []TransformOp{{Op: "toInt"}}},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"count": 42.0},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"count": 42.0, "countInt": 42},
 			},
 		},
@@ -1052,10 +1052,10 @@ func TestMapping_Process_Transforms(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("amount"), Target: "amountFloat", Transforms: []TransformOp{{Op: "toFloat"}}},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"amount": "3.14"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"amount": "3.14", "amountFloat": 3.14},
 			},
 		},
@@ -1064,10 +1064,10 @@ func TestMapping_Process_Transforms(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("enabled"), Target: "enabledBool", Transforms: []TransformOp{{Op: "toBool"}}},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"enabled": "true"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"enabled": "true", "enabledBool": true},
 			},
 		},
@@ -1076,10 +1076,10 @@ func TestMapping_Process_Transforms(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("id"), Target: "idString", Transforms: []TransformOp{{Op: "toString"}}},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"id": 12},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"id": 12, "idString": "12"},
 			},
 		},
@@ -1088,11 +1088,11 @@ func TestMapping_Process_Transforms(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("tag"), Target: "tags", Transforms: []TransformOp{{Op: "toArray"}}},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"tag": "single"},
 			},
-			want: []map[string]interface{}{
-				{"tag": "single", "tags": []interface{}{"single"}},
+			want: []map[string]any{
+				{"tag": "single", "tags": []any{"single"}},
 			},
 		},
 		{
@@ -1100,11 +1100,11 @@ func TestMapping_Process_Transforms(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("meta"), Target: "metadata", Transforms: []TransformOp{{Op: "toObject"}}},
 			},
-			input: []map[string]interface{}{
-				{"meta": map[string]interface{}{"key": "value"}},
+			input: []map[string]any{
+				{"meta": map[string]any{"key": "value"}},
 			},
-			want: []map[string]interface{}{
-				{"meta": map[string]interface{}{"key": "value"}, "metadata": map[string]interface{}{"key": "value"}},
+			want: []map[string]any{
+				{"meta": map[string]any{"key": "value"}, "metadata": map[string]any{"key": "value"}},
 			},
 		},
 
@@ -1114,11 +1114,11 @@ func TestMapping_Process_Transforms(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("tags"), Target: "tagList", Transforms: []TransformOp{{Op: "split"}}},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"tags": "a,b,c"},
 			},
-			want: []map[string]interface{}{
-				{"tags": "a,b,c", "tagList": []interface{}{"a", "b", "c"}},
+			want: []map[string]any{
+				{"tags": "a,b,c", "tagList": []any{"a", "b", "c"}},
 			},
 		},
 		{
@@ -1126,11 +1126,11 @@ func TestMapping_Process_Transforms(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("tags"), Target: "tagList", Transforms: []TransformOp{{Op: "split", Separator: "|"}}},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"tags": "a|b|c"},
 			},
-			want: []map[string]interface{}{
-				{"tags": "a|b|c", "tagList": []interface{}{"a", "b", "c"}},
+			want: []map[string]any{
+				{"tags": "a|b|c", "tagList": []any{"a", "b", "c"}},
 			},
 		},
 
@@ -1140,11 +1140,11 @@ func TestMapping_Process_Transforms(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("items"), Target: "itemString", Transforms: []TransformOp{{Op: "join"}}},
 			},
-			input: []map[string]interface{}{
-				{"items": []interface{}{"a", "b", "c"}},
+			input: []map[string]any{
+				{"items": []any{"a", "b", "c"}},
 			},
-			want: []map[string]interface{}{
-				{"items": []interface{}{"a", "b", "c"}, "itemString": "a,b,c"},
+			want: []map[string]any{
+				{"items": []any{"a", "b", "c"}, "itemString": "a,b,c"},
 			},
 		},
 		{
@@ -1152,11 +1152,11 @@ func TestMapping_Process_Transforms(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("items"), Target: "itemString", Transforms: []TransformOp{{Op: "join", Separator: " - "}}},
 			},
-			input: []map[string]interface{}{
-				{"items": []interface{}{"x", "y", "z"}},
+			input: []map[string]any{
+				{"items": []any{"x", "y", "z"}},
 			},
-			want: []map[string]interface{}{
-				{"items": []interface{}{"x", "y", "z"}, "itemString": "x - y - z"},
+			want: []map[string]any{
+				{"items": []any{"x", "y", "z"}, "itemString": "x - y - z"},
 			},
 		},
 
@@ -1170,10 +1170,10 @@ func TestMapping_Process_Transforms(t *testing.T) {
 					Replacement: "X",
 				}}},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"text": "hello123world456"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"text": "hello123world456", "cleaned": "helloXworldX"},
 			},
 		},
@@ -1187,10 +1187,10 @@ func TestMapping_Process_Transforms(t *testing.T) {
 					Format: "YYYY-MM-DD",
 				}}},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"created": "2026-01-15T10:30:00Z"},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"created": "2026-01-15T10:30:00Z", "date": "2026-01-15"},
 			},
 		},
@@ -1208,10 +1208,10 @@ func TestMapping_Process_Transforms(t *testing.T) {
 					},
 				},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"name": "  JOHN DOE  "},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"name": "  JOHN DOE  ", "cleaned": "john doe"},
 			},
 		},
@@ -1228,10 +1228,10 @@ func TestMapping_Process_Transforms(t *testing.T) {
 					},
 				},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"input": "  Hello   World  "},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"input": "  Hello   World  ", "output": "hello_world"},
 			},
 		},
@@ -1242,10 +1242,10 @@ func TestMapping_Process_Transforms(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("count"), Target: "total", Transforms: []TransformOp{{Op: "trim"}}},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"count": 42},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"count": 42, "total": 42},
 			},
 		},
@@ -1254,10 +1254,10 @@ func TestMapping_Process_Transforms(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("empty"), Target: "result", Transforms: []TransformOp{{Op: "trim"}}},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"empty": nil},
 			},
-			want: []map[string]interface{}{
+			want: []map[string]any{
 				{"empty": nil, "result": nil},
 			},
 		},
@@ -1294,18 +1294,18 @@ func TestMapping_Process_TypePreservation(t *testing.T) {
 	tests := []struct {
 		name     string
 		mappings []FieldMapping
-		input    []map[string]interface{}
-		check    func(t *testing.T, result []map[string]interface{})
+		input    []map[string]any
+		check    func(t *testing.T, result []map[string]any)
 	}{
 		{
 			name: "preserves int type",
 			mappings: []FieldMapping{
 				{Source: strPtr("count"), Target: "total"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"count": 42},
 			},
-			check: func(t *testing.T, result []map[string]interface{}) {
+			check: func(t *testing.T, result []map[string]any) {
 				if _, ok := result[0]["total"].(int); !ok {
 					t.Errorf("expected int, got %T", result[0]["total"])
 				}
@@ -1316,10 +1316,10 @@ func TestMapping_Process_TypePreservation(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("price"), Target: "amount"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"price": 19.99},
 			},
-			check: func(t *testing.T, result []map[string]interface{}) {
+			check: func(t *testing.T, result []map[string]any) {
 				if _, ok := result[0]["amount"].(float64); !ok {
 					t.Errorf("expected float64, got %T", result[0]["amount"])
 				}
@@ -1330,10 +1330,10 @@ func TestMapping_Process_TypePreservation(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("active"), Target: "enabled"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"active": true},
 			},
-			check: func(t *testing.T, result []map[string]interface{}) {
+			check: func(t *testing.T, result []map[string]any) {
 				if _, ok := result[0]["enabled"].(bool); !ok {
 					t.Errorf("expected bool, got %T", result[0]["enabled"])
 				}
@@ -1344,10 +1344,10 @@ func TestMapping_Process_TypePreservation(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("empty"), Target: "null_field"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"empty": nil},
 			},
-			check: func(t *testing.T, result []map[string]interface{}) {
+			check: func(t *testing.T, result []map[string]any) {
 				if result[0]["null_field"] != nil {
 					t.Errorf("expected nil, got %v", result[0]["null_field"])
 				}
@@ -1358,12 +1358,12 @@ func TestMapping_Process_TypePreservation(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("items"), Target: "list"},
 			},
-			input: []map[string]interface{}{
-				{"items": []interface{}{"a", "b", "c"}},
+			input: []map[string]any{
+				{"items": []any{"a", "b", "c"}},
 			},
-			check: func(t *testing.T, result []map[string]interface{}) {
-				if _, ok := result[0]["list"].([]interface{}); !ok {
-					t.Errorf("expected []interface{}, got %T", result[0]["list"])
+			check: func(t *testing.T, result []map[string]any) {
+				if _, ok := result[0]["list"].([]any); !ok {
+					t.Errorf("expected []any, got %T", result[0]["list"])
 				}
 			},
 		},
@@ -1372,12 +1372,12 @@ func TestMapping_Process_TypePreservation(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("meta"), Target: "metadata"},
 			},
-			input: []map[string]interface{}{
-				{"meta": map[string]interface{}{"key": "value"}},
+			input: []map[string]any{
+				{"meta": map[string]any{"key": "value"}},
 			},
-			check: func(t *testing.T, result []map[string]interface{}) {
-				if _, ok := result[0]["metadata"].(map[string]interface{}); !ok {
-					t.Errorf("expected map[string]interface{}, got %T", result[0]["metadata"])
+			check: func(t *testing.T, result []map[string]any) {
+				if _, ok := result[0]["metadata"].(map[string]any); !ok {
+					t.Errorf("expected map[string]any, got %T", result[0]["metadata"])
 				}
 			},
 		},
@@ -1404,25 +1404,25 @@ func TestMapping_Process_TypePreservation(t *testing.T) {
 func TestMappingModule_IntegrationScenarios(t *testing.T) {
 	t.Run("end-to-end transform scenario", func(t *testing.T) {
 		// Simulate data coming from HTTP Polling input module
-		inputRecords := []map[string]interface{}{
+		inputRecords := []map[string]any{
 			{
-				"user": map[string]interface{}{
+				"user": map[string]any{
 					"firstName": "  JOHN  ",
 					"lastName":  "DOE",
 					"email":     "JOHN@EXAMPLE.COM",
 				},
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"createdAt": "2026-01-15T10:30:00Z",
 					"tags":      "sales,vip,active",
 				},
 			},
 			{
-				"user": map[string]interface{}{
+				"user": map[string]any{
 					"firstName": "Jane",
 					"lastName":  "Smith",
 					"email":     "jane.smith@example.com",
 				},
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"createdAt": "2026-01-14T08:00:00Z",
 					"tags":      "support",
 				},
@@ -1468,12 +1468,12 @@ func TestMappingModule_IntegrationScenarios(t *testing.T) {
 		rec1 := result[0]
 
 		// Check nested structure created correctly
-		contact, ok := rec1["contact"].(map[string]interface{})
+		contact, ok := rec1["contact"].(map[string]any)
 		if !ok {
 			t.Fatalf("Expected 'contact' to be a map, got %T", rec1["contact"])
 		}
 
-		name, ok := contact["name"].(map[string]interface{})
+		name, ok := contact["name"].(map[string]any)
 		if !ok {
 			t.Fatalf("Expected 'contact.name' to be a map, got %T", contact["name"])
 		}
@@ -1495,7 +1495,7 @@ func TestMappingModule_IntegrationScenarios(t *testing.T) {
 		}
 
 		// Check split transform
-		labels, ok := rec1["labels"].([]interface{})
+		labels, ok := rec1["labels"].([]any)
 		if !ok {
 			t.Fatalf("Expected 'labels' to be an array, got %T", rec1["labels"])
 		}
@@ -1517,7 +1517,7 @@ func TestMappingModule_IntegrationScenarios(t *testing.T) {
 		mapper, _ := NewMappingFromConfig(mappings, "fail")
 
 		// Empty input
-		result, err := mapper.Process(context.Background(), []map[string]interface{}{})
+		result, err := mapper.Process(context.Background(), []map[string]any{})
 		if err != nil {
 			t.Fatalf("Process() failed on empty input: %v", err)
 		}
@@ -1536,14 +1536,14 @@ func TestMappingModule_IntegrationScenarios(t *testing.T) {
 	})
 
 	t.Run("output format compatible with Output module", func(t *testing.T) {
-		// Verify that output is []map[string]interface{} which Output modules expect
+		// Verify that output is []map[string]any which Output modules expect
 		mappings := []FieldMapping{
 			{Source: strPtr("data"), Target: "payload"},
 		}
 
 		mapper, _ := NewMappingFromConfig(mappings, "fail")
 
-		input := []map[string]interface{}{
+		input := []map[string]any{
 			{"data": "test"},
 		}
 
@@ -1574,7 +1574,7 @@ func TestMapping_Deterministic(t *testing.T) {
 			{Source: strPtr("missing"), Target: "optional", OnMissing: "useDefault", DefaultValue: "default"},
 		}
 
-		input := []map[string]interface{}{
+		input := []map[string]any{
 			{"name": "  JOHN DOE  ", "email": "john@example.com"},
 			{"name": "Jane Smith", "email": "jane@example.com"},
 		}
@@ -1582,7 +1582,7 @@ func TestMapping_Deterministic(t *testing.T) {
 		mapper, _ := NewMappingFromConfig(mappings, "fail")
 
 		// Run multiple times
-		var results [][]map[string]interface{}
+		var results [][]map[string]any
 		for i := 0; i < 10; i++ {
 			result, err := mapper.Process(context.Background(), input)
 			if err != nil {
@@ -1610,7 +1610,7 @@ func TestMapping_Deterministic(t *testing.T) {
 			}},
 		}
 
-		input := []map[string]interface{}{
+		input := []map[string]any{
 			{"text": "  Hello   World  "},
 		}
 
@@ -1636,7 +1636,7 @@ func TestMapping_Deterministic(t *testing.T) {
 			}}},
 		}
 
-		input := []map[string]interface{}{
+		input := []map[string]any{
 			{"date": "2026-01-15T10:30:00Z"},
 		}
 
@@ -1658,7 +1658,7 @@ func TestMapping_Deterministic(t *testing.T) {
 			{Source: strPtr("required"), Target: "output", OnMissing: "fail"},
 		}
 
-		input := []map[string]interface{}{
+		input := []map[string]any{
 			{"other": "value"},
 		}
 
@@ -1682,10 +1682,10 @@ func TestMapping_Deterministic(t *testing.T) {
 			{Source: strPtr("user.profile.name"), Target: "output.nested.value"},
 		}
 
-		input := []map[string]interface{}{
+		input := []map[string]any{
 			{
-				"user": map[string]interface{}{
-					"profile": map[string]interface{}{
+				"user": map[string]any{
+					"profile": map[string]any{
 						"name": "test",
 					},
 				},
@@ -1702,12 +1702,12 @@ func TestMapping_Deterministic(t *testing.T) {
 			}
 
 			// Verify nested structure
-			output, ok := result[0]["output"].(map[string]interface{})
+			output, ok := result[0]["output"].(map[string]any)
 			if !ok {
 				t.Errorf("Run %d: expected 'output' to be a map", i)
 				continue
 			}
-			nested, ok := output["nested"].(map[string]interface{})
+			nested, ok := output["nested"].(map[string]any)
 			if !ok {
 				t.Errorf("Run %d: expected 'output.nested' to be a map", i)
 				continue
@@ -1727,7 +1727,7 @@ func TestMappingModule_Interface(t *testing.T) {
 	var _ Module = mapper
 
 	// Verify Process method signature
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"test": "data"},
 	}
 	_, _ = mapper.Process(context.Background(), records)
@@ -1738,7 +1738,7 @@ func TestMapping_Process_ErrorContext(t *testing.T) {
 	tests := []struct {
 		name        string
 		mappings    []FieldMapping
-		input       []map[string]interface{}
+		input       []map[string]any
 		errContains []string
 	}{
 		{
@@ -1746,7 +1746,7 @@ func TestMapping_Process_ErrorContext(t *testing.T) {
 			mappings: []FieldMapping{
 				{Source: strPtr("required_field"), Target: "output", OnMissing: "fail"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"other": "value"},
 			},
 			errContains: []string{"required_field", "record 0"},
@@ -1826,7 +1826,7 @@ func TestMapping_Process_TransformErrors(t *testing.T) {
 		name     string
 		mappings []FieldMapping
 		onError  string
-		input    []map[string]interface{}
+		input    []map[string]any
 		wantLen  int
 		wantErr  bool
 	}{
@@ -1838,7 +1838,7 @@ func TestMapping_Process_TransformErrors(t *testing.T) {
 				}}},
 			},
 			onError: "fail",
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"count": "abc"},
 			},
 			wantLen: 0,
@@ -1852,7 +1852,7 @@ func TestMapping_Process_TransformErrors(t *testing.T) {
 				}}},
 			},
 			onError: "fail",
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"date": "not-a-date"},
 			},
 			wantLen: 0,
@@ -1892,7 +1892,7 @@ func containsString(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
 
-func recordsEqual(a, b []map[string]interface{}) bool {
+func recordsEqual(a, b []map[string]any) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -1904,7 +1904,7 @@ func recordsEqual(a, b []map[string]interface{}) bool {
 	return true
 }
 
-func mapsEqual(a, b map[string]interface{}) bool {
+func mapsEqual(a, b map[string]any) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -1920,7 +1920,7 @@ func mapsEqual(a, b map[string]interface{}) bool {
 	return true
 }
 
-func valuesEqual(a, b interface{}) bool {
+func valuesEqual(a, b any) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -1929,15 +1929,15 @@ func valuesEqual(a, b interface{}) bool {
 	}
 
 	// Handle maps
-	aMap, aIsMap := a.(map[string]interface{})
-	bMap, bIsMap := b.(map[string]interface{})
+	aMap, aIsMap := a.(map[string]any)
+	bMap, bIsMap := b.(map[string]any)
 	if aIsMap && bIsMap {
 		return mapsEqual(aMap, bMap)
 	}
 
 	// Handle slices
-	aSlice, aIsSlice := a.([]interface{})
-	bSlice, bIsSlice := b.([]interface{})
+	aSlice, aIsSlice := a.([]any)
+	bSlice, bIsSlice := b.([]any)
 	if aIsSlice && bIsSlice {
 		if len(aSlice) != len(bSlice) {
 			return false
@@ -1967,11 +1967,11 @@ func TestMapping_MetadataPreservation(t *testing.T) {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{
 				"name": "John",
 				"age":  30,
-				"_metadata": map[string]interface{}{
+				"_metadata": map[string]any{
 					"processed_at": "2024-01-01T12:00:00Z",
 					"source":       "api",
 				},
@@ -1996,7 +1996,7 @@ func TestMapping_MetadataPreservation(t *testing.T) {
 		}
 
 		// Check that _metadata is preserved
-		metadata, ok := result[0]["_metadata"].(map[string]interface{})
+		metadata, ok := result[0]["_metadata"].(map[string]any)
 		if !ok {
 			t.Fatal("expected _metadata to be preserved")
 		}
@@ -2018,12 +2018,12 @@ func TestMapping_MetadataPreservation(t *testing.T) {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{
 				"data":      "value",
-				"_metadata": map[string]interface{}{"key": "meta"},
+				"_metadata": map[string]any{"key": "meta"},
 				"_custom":   "custom_value",
-				"_internal": map[string]interface{}{"debug": true},
+				"_internal": map[string]any{"debug": true},
 			},
 		}
 
@@ -2059,10 +2059,10 @@ func TestMapping_MetadataPreservation(t *testing.T) {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{
 				"name": "Test",
-				"_metadata": map[string]interface{}{
+				"_metadata": map[string]any{
 					"source": "external-api",
 				},
 			},
@@ -2096,7 +2096,7 @@ func TestMapping_FieldDeletion(t *testing.T) {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{
 				"name":     "John",
 				"email":    "john@example.com",
@@ -2134,7 +2134,7 @@ func TestMapping_FieldDeletion(t *testing.T) {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{
 				"name":     "John",
 				"password": "pass123",
@@ -2174,9 +2174,9 @@ func TestMapping_FieldDeletion(t *testing.T) {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{
-				"user": map[string]interface{}{
+				"user": map[string]any{
 					"name":     "John",
 					"password": "secret",
 				},
@@ -2188,7 +2188,7 @@ func TestMapping_FieldDeletion(t *testing.T) {
 			t.Fatalf("Process failed: %v", err)
 		}
 
-		user, ok := result[0]["user"].(map[string]interface{})
+		user, ok := result[0]["user"].(map[string]any)
 		if !ok {
 			t.Fatal("expected user to be a map")
 		}
@@ -2212,10 +2212,10 @@ func TestMapping_FieldDeletion(t *testing.T) {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{
 				"id": 1,
-				"user": map[string]interface{}{
+				"user": map[string]any{
 					"name":     "John",
 					"password": "secret",
 				},
@@ -2247,7 +2247,7 @@ func TestMapping_FieldDeletion(t *testing.T) {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{
 				"name": "John",
 			},
@@ -2276,7 +2276,7 @@ func TestMapping_FieldDeletion(t *testing.T) {
 			t.Fatalf("NewMappingFromConfig failed: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{
 				"name":     "John",
 				"email":    "john@example.com",

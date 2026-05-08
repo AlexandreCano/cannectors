@@ -20,7 +20,7 @@ type SetConfig struct {
 	// Target is the field path to set (supports dot notation for nested paths)
 	Target string `json:"target"`
 	// Value is the literal value to set
-	Value interface{} `json:"value"`
+	Value any `json:"value"`
 }
 
 // SetModule implements the set filter that sets or modifies a single field on each record.
@@ -43,7 +43,7 @@ func NewSetFromConfig(config SetConfig) (*SetModule, error) {
 
 // Process implements the filter.Module interface.
 // It sets or modifies a single field on each record.
-func (m *SetModule) Process(ctx context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (m *SetModule) Process(ctx context.Context, records []map[string]any) ([]map[string]any, error) {
 	// Respect context cancellation
 	select {
 	case <-ctx.Done():
@@ -55,7 +55,7 @@ func (m *SetModule) Process(ctx context.Context, records []map[string]interface{
 		return records, nil
 	}
 
-	result := make([]map[string]interface{}, 0, len(records))
+	result := make([]map[string]any, 0, len(records))
 
 	for i, record := range records {
 		// Check context for long-running operations
@@ -78,7 +78,7 @@ func (m *SetModule) Process(ctx context.Context, records []map[string]interface{
 }
 
 // processRecord processes a single record and returns the modified record.
-func (m *SetModule) processRecord(record map[string]interface{}) (map[string]interface{}, error) {
+func (m *SetModule) processRecord(record map[string]any) (map[string]any, error) {
 	target := m.config.Target
 	value := m.config.Value
 
@@ -96,7 +96,7 @@ func (m *SetModule) processRecord(record map[string]interface{}) (map[string]int
 }
 
 // ParseSetConfig parses a raw configuration map into SetConfig.
-func ParseSetConfig(config map[string]interface{}) (SetConfig, error) {
+func ParseSetConfig(config map[string]any) (SetConfig, error) {
 	var cfg SetConfig
 
 	// Parse and validate target (required)

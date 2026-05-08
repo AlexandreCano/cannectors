@@ -142,23 +142,23 @@ development_status:
   # Epic 18: God File Split & Module Error Harmonization (from audit 2026-04-21)
   # Découpe les fichiers > 800 LOC en fichiers ciblés par concern
   # Source: docs/AUDIT_TECHNIQUE_2026-04-21.md §5 P2.1, P2.5, §2.1
-  epic-18: review
-  18-1-split-http-request-output-file: review
-  18-2-split-http-polling-input-file: review
-  18-3-split-mapping-filter-file: review
-  18-4-harmonize-module-error-types: review
-  18-5-split-moduleconfig-package: review
+  epic-18: done
+  18-1-split-http-request-output-file: done
+  18-2-split-http-polling-input-file: done
+  18-3-split-mapping-filter-file: done
+  18-4-harmonize-module-error-types: done
+  18-5-split-moduleconfig-package: done
   epic-18-retrospective: optional
 
   # Epic 19: Observability & Developer Experience (from audit 2026-04-21)
   # Trace ID, secrets sanitization, dégraissage logger, any vs interface{}, code mort
   # Source: docs/AUDIT_TECHNIQUE_2026-04-21.md §5 P3.1, P3.2, P3.3, P3.5, P3.7
-  epic-19: backlog
-  19-1-add-trace-id-to-execution-logs: backlog
-  19-2-audit-secrets-leakage-in-logs: backlog
-  19-3-trim-logger-package: backlog
-  19-4-replace-interface-with-any: backlog
-  19-5-remove-dead-code: backlog
+  epic-19: review
+  19-1-add-trace-id-to-execution-logs: review
+  19-2-audit-secrets-leakage-in-logs: review
+  19-3-trim-logger-package: review
+  19-4-replace-interface-with-any: review
+  19-5-remove-dead-code: review
   epic-19-retrospective: optional
 
   # Epic 20: Test Hygiene & Coverage (from audit 2026-04-21)

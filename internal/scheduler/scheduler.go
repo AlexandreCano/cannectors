@@ -67,6 +67,14 @@ type Executor interface {
 	Execute(pipeline *connector.Pipeline) (*connector.ExecutionResult, error)
 }
 
+// ContextExecutor is an optional interface that allows the scheduler to pass a
+// context (carrying trace IDs, cancellation signals, etc.) to the executor.
+// The scheduler uses ExecuteWithContext when the executor satisfies this
+// interface, falling back to Execute otherwise.
+type ContextExecutor interface {
+	ExecuteWithContext(ctx context.Context, pipeline *connector.Pipeline) (*connector.ExecutionResult, error)
+}
+
 // registeredPipeline holds a pipeline and its CRON entry ID.
 type registeredPipeline struct {
 	pipeline *connector.Pipeline
@@ -445,7 +453,13 @@ func (s *Scheduler) executePipeline(reg *registeredPipeline) {
 	startTime := time.Now()
 	schedule := GetScheduleFromInput(pipeline)
 
+	// Mint a fresh trace ID for this scheduled tick so each invocation has its
+	// own correlation key, regardless of any trace present in the parent context.
+	traceID := logger.NewTraceID()
+	ctx = logger.WithTraceID(ctx, traceID)
+
 	logger.Info("scheduled pipeline execution starting",
+		slog.String(logger.TraceIDField, traceID),
 		slog.String("pipeline_id", pipeline.ID),
 		slog.String("pipeline_name", pipeline.Name),
 		slog.String("schedule", schedule),
@@ -453,21 +467,20 @@ func (s *Scheduler) executePipeline(reg *registeredPipeline) {
 	)
 
 	// Check if context is canceled before executing
-	if ctx != nil {
-		select {
-		case <-ctx.Done():
-			logger.Info("scheduled pipeline execution canceled",
-				slog.String("pipeline_id", pipeline.ID),
-				slog.String("pipeline_name", pipeline.Name),
-			)
-			return
-		default:
-			// Continue execution
-		}
+	select {
+	case <-ctx.Done():
+		logger.Info("scheduled pipeline execution canceled",
+			slog.String(logger.TraceIDField, traceID),
+			slog.String("pipeline_id", pipeline.ID),
+			slog.String("pipeline_name", pipeline.Name),
+		)
+		return
+	default:
+		// Continue execution
 	}
 
 	// Execute pipeline
-	s.doExecutePipeline(pipeline, startTime)
+	s.doExecutePipeline(ctx, pipeline, startTime, traceID)
 }
 
 // tryStartExecution attempts to mark the pipeline as running.
@@ -561,49 +574,66 @@ func (s *Scheduler) executeQueuedPipeline(reg *registeredPipeline) {
 	pipeline := reg.pipeline
 	startTime := time.Now()
 
+	// Mint a fresh trace ID for this queued tick so each invocation has its own
+	// correlation key, regardless of any trace present in the parent context.
+	traceID := logger.NewTraceID()
+	ctx = logger.WithTraceID(ctx, traceID)
+
 	logger.Info("queued pipeline execution starting",
+		slog.String(logger.TraceIDField, traceID),
 		slog.String("pipeline_id", pipeline.ID),
 		slog.String("pipeline_name", pipeline.Name),
 		slog.Time("scheduled_time", startTime),
 	)
 
 	// Check if context is canceled
-	if ctx != nil {
-		select {
-		case <-ctx.Done():
-			logger.Info("queued pipeline execution canceled",
-				slog.String("pipeline_id", pipeline.ID),
-				slog.String("pipeline_name", pipeline.Name),
-			)
-			s.finishExecution(reg)
-			return
-		default:
-			// Continue execution
-		}
+	select {
+	case <-ctx.Done():
+		logger.Info("queued pipeline execution canceled",
+			slog.String(logger.TraceIDField, traceID),
+			slog.String("pipeline_id", pipeline.ID),
+			slog.String("pipeline_name", pipeline.Name),
+		)
+		s.finishExecution(reg)
+		return
+	default:
+		// Continue execution
 	}
 
 	// Execute pipeline
-	s.doExecutePipeline(pipeline, startTime)
+	s.doExecutePipeline(ctx, pipeline, startTime, traceID)
 
 	// Process next queued item (if any)
 	s.finishExecution(reg)
 }
 
 // doExecutePipeline performs the actual pipeline execution.
-func (s *Scheduler) doExecutePipeline(pipeline *connector.Pipeline, startTime time.Time) {
+func (s *Scheduler) doExecutePipeline(ctx context.Context, pipeline *connector.Pipeline, startTime time.Time, traceID string) {
 	if s.executor == nil {
 		// Stub mode - just log
 		logger.Info("scheduler stub: pipeline would be executed",
+			slog.String(logger.TraceIDField, traceID),
 			slog.String("pipeline_id", pipeline.ID),
 		)
 		return
 	}
 
-	result, err := s.executor.Execute(pipeline)
+	// Prefer ExecuteWithContext when the executor supports it so the
+	// scheduler-minted trace ID propagates into the runtime.
+	var (
+		result *connector.ExecutionResult
+		err    error
+	)
+	if ce, ok := s.executor.(ContextExecutor); ok {
+		result, err = ce.ExecuteWithContext(ctx, pipeline)
+	} else {
+		result, err = s.executor.Execute(pipeline)
+	}
 	duration := time.Since(startTime)
 
 	if err != nil {
 		logger.Error("scheduled pipeline execution failed",
+			slog.String(logger.TraceIDField, traceID),
 			slog.String("pipeline_id", pipeline.ID),
 			slog.String("pipeline_name", pipeline.Name),
 			slog.Duration("duration", duration),
@@ -613,6 +643,7 @@ func (s *Scheduler) doExecutePipeline(pipeline *connector.Pipeline, startTime ti
 	}
 
 	logger.Info("scheduled pipeline execution completed",
+		slog.String(logger.TraceIDField, traceID),
 		slog.String("pipeline_id", pipeline.ID),
 		slog.String("pipeline_name", pipeline.Name),
 		slog.String("status", result.Status),

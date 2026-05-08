@@ -239,7 +239,7 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 	}
 
 	logger.Debug("http request output module created",
-		slog.String("endpoint", cfg.Endpoint),
+		slog.String("endpoint", httpclient.SanitizeURL(cfg.Endpoint)),
 		slog.String("method", method),
 		slog.String("timeout", timeout.String()),
 		slog.Bool("has_auth", authHandler != nil),
@@ -278,21 +278,21 @@ func validateTemplateConfig(endpoint string, headers map[string]string) error {
 //   - "single": Sends one request per record, body is single JSON object
 //
 // Empty or nil records return success with 0 sent.
-func (h *HTTPRequestModule) Send(ctx context.Context, records []map[string]interface{}) (int, error) {
+func (h *HTTPRequestModule) Send(ctx context.Context, records []map[string]any) (int, error) {
 	startTime := time.Now()
 
 	// Handle empty/nil records gracefully
 	if len(records) == 0 {
 		logger.Debug("no records to send, returning success",
 			slog.String("module_type", "httpRequest"),
-			slog.String("endpoint", h.endpoint),
+			slog.String("endpoint", httpclient.SanitizeURL(h.endpoint)),
 		)
 		return 0, nil
 	}
 
 	logger.Info("output send started",
 		slog.String("module_type", "httpRequest"),
-		slog.String("endpoint", h.endpoint),
+		slog.String("endpoint", httpclient.SanitizeURL(h.endpoint)),
 		slog.String("method", h.method),
 		slog.Int("record_count", len(records)),
 		slog.String("request_mode", h.request.RequestMode),
@@ -314,7 +314,7 @@ func (h *HTTPRequestModule) Send(ctx context.Context, records []map[string]inter
 	if err != nil {
 		logger.Error("output send failed",
 			slog.String("module_type", "httpRequest"),
-			slog.String("endpoint", h.endpoint),
+			slog.String("endpoint", httpclient.SanitizeURL(h.endpoint)),
 			slog.String("method", h.method),
 			slog.Int("records_sent", sent),
 			slog.Int("records_failed", len(records)-sent),
@@ -326,7 +326,7 @@ func (h *HTTPRequestModule) Send(ctx context.Context, records []map[string]inter
 
 	logger.Info("output send completed",
 		slog.String("module_type", "httpRequest"),
-		slog.String("endpoint", h.endpoint),
+		slog.String("endpoint", httpclient.SanitizeURL(h.endpoint)),
 		slog.String("method", h.method),
 		slog.Int("records_sent", sent),
 		slog.Int("records_failed", len(records)-sent),
@@ -337,12 +337,12 @@ func (h *HTTPRequestModule) Send(ctx context.Context, records []map[string]inter
 }
 
 // sendBatchMode sends all records in a single HTTP request as JSON array
-func (h *HTTPRequestModule) sendBatchMode(ctx context.Context, records []map[string]interface{}) (int, error) {
+func (h *HTTPRequestModule) sendBatchMode(ctx context.Context, records []map[string]any) (int, error) {
 	requestStart := time.Now()
 
 	logger.Debug("sending records in batch mode",
 		slog.String("module_type", "httpRequest"),
-		slog.String("endpoint", h.endpoint),
+		slog.String("endpoint", httpclient.SanitizeURL(h.endpoint)),
 		slog.String("method", h.method),
 		slog.Int("record_count", len(records)),
 	)
@@ -383,7 +383,7 @@ func (h *HTTPRequestModule) sendBatchMode(ctx context.Context, records []map[str
 		if err != nil {
 			logger.Error("failed to marshal records to JSON",
 				slog.String("module_type", "httpRequest"),
-				slog.String("endpoint", h.endpoint),
+				slog.String("endpoint", httpclient.SanitizeURL(h.endpoint)),
 				slog.Int("record_count", len(records)),
 				slog.String("error", err.Error()),
 			)
@@ -413,7 +413,7 @@ func (h *HTTPRequestModule) sendBatchMode(ctx context.Context, records []map[str
 	if err != nil {
 		logger.Debug("batch request failed",
 			slog.String("module_type", "httpRequest"),
-			slog.String("endpoint", endpoint),
+			slog.String("endpoint", httpclient.SanitizeURL(endpoint)),
 			slog.Duration("duration", requestDuration),
 			slog.String("error", err.Error()),
 		)
@@ -422,7 +422,7 @@ func (h *HTTPRequestModule) sendBatchMode(ctx context.Context, records []map[str
 
 	logger.Debug("batch request completed",
 		slog.String("module_type", "httpRequest"),
-		slog.String("endpoint", endpoint),
+		slog.String("endpoint", httpclient.SanitizeURL(endpoint)),
 		slog.Int("records_sent", len(records)),
 		slog.Duration("duration", requestDuration),
 	)
@@ -431,10 +431,10 @@ func (h *HTTPRequestModule) sendBatchMode(ctx context.Context, records []map[str
 }
 
 // sendSingleRecordMode sends one HTTP request per record
-func (h *HTTPRequestModule) sendSingleRecordMode(ctx context.Context, records []map[string]interface{}) (int, error) {
+func (h *HTTPRequestModule) sendSingleRecordMode(ctx context.Context, records []map[string]any) (int, error) {
 	logger.Debug("sending records in single record mode",
 		slog.String("module_type", "httpRequest"),
-		slog.String("endpoint", h.endpoint),
+		slog.String("endpoint", httpclient.SanitizeURL(h.endpoint)),
 		slog.String("method", h.method),
 		slog.Int("record_count", len(records)),
 		slog.String("on_error", string(h.onError)),
@@ -487,7 +487,7 @@ func (h *HTTPRequestModule) GetRetryInfo() *connector.RetryInfo {
 func (h *HTTPRequestModule) Close() error {
 	h.client.CloseIdleConnections()
 	logger.Debug("http request output module closed",
-		slog.String("endpoint", h.endpoint),
+		slog.String("endpoint", httpclient.SanitizeURL(h.endpoint)),
 	)
 	return nil
 }

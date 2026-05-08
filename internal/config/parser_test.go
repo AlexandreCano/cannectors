@@ -672,7 +672,7 @@ func TestParseYAMLString_YAML12BooleanValues(t *testing.T) {
 		name     string
 		yaml     string
 		key      string
-		expected interface{}
+		expected any
 	}{
 		// YAML 1.2: yes/no/on/off are strings, NOT booleans
 		{"yes as string (YAML 1.2)", "enabled: yes", "enabled", "yes"},

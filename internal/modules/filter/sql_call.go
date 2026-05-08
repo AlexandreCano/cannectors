@@ -220,9 +220,9 @@ func logSQLCallModuleInitialization(driver, mergeStrategy string, onError errhan
 }
 
 // Process executes SQL queries for each input record and enriches them.
-func (m *SQLCallModule) Process(ctx context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (m *SQLCallModule) Process(ctx context.Context, records []map[string]any) ([]map[string]any, error) {
 	if records == nil {
-		return []map[string]interface{}{}, nil
+		return []map[string]any{}, nil
 	}
 
 	startTime := time.Now()
@@ -234,7 +234,7 @@ func (m *SQLCallModule) Process(ctx context.Context, records []map[string]interf
 		slog.String("on_error", string(m.onError)),
 	)
 
-	result := make([]map[string]interface{}, 0, len(records))
+	result := make([]map[string]any, 0, len(records))
 	skippedCount := 0
 	errorCount := 0
 	cacheHits := 0
@@ -305,13 +305,13 @@ func (m *SQLCallModule) Process(ctx context.Context, records []map[string]interf
 }
 
 // processRecord executes the SQL query for a single record.
-func (m *SQLCallModule) processRecord(ctx context.Context, record map[string]interface{}, recordIdx int) (map[string]interface{}, bool, error) {
+func (m *SQLCallModule) processRecord(ctx context.Context, record map[string]any, recordIdx int) (map[string]any, bool, error) {
 	// Compute cache key once from original record (before any mutations)
 	var cacheKey string
 	if m.cacheEnabled {
 		cacheKey = m.buildCacheKey(record)
 		if cachedData, found := m.cache.Get(cacheKey); found {
-			responseData, ok := cachedData.(map[string]interface{})
+			responseData, ok := cachedData.(map[string]any)
 			if ok {
 				logger.Debug("sql_call cache hit",
 					slog.Int("record_index", recordIdx),
@@ -339,7 +339,7 @@ func (m *SQLCallModule) processRecord(ctx context.Context, record map[string]int
 }
 
 // executeQuery executes a single SQL query with record data.
-func (m *SQLCallModule) executeQuery(ctx context.Context, queryTemplate string, record map[string]interface{}) (map[string]interface{}, error) {
+func (m *SQLCallModule) executeQuery(ctx context.Context, queryTemplate string, record map[string]any) (map[string]any, error) {
 	// Build parameterized query from template
 	query, args, err := m.buildParameterizedQuery(queryTemplate, record)
 	if err != nil {
@@ -367,7 +367,7 @@ func (m *SQLCallModule) executeQuery(ctx context.Context, queryTemplate string, 
 
 	// Extract result
 	if len(records) == 0 {
-		return make(map[string]interface{}), nil
+		return make(map[string]any), nil
 	}
 
 	return records[0], nil
@@ -376,9 +376,9 @@ func (m *SQLCallModule) executeQuery(ctx context.Context, queryTemplate string, 
 // buildParameterizedQuery builds a parameterized query from a template.
 // Replaces {{record.field}} with positional parameters and returns args.
 // Validates that all template placeholders are replaced to prevent SQL injection.
-func (m *SQLCallModule) buildParameterizedQuery(queryTemplate string, record map[string]interface{}) (string, []interface{}, error) {
+func (m *SQLCallModule) buildParameterizedQuery(queryTemplate string, record map[string]any) (string, []any, error) {
 	query := queryTemplate
-	var args []interface{}
+	var args []any
 
 	// Find and replace all {{record.field}} patterns
 	paramIndex := 1
@@ -420,17 +420,17 @@ func (m *SQLCallModule) buildParameterizedQuery(queryTemplate string, record map
 }
 
 // rowsToRecords converts sql.Rows to a slice of maps.
-func (m *SQLCallModule) rowsToRecords(rows *sql.Rows) ([]map[string]interface{}, error) {
+func (m *SQLCallModule) rowsToRecords(rows *sql.Rows) ([]map[string]any, error) {
 	columns, err := rows.Columns()
 	if err != nil {
 		return nil, fmt.Errorf("getting column names: %w", err)
 	}
 
-	var records []map[string]interface{}
+	var records []map[string]any
 
 	for rows.Next() {
-		values := make([]interface{}, len(columns))
-		valuePtrs := make([]interface{}, len(columns))
+		values := make([]any, len(columns))
+		valuePtrs := make([]any, len(columns))
 		for i := range values {
 			valuePtrs[i] = &values[i]
 		}
@@ -439,7 +439,7 @@ func (m *SQLCallModule) rowsToRecords(rows *sql.Rows) ([]map[string]interface{},
 			return nil, fmt.Errorf("scanning row: %w", err)
 		}
 
-		record := make(map[string]interface{}, len(columns))
+		record := make(map[string]any, len(columns))
 		for i, col := range columns {
 			val := values[i]
 			// Convert []byte to string
@@ -460,7 +460,7 @@ func (m *SQLCallModule) rowsToRecords(rows *sql.Rows) ([]map[string]interface{},
 }
 
 // buildCacheKey builds a cache key from record data.
-func (m *SQLCallModule) buildCacheKey(record map[string]interface{}) string {
+func (m *SQLCallModule) buildCacheKey(record map[string]any) string {
 	if m.cacheKey != "" {
 		// Evaluate template
 		return m.templateEvaluator.Evaluate(m.cacheKey, record)
@@ -480,32 +480,32 @@ func (m *SQLCallModule) buildCacheKey(record map[string]interface{}) string {
 // marshalDeterministic produces deterministic JSON by recursively sorting map
 // keys. The standard library's json.Marshal already sorts top-level keys for
 // map[string]T, but only when the value is itself a map of the same type.
-// This helper normalises every nested map[string]interface{} (the canonical
+// This helper normalises every nested map[string]any (the canonical
 // Go shape produced by JSON/YAML parsers) so the cache key is stable for
 // records that carry the same data with different insertion order.
-func marshalDeterministic(record map[string]interface{}) ([]byte, error) {
+func marshalDeterministic(record map[string]any) ([]byte, error) {
 	return json.Marshal(canonicalize(record))
 }
 
-// canonicalize returns a value where every map[string]interface{} is replaced
+// canonicalize returns a value where every map[string]any is replaced
 // by an *orderedMap with sorted keys. Slices are walked recursively. Other
 // values are returned unchanged. Combined with json.Marshal, this guarantees
 // a byte-for-byte identical output for two semantically equal inputs.
-func canonicalize(v interface{}) interface{} {
+func canonicalize(v any) any {
 	switch t := v.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		keys := make([]string, 0, len(t))
 		for k := range t {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
-		out := make([][2]interface{}, len(keys))
+		out := make([][2]any, len(keys))
 		for i, k := range keys {
-			out[i] = [2]interface{}{k, canonicalize(t[k])}
+			out[i] = [2]any{k, canonicalize(t[k])}
 		}
 		return orderedMap(out)
-	case []interface{}:
-		out := make([]interface{}, len(t))
+	case []any:
+		out := make([]any, len(t))
 		for i, item := range t {
 			out[i] = canonicalize(item)
 		}
@@ -518,7 +518,7 @@ func canonicalize(v interface{}) interface{} {
 // orderedMap is a slice of (key, value) pairs that marshals to a JSON object
 // while preserving the slice's order. Pre-sorted keys then yield deterministic
 // output.
-type orderedMap [][2]interface{}
+type orderedMap [][2]any
 
 func (m orderedMap) MarshalJSON() ([]byte, error) {
 	var buf strings.Builder
@@ -544,7 +544,7 @@ func (m orderedMap) MarshalJSON() ([]byte, error) {
 }
 
 // mergeData merges query result into the record.
-func (m *SQLCallModule) mergeData(record, result map[string]interface{}) map[string]interface{} {
+func (m *SQLCallModule) mergeData(record, result map[string]any) map[string]any {
 	if result == nil {
 		return record
 	}
@@ -553,7 +553,7 @@ func (m *SQLCallModule) mergeData(record, result map[string]interface{}) map[str
 	case "merge":
 		return deepMerge(record, result)
 	case "replace":
-		merged := make(map[string]interface{})
+		merged := make(map[string]any)
 		for k, v := range record {
 			merged[k] = v
 		}
@@ -562,7 +562,7 @@ func (m *SQLCallModule) mergeData(record, result map[string]interface{}) map[str
 		}
 		return merged
 	case "append":
-		merged := make(map[string]interface{})
+		merged := make(map[string]any)
 		for k, v := range record {
 			merged[k] = v
 		}
@@ -578,8 +578,8 @@ func (m *SQLCallModule) mergeData(record, result map[string]interface{}) map[str
 }
 
 // deepMerge performs a deep merge of two maps.
-func deepMerge(a, b map[string]interface{}) map[string]interface{} {
-	result := make(map[string]interface{})
+func deepMerge(a, b map[string]any) map[string]any {
+	result := make(map[string]any)
 
 	for k, v := range a {
 		result[k] = v
@@ -587,8 +587,8 @@ func deepMerge(a, b map[string]interface{}) map[string]interface{} {
 
 	for k, vb := range b {
 		if va, exists := result[k]; exists {
-			if mapA, okA := va.(map[string]interface{}); okA {
-				if mapB, okB := vb.(map[string]interface{}); okB {
+			if mapA, okA := va.(map[string]any); okA {
+				if mapB, okB := vb.(map[string]any); okB {
 					result[k] = deepMerge(mapA, mapB)
 					continue
 				}

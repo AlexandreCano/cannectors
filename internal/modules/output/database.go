@@ -136,7 +136,7 @@ func NewDatabaseOutputFromConfig(cfg *connector.ModuleConfig) (*DatabaseOutput, 
 
 // Send writes records to the database.
 // Returns the number of records successfully processed and any error.
-func (d *DatabaseOutput) Send(ctx context.Context, records []map[string]interface{}) (int, error) {
+func (d *DatabaseOutput) Send(ctx context.Context, records []map[string]any) (int, error) {
 	if len(records) == 0 {
 		return 0, nil
 	}
@@ -181,7 +181,7 @@ func (d *DatabaseOutput) Send(ctx context.Context, records []map[string]interfac
 }
 
 // sendWithTransaction executes queries within a transaction.
-func (d *DatabaseOutput) sendWithTransaction(ctx context.Context, records []map[string]interface{}) (int, error) {
+func (d *DatabaseOutput) sendWithTransaction(ctx context.Context, records []map[string]any) (int, error) {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("beginning transaction: %w", err)
@@ -215,7 +215,7 @@ func (d *DatabaseOutput) sendWithTransaction(ctx context.Context, records []map[
 
 // processRecordInTransaction processes a single record within a transaction.
 // Returns true if the record was successfully processed, false if skipped, and an error if processing should stop.
-func (d *DatabaseOutput) processRecordInTransaction(ctx context.Context, tx *sql.Tx, record map[string]interface{}, recordIndex int) (bool, error) {
+func (d *DatabaseOutput) processRecordInTransaction(ctx context.Context, tx *sql.Tx, record map[string]any, recordIndex int) (bool, error) {
 	query, args, err := d.buildParameterizedQuery(d.config.Query, record)
 	if err != nil {
 		return d.handleQueryBuildError(err, recordIndex)
@@ -279,7 +279,7 @@ func (d *DatabaseOutput) handleDatabaseError(err error, query string, argCount i
 }
 
 // sendWithoutTransaction executes queries without a transaction.
-func (d *DatabaseOutput) sendWithoutTransaction(ctx context.Context, records []map[string]interface{}) (int, error) {
+func (d *DatabaseOutput) sendWithoutTransaction(ctx context.Context, records []map[string]any) (int, error) {
 	successCount := 0
 	for i, record := range records {
 		processed, err := d.processRecordWithoutTransaction(ctx, record, i)
@@ -295,7 +295,7 @@ func (d *DatabaseOutput) sendWithoutTransaction(ctx context.Context, records []m
 
 // processRecordWithoutTransaction processes a single record without a transaction.
 // Returns true if the record was successfully processed, false if skipped, and an error if processing should stop.
-func (d *DatabaseOutput) processRecordWithoutTransaction(ctx context.Context, record map[string]interface{}, recordIndex int) (bool, error) {
+func (d *DatabaseOutput) processRecordWithoutTransaction(ctx context.Context, record map[string]any, recordIndex int) (bool, error) {
 	query, args, err := d.buildParameterizedQuery(d.config.Query, record)
 	if err != nil {
 		return d.handleQueryBuildError(err, recordIndex)
@@ -315,9 +315,9 @@ func (d *DatabaseOutput) processRecordWithoutTransaction(ctx context.Context, re
 // buildParameterizedQuery builds a parameterized query from a template.
 // Replaces {{record.field}} placeholders with parameterized values.
 // Validates that all template placeholders are replaced to prevent SQL injection.
-func (d *DatabaseOutput) buildParameterizedQuery(queryTemplate string, record map[string]interface{}) (string, []interface{}, error) {
+func (d *DatabaseOutput) buildParameterizedQuery(queryTemplate string, record map[string]any) (string, []any, error) {
 	query := queryTemplate
-	var args []interface{}
+	var args []any
 
 	paramIndex := 1
 	for {
@@ -353,12 +353,12 @@ func (d *DatabaseOutput) buildParameterizedQuery(queryTemplate string, record ma
 }
 
 // getDBFieldValue extracts a field value from a record using dot notation.
-func getDBFieldValue(record map[string]interface{}, field string) interface{} {
+func getDBFieldValue(record map[string]any, field string) any {
 	parts := strings.Split(field, ".")
-	current := interface{}(record)
+	current := any(record)
 
 	for _, part := range parts {
-		if m, ok := current.(map[string]interface{}); ok {
+		if m, ok := current.(map[string]any); ok {
 			current = m[part]
 		} else {
 			return nil

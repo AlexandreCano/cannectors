@@ -7,7 +7,7 @@ import (
 )
 
 func TestGet_Simple(t *testing.T) {
-	obj := map[string]interface{}{"name": "Alice"}
+	obj := map[string]any{"name": "Alice"}
 	val, ok := recordpath.Get(obj, "name")
 	if !ok || val != "Alice" {
 		t.Errorf("Get(name) = %v, %v", val, ok)
@@ -15,9 +15,9 @@ func TestGet_Simple(t *testing.T) {
 }
 
 func TestGet_Nested(t *testing.T) {
-	obj := map[string]interface{}{
-		"user": map[string]interface{}{
-			"profile": map[string]interface{}{
+	obj := map[string]any{
+		"user": map[string]any{
+			"profile": map[string]any{
 				"name": "Bob",
 			},
 		},
@@ -29,8 +29,8 @@ func TestGet_Nested(t *testing.T) {
 }
 
 func TestGet_Array(t *testing.T) {
-	obj := map[string]interface{}{
-		"items": []interface{}{"a", "b", "c"},
+	obj := map[string]any{
+		"items": []any{"a", "b", "c"},
 	}
 	val, ok := recordpath.Get(obj, "items[1]")
 	if !ok || val != "b" {
@@ -39,7 +39,7 @@ func TestGet_Array(t *testing.T) {
 }
 
 func TestGet_MissingPath(t *testing.T) {
-	obj := map[string]interface{}{"name": "Alice"}
+	obj := map[string]any{"name": "Alice"}
 	_, ok := recordpath.Get(obj, "missing.path")
 	if ok {
 		t.Error("Expected missing path to return false")
@@ -47,7 +47,7 @@ func TestGet_MissingPath(t *testing.T) {
 }
 
 func TestGet_EmptyPath(t *testing.T) {
-	obj := map[string]interface{}{"name": "Alice"}
+	obj := map[string]any{"name": "Alice"}
 	_, ok := recordpath.Get(obj, "")
 	if ok {
 		t.Error("Expected empty path to return false")
@@ -55,7 +55,7 @@ func TestGet_EmptyPath(t *testing.T) {
 }
 
 func TestSet_Simple(t *testing.T) {
-	obj := map[string]interface{}{}
+	obj := map[string]any{}
 	if err := recordpath.Set(obj, "name", "Alice"); err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestSet_Simple(t *testing.T) {
 }
 
 func TestSet_Nested(t *testing.T) {
-	obj := map[string]interface{}{}
+	obj := map[string]any{}
 	if err := recordpath.Set(obj, "user.profile.name", "Bob"); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestSet_Nested(t *testing.T) {
 }
 
 func TestSet_EmptyPath(t *testing.T) {
-	obj := map[string]interface{}{}
+	obj := map[string]any{}
 	err := recordpath.Set(obj, "", "value")
 	if err == nil {
 		t.Error("Expected error for empty path")
@@ -84,7 +84,7 @@ func TestSet_EmptyPath(t *testing.T) {
 }
 
 func TestDelete_Simple(t *testing.T) {
-	obj := map[string]interface{}{"name": "Alice", "age": 30}
+	obj := map[string]any{"name": "Alice", "age": 30}
 	recordpath.Delete(obj, "name")
 	if _, ok := obj["name"]; ok {
 		t.Error("Expected name to be deleted")
@@ -95,16 +95,16 @@ func TestDelete_Simple(t *testing.T) {
 }
 
 func TestDelete_Nested(t *testing.T) {
-	obj := map[string]interface{}{
-		"user": map[string]interface{}{
+	obj := map[string]any{
+		"user": map[string]any{
 			"name": "Bob",
 			"age":  25,
 		},
 	}
 	recordpath.Delete(obj, "user.name")
-	user, ok := obj["user"].(map[string]interface{})
+	user, ok := obj["user"].(map[string]any)
 	if !ok {
-		t.Fatal("obj[\"user\"] is not map[string]interface{}")
+		t.Fatal("obj[\"user\"] is not map[string]any")
 	}
 	if _, ok := user["name"]; ok {
 		t.Error("Expected user.name to be deleted")
@@ -115,7 +115,7 @@ func TestDelete_Nested(t *testing.T) {
 }
 
 func TestDelete_MissingPath(t *testing.T) {
-	obj := map[string]interface{}{"name": "Alice"}
+	obj := map[string]any{"name": "Alice"}
 	// Should not panic
 	recordpath.Delete(obj, "missing.path")
 }

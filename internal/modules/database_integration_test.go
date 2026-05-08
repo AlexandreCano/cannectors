@@ -123,7 +123,7 @@ func TestDatabaseInputBasicQuery(t *testing.T) {
 	// Test database input module
 	cfg := &connector.ModuleConfig{
 		Type: "database",
-		Config: map[string]interface{}{
+		Config: map[string]any{
 			"connectionString": "file:" + tmpFile,
 			"driver":           "sqlite",
 			"query":            "SELECT id, name, email FROM users ORDER BY id",
@@ -179,7 +179,7 @@ func TestDatabaseInputWithQueryFile(t *testing.T) {
 
 	cfg := &connector.ModuleConfig{
 		Type: "database",
-		Config: map[string]interface{}{
+		Config: map[string]any{
 			"connectionString": "file:" + tmpFile,
 			"driver":           "sqlite",
 			"queryFile":        sqlFile,
@@ -233,7 +233,7 @@ func TestDatabaseInputWithLastRunTimestamp(t *testing.T) {
 	// Query with lastRunTimestamp - should get all records on first run (epoch time)
 	cfg := &connector.ModuleConfig{
 		Type: "database",
-		Config: map[string]interface{}{
+		Config: map[string]any{
 			"connectionString": "file:" + tmpFile,
 			"driver":           "sqlite",
 			"query":            "SELECT id, name, created_at FROM events WHERE created_at > {{lastRunTimestamp}} ORDER BY id",
@@ -294,7 +294,7 @@ func TestSQLCallFilterEnrichment(t *testing.T) {
 	defer sqlFilter.Close()
 
 	// Input records to enrich
-	inputRecords := []map[string]interface{}{
+	inputRecords := []map[string]any{
 		{"user_id": 1, "name": "Alice"},
 		{"user_id": 2, "name": "Bob"},
 	}
@@ -354,7 +354,7 @@ func TestSQLCallFilterWithQueryFile(t *testing.T) {
 	}
 	defer sqlFilter.Close()
 
-	inputRecords := []map[string]interface{}{
+	inputRecords := []map[string]any{
 		{"sku": "SKU001", "name": "Widget"},
 	}
 
@@ -389,7 +389,7 @@ func TestDatabaseOutputInsert(t *testing.T) {
 
 	cfg := &connector.ModuleConfig{
 		Type: "database",
-		Config: map[string]interface{}{
+		Config: map[string]any{
 			"connectionString": "file:" + tmpFile,
 			"driver":           "sqlite",
 			"query":            "INSERT INTO audit_log (action, entity, timestamp) VALUES ({{record.action}}, {{record.entity}}, {{record.timestamp}})",
@@ -402,7 +402,7 @@ func TestDatabaseOutputInsert(t *testing.T) {
 	}
 	defer outputModule.Close()
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"action": "CREATE", "entity": "user", "timestamp": "2024-01-01"},
 		{"action": "UPDATE", "entity": "order", "timestamp": "2024-01-02"},
 	}
@@ -456,7 +456,7 @@ func TestDatabaseOutputWithTransaction(t *testing.T) {
 
 	cfg := &connector.ModuleConfig{
 		Type: "database",
-		Config: map[string]interface{}{
+		Config: map[string]any{
 			"connectionString": "file:" + tmpFile,
 			"driver":           "sqlite",
 			"query":            "INSERT INTO items (id, name) VALUES ({{record.id}}, {{record.name}})",
@@ -470,7 +470,7 @@ func TestDatabaseOutputWithTransaction(t *testing.T) {
 	}
 	defer outputModule.Close()
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "name": "Item 1"},
 		{"id": 2, "name": "Item 2"},
 		{"id": 3, "name": "Item 3"},
@@ -517,7 +517,7 @@ func TestDatabaseOutputUpsert(t *testing.T) {
 
 	cfg := &connector.ModuleConfig{
 		Type: "database",
-		Config: map[string]interface{}{
+		Config: map[string]any{
 			"connectionString": "file:" + tmpFile,
 			"driver":           "sqlite",
 			"query":            "INSERT OR REPLACE INTO products (sku, name, price) VALUES ({{record.sku}}, {{record.name}}, {{record.price}})",
@@ -530,7 +530,7 @@ func TestDatabaseOutputUpsert(t *testing.T) {
 	}
 	defer outputModule.Close()
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"sku": "SKU001", "name": "Updated Name", "price": 19.99}, // Update existing
 		{"sku": "SKU002", "name": "New Product", "price": 29.99},  // Insert new
 	}
@@ -590,7 +590,7 @@ func TestDatabaseOutputErrorHandling(t *testing.T) {
 	// Test with onError: skip - should continue after constraint violation
 	cfg := &connector.ModuleConfig{
 		Type: "database",
-		Config: map[string]interface{}{
+		Config: map[string]any{
 			"connectionString": "file:" + tmpFile,
 			"driver":           "sqlite",
 			"query":            "INSERT INTO unique_items (id, code) VALUES ({{record.id}}, {{record.code}})",
@@ -604,7 +604,7 @@ func TestDatabaseOutputErrorHandling(t *testing.T) {
 	}
 	defer outputModule.Close()
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 2, "code": "EXISTING"}, // Will fail - duplicate code
 		{"id": 3, "code": "NEW"},      // Should succeed
 	}
@@ -650,7 +650,7 @@ func TestDatabaseOutputWithQueryFile(t *testing.T) {
 
 	cfg := &connector.ModuleConfig{
 		Type: "database",
-		Config: map[string]interface{}{
+		Config: map[string]any{
 			"connectionString": "file:" + tmpFile,
 			"driver":           "sqlite",
 			"queryFile":        sqlFile,
@@ -663,7 +663,7 @@ func TestDatabaseOutputWithQueryFile(t *testing.T) {
 	}
 	defer outputModule.Close()
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"msg": "Log entry 1"},
 		{"msg": "Log entry 2"},
 	}
@@ -706,7 +706,7 @@ func TestDatabaseOutputNestedFields(t *testing.T) {
 
 	cfg := &connector.ModuleConfig{
 		Type: "database",
-		Config: map[string]interface{}{
+		Config: map[string]any{
 			"connectionString": "file:" + tmpFile,
 			"driver":           "sqlite",
 			"query":            "INSERT INTO events (event_type, user_name) VALUES ({{record.event.type}}, {{record.user.name}})",
@@ -719,10 +719,10 @@ func TestDatabaseOutputNestedFields(t *testing.T) {
 	}
 	defer outputModule.Close()
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{
-			"event": map[string]interface{}{"type": "login"},
-			"user":  map[string]interface{}{"name": "alice"},
+			"event": map[string]any{"type": "login"},
+			"user":  map[string]any{"name": "alice"},
 		},
 	}
 

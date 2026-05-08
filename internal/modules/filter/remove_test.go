@@ -9,69 +9,69 @@ import (
 func TestParseRemoveConfig_Validation(t *testing.T) {
 	tests := []struct {
 		name    string
-		config  map[string]interface{}
+		config  map[string]any
 		wantErr bool
 		errMsg  string
 	}{
 		{
 			name:    "missing target and targets",
-			config:  map[string]interface{}{},
+			config:  map[string]any{},
 			wantErr: true,
 			errMsg:  "'target' or 'targets' is required",
 		},
 		{
 			name:    "empty target without targets",
-			config:  map[string]interface{}{"target": ""},
+			config:  map[string]any{"target": ""},
 			wantErr: true,
 			errMsg:  "'target' or 'targets' is required",
 		},
 		{
 			name:    "target is not a string",
-			config:  map[string]interface{}{"target": 123},
+			config:  map[string]any{"target": 123},
 			wantErr: true,
 			errMsg:  "'target' or 'targets' is required",
 		},
 		{
 			name: "valid config with simple target",
-			config: map[string]interface{}{
+			config: map[string]any{
 				"target": "id",
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid config with nested target",
-			config: map[string]interface{}{
+			config: map[string]any{
 				"target": "metadata.version",
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid config with targets array",
-			config: map[string]interface{}{
-				"targets": []interface{}{"id", "password", "internal_id"},
+			config: map[string]any{
+				"targets": []any{"id", "password", "internal_id"},
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid config with both target and targets",
-			config: map[string]interface{}{
+			config: map[string]any{
 				"target":  "id",
-				"targets": []interface{}{"password"},
+				"targets": []any{"password"},
 			},
 			wantErr: false,
 		},
 		{
 			name: "empty targets array without target",
-			config: map[string]interface{}{
-				"targets": []interface{}{},
+			config: map[string]any{
+				"targets": []any{},
 			},
 			wantErr: true,
 			errMsg:  "'target' or 'targets' is required",
 		},
 		{
 			name: "targets array with only empty strings",
-			config: map[string]interface{}{
-				"targets": []interface{}{"", ""},
+			config: map[string]any{
+				"targets": []any{"", ""},
 			},
 			wantErr: true,
 			errMsg:  "'target' or 'targets' is required",
@@ -163,38 +163,38 @@ func TestRemoveModule_Process_FieldPresent(t *testing.T) {
 	tests := []struct {
 		name     string
 		config   RemoveConfig
-		input    []map[string]interface{}
-		expected []map[string]interface{}
+		input    []map[string]any
+		expected []map[string]any
 	}{
 		{
 			name:   "remove existing field (AC#2)",
 			config: RemoveConfig{Target: "id"},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"id": "user-123", "name": "Alice", "email": "alice@example.com"},
 			},
-			expected: []map[string]interface{}{
+			expected: []map[string]any{
 				{"name": "Alice", "email": "alice@example.com"},
 			},
 		},
 		{
 			name:   "remove field preserves other fields (AC#2)",
 			config: RemoveConfig{Target: "password"},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"username": "alice", "password": "secret123", "role": "admin"},
 			},
-			expected: []map[string]interface{}{
+			expected: []map[string]any{
 				{"username": "alice", "role": "admin"},
 			},
 		},
 		{
 			name:   "process multiple records (AC#5)",
 			config: RemoveConfig{Target: "internal_id"},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"id": 1, "internal_id": "int-001", "name": "Alice"},
 				{"id": 2, "internal_id": "int-002", "name": "Bob"},
 				{"id": 3, "internal_id": "int-003", "name": "Charlie"},
 			},
-			expected: []map[string]interface{}{
+			expected: []map[string]any{
 				{"id": 1, "name": "Alice"},
 				{"id": 2, "name": "Bob"},
 				{"id": 3, "name": "Charlie"},
@@ -231,38 +231,38 @@ func TestRemoveModule_Process_FieldAbsent(t *testing.T) {
 	tests := []struct {
 		name     string
 		config   RemoveConfig
-		input    []map[string]interface{}
-		expected []map[string]interface{}
+		input    []map[string]any
+		expected []map[string]any
 	}{
 		{
 			name:   "remove non-existing field is no-op (AC#3)",
 			config: RemoveConfig{Target: "nonexistent"},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"id": 1, "name": "Alice"},
 			},
-			expected: []map[string]interface{}{
+			expected: []map[string]any{
 				{"id": 1, "name": "Alice"},
 			},
 		},
 		{
 			name:   "remove from empty record is no-op (AC#3)",
 			config: RemoveConfig{Target: "id"},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{},
 			},
-			expected: []map[string]interface{}{
+			expected: []map[string]any{
 				{},
 			},
 		},
 		{
 			name:   "mixed: some records have field, some don't (AC#3)",
 			config: RemoveConfig{Target: "optional"},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"id": 1, "optional": "value"},
 				{"id": 2},
 				{"id": 3, "optional": "another"},
 			},
-			expected: []map[string]interface{}{
+			expected: []map[string]any{
 				{"id": 1},
 				{"id": 2},
 				{"id": 3},
@@ -299,38 +299,38 @@ func TestRemoveModule_Process_NestedPath(t *testing.T) {
 	tests := []struct {
 		name     string
 		config   RemoveConfig
-		input    []map[string]interface{}
-		expected []map[string]interface{}
+		input    []map[string]any
+		expected []map[string]any
 	}{
 		{
 			name:   "remove nested field when present (AC#4)",
 			config: RemoveConfig{Target: "metadata.version"},
-			input: []map[string]interface{}{
-				{"id": 1, "metadata": map[string]interface{}{"version": "1.0.0", "author": "Alice"}},
+			input: []map[string]any{
+				{"id": 1, "metadata": map[string]any{"version": "1.0.0", "author": "Alice"}},
 			},
-			expected: []map[string]interface{}{
-				{"id": 1, "metadata": map[string]interface{}{"author": "Alice"}},
+			expected: []map[string]any{
+				{"id": 1, "metadata": map[string]any{"author": "Alice"}},
 			},
 		},
 		{
 			name:   "remove deeply nested field (AC#4)",
 			config: RemoveConfig{Target: "a.b.c"},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{
 					"id": 1,
-					"a": map[string]interface{}{
-						"b": map[string]interface{}{
+					"a": map[string]any{
+						"b": map[string]any{
 							"c": "deep",
 							"d": "keep",
 						},
 					},
 				},
 			},
-			expected: []map[string]interface{}{
+			expected: []map[string]any{
 				{
 					"id": 1,
-					"a": map[string]interface{}{
-						"b": map[string]interface{}{
+					"a": map[string]any{
+						"b": map[string]any{
 							"d": "keep",
 						},
 					},
@@ -340,31 +340,31 @@ func TestRemoveModule_Process_NestedPath(t *testing.T) {
 		{
 			name:   "remove nested field when intermediate key missing is no-op (AC#4)",
 			config: RemoveConfig{Target: "nonexistent.field"},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"id": 1, "name": "Alice"},
 			},
-			expected: []map[string]interface{}{
+			expected: []map[string]any{
 				{"id": 1, "name": "Alice"},
 			},
 		},
 		{
 			name:   "remove nested field when leaf missing is no-op (AC#4)",
 			config: RemoveConfig{Target: "metadata.nonexistent"},
-			input: []map[string]interface{}{
-				{"id": 1, "metadata": map[string]interface{}{"version": "1.0.0"}},
+			input: []map[string]any{
+				{"id": 1, "metadata": map[string]any{"version": "1.0.0"}},
 			},
-			expected: []map[string]interface{}{
-				{"id": 1, "metadata": map[string]interface{}{"version": "1.0.0"}},
+			expected: []map[string]any{
+				{"id": 1, "metadata": map[string]any{"version": "1.0.0"}},
 			},
 		},
 		{
 			name:   "remove only leaf, keep parent structure (AC#4)",
 			config: RemoveConfig{Target: "user.email"},
-			input: []map[string]interface{}{
-				{"user": map[string]interface{}{"name": "Alice", "email": "alice@example.com"}},
+			input: []map[string]any{
+				{"user": map[string]any{"name": "Alice", "email": "alice@example.com"}},
 			},
-			expected: []map[string]interface{}{
-				{"user": map[string]interface{}{"name": "Alice"}},
+			expected: []map[string]any{
+				{"user": map[string]any{"name": "Alice"}},
 			},
 		},
 	}
@@ -398,36 +398,36 @@ func TestRemoveModule_Process_MultipleTargets(t *testing.T) {
 	tests := []struct {
 		name     string
 		config   RemoveConfig
-		input    []map[string]interface{}
-		expected []map[string]interface{}
+		input    []map[string]any
+		expected []map[string]any
 	}{
 		{
 			name:   "remove multiple flat fields with targets array",
 			config: RemoveConfig{Targets: []string{"password", "internal_id", "secret"}},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"id": 1, "name": "Alice", "password": "secret123", "internal_id": "int-001", "secret": "key"},
 			},
-			expected: []map[string]interface{}{
+			expected: []map[string]any{
 				{"id": 1, "name": "Alice"},
 			},
 		},
 		{
 			name:   "remove multiple fields including nested",
 			config: RemoveConfig{Targets: []string{"password", "metadata.secret", "internal_id"}},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{
 					"id":          1,
 					"name":        "Alice",
 					"password":    "secret123",
 					"internal_id": "int-001",
-					"metadata":    map[string]interface{}{"secret": "key", "version": "1.0.0"},
+					"metadata":    map[string]any{"secret": "key", "version": "1.0.0"},
 				},
 			},
-			expected: []map[string]interface{}{
+			expected: []map[string]any{
 				{
 					"id":       1,
 					"name":     "Alice",
-					"metadata": map[string]interface{}{"version": "1.0.0"},
+					"metadata": map[string]any{"version": "1.0.0"},
 				},
 			},
 		},
@@ -437,30 +437,30 @@ func TestRemoveModule_Process_MultipleTargets(t *testing.T) {
 				Target:  "password",
 				Targets: []string{"internal_id", "secret"},
 			},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"id": 1, "name": "Alice", "password": "secret123", "internal_id": "int-001", "secret": "key"},
 			},
-			expected: []map[string]interface{}{
+			expected: []map[string]any{
 				{"id": 1, "name": "Alice"},
 			},
 		},
 		{
 			name:   "remove with some fields missing",
 			config: RemoveConfig{Targets: []string{"password", "nonexistent", "internal_id"}},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"id": 1, "name": "Alice", "password": "secret123"},
 			},
-			expected: []map[string]interface{}{
+			expected: []map[string]any{
 				{"id": 1, "name": "Alice"},
 			},
 		},
 		{
 			name:   "remove duplicates in targets",
 			config: RemoveConfig{Targets: []string{"password", "password", "internal_id", "internal_id"}},
-			input: []map[string]interface{}{
+			input: []map[string]any{
 				{"id": 1, "password": "secret123", "internal_id": "int-001"},
 			},
-			expected: []map[string]interface{}{
+			expected: []map[string]any{
 				{"id": 1},
 			},
 		},
@@ -507,7 +507,7 @@ func TestRemoveModule_Process_InFilterChain(t *testing.T) {
 			t.Fatalf("failed to create remove module: %v", err)
 		}
 
-		input := []map[string]interface{}{
+		input := []map[string]any{
 			{"id": 1, "internal_id": "int-001", "secret": "key", "name": "Alice"},
 		}
 
@@ -529,7 +529,7 @@ func TestRemoveModule_Process_InFilterChain(t *testing.T) {
 		}
 
 		// Verify final result
-		expected := map[string]interface{}{
+		expected := map[string]any{
 			"id":     1,
 			"name":   "Alice",
 			"status": "processed",
@@ -555,7 +555,7 @@ func TestRemoveModule_Process_EmptyInput(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	result, err := module.Process(context.Background(), []map[string]interface{}{})
+	result, err := module.Process(context.Background(), []map[string]any{})
 	if err != nil {
 		t.Fatalf("Process() error: %v", err)
 	}
@@ -574,7 +574,7 @@ func TestRemoveModule_Process_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err = module.Process(ctx, []map[string]interface{}{{"id": 1}})
+	_, err = module.Process(ctx, []map[string]any{{"id": 1}})
 	if err == nil {
 		t.Error("expected context cancellation error, got nil")
 	}
@@ -587,7 +587,7 @@ func TestRemoveModule_Process_Deterministic(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{"id": 1, "temp": "remove-me", "secret": "key", "keep": "value"},
 		{"id": 2, "temp": "also-remove", "secret": "key2", "keep": "value2"},
 	}
@@ -595,9 +595,9 @@ func TestRemoveModule_Process_Deterministic(t *testing.T) {
 	// Run multiple times and verify same result
 	for i := 0; i < 5; i++ {
 		// Deep copy input for each run
-		inputCopy := make([]map[string]interface{}, len(input))
+		inputCopy := make([]map[string]any, len(input))
 		for j, rec := range input {
-			inputCopy[j] = make(map[string]interface{})
+			inputCopy[j] = make(map[string]any)
 			for k, v := range rec {
 				inputCopy[j][k] = v
 			}
@@ -635,8 +635,8 @@ func TestRemoveModule_Process_WithArrayIndex(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		input := []map[string]interface{}{
-			{"id": 1, "items": []interface{}{"first", "second", "third"}},
+		input := []map[string]any{
+			{"id": 1, "items": []any{"first", "second", "third"}},
 		}
 
 		result, err := module.Process(context.Background(), input)
@@ -644,7 +644,7 @@ func TestRemoveModule_Process_WithArrayIndex(t *testing.T) {
 			t.Fatalf("Process() error: %v", err)
 		}
 
-		items, ok := result[0]["items"].([]interface{})
+		items, ok := result[0]["items"].([]any)
 		if !ok {
 			t.Fatalf("items should be an array")
 		}

@@ -48,7 +48,7 @@ var ErrNotImplemented = errors.New("not implemented")
 //
 // # Record Format
 //
-// Process() receives and returns []map[string]interface{} where:
+// Process() receives and returns []map[string]any where:
 //   - Each map represents a single record/entity
 //   - Keys are field names (strings)
 //   - Values can be any JSON-serializable type
@@ -86,7 +86,7 @@ var ErrNotImplemented = errors.New("not implemented")
 //	    mappings map[string]string // source -> target field mappings
 //	}
 //
-//	func (f *FieldMappingFilter) Process(ctx context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
+//	func (f *FieldMappingFilter) Process(ctx context.Context, records []map[string]any) ([]map[string]any, error) {
 //	    // Respect context cancellation
 //	    select {
 //	    case <-ctx.Done():
@@ -95,9 +95,9 @@ var ErrNotImplemented = errors.New("not implemented")
 //	    }
 //
 //	    // Transform records
-//	    result := make([]map[string]interface{}, len(records))
+//	    result := make([]map[string]any, len(records))
 //	    for i, record := range records {
-//	        transformed := make(map[string]interface{})
+//	        transformed := make(map[string]any)
 //	        for sourceField, targetField := range f.mappings {
 //	            if value, exists := record[sourceField]; exists {
 //	                transformed[targetField] = value
@@ -120,7 +120,7 @@ type Module interface {
 	// The records parameter contains the input data to transform.
 	// Returns the transformed records (may be more, fewer, or the same count as input).
 	// Returns an error if transformation fails.
-	Process(ctx context.Context, records []map[string]interface{}) ([]map[string]interface{}, error)
+	Process(ctx context.Context, records []map[string]any) ([]map[string]any, error)
 }
 
 // Note: Condition module is now implemented in condition.go (Story 3.4)

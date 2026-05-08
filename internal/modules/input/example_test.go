@@ -16,7 +16,7 @@ import (
 func Example() {
 	// Mock HTTP server for demonstration
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		data := []map[string]interface{}{
+		data := []map[string]any{
 			{"id": 1, "name": "Alice", "email": "alice@example.com"},
 			{"id": 2, "name": "Bob", "email": "bob@example.com"},
 		}
@@ -61,7 +61,7 @@ type ExampleInputModule struct {
 	client *http.Client
 }
 
-func (m *ExampleInputModule) Fetch(ctx context.Context) ([]map[string]interface{}, error) {
+func (m *ExampleInputModule) Fetch(ctx context.Context) ([]map[string]any, error) {
 	// Respect context cancellation
 	select {
 	case <-ctx.Done():
@@ -87,7 +87,7 @@ func (m *ExampleInputModule) Fetch(ctx context.Context) ([]map[string]interface{
 	defer resp.Body.Close() //nolint:errcheck // Example code - error handling omitted for clarity
 
 	// Parse response
-	var records []map[string]interface{}
+	var records []map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&records); err != nil {
 		return nil, err
 	}

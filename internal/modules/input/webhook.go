@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -72,8 +73,18 @@ type rateLimiter struct {
 }
 
 // WebhookHandler is a callback function that processes webhook data.
-// It receives the parsed webhook payload and returns an error if processing fails.
-type WebhookHandler func(data []map[string]interface{}) error
+// It receives a context carrying a trace ID derived from the incoming request
+// (X-Request-Id header, W3C traceparent, or a freshly generated UUID v4),
+// the parsed payload, and returns an error if processing fails.
+type WebhookHandler func(ctx context.Context, data []map[string]any) error
+
+// queuedRequest pairs a webhook payload with the per-request context that
+// carries its trace ID, so workers can preserve correlation when handling
+// queued items asynchronously.
+type queuedRequest struct {
+	ctx  context.Context
+	data []map[string]any
+}
 
 // Webhook implements an HTTP server that receives webhook POST requests.
 // It supports HMAC-SHA256 signature validation and callback-based processing.
@@ -98,7 +109,7 @@ type Webhook struct {
 	// State management
 	mu         sync.RWMutex
 	running    bool
-	queue      chan []map[string]interface{}
+	queue      chan queuedRequest
 	workerStop chan struct{}
 	workerWG   sync.WaitGroup
 	limiter    *rateLimiter
@@ -304,7 +315,7 @@ func (l *rateLimiter) Stop() {
 // Use Start() with a callback handler instead.
 //
 // Returns ErrNotImplemented as webhooks use callback-based pattern.
-func (w *Webhook) Fetch(_ context.Context) ([]map[string]interface{}, error) {
+func (w *Webhook) Fetch(_ context.Context) ([]map[string]any, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -504,28 +515,35 @@ func (w *Webhook) createHandler(handler WebhookHandler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		startTime := time.Now()
 
-		if !w.checkMethodAndPath(rw, r) {
+		// Mint or extract a trace ID for this request before any logging so
+		// every subsequent log entry can be correlated.
+		reqCtx, traceID := logger.EnsureTraceID(
+			logger.WithTraceID(r.Context(), logger.TraceIDFromHTTPHeader(r.Header)),
+		)
+
+		if !w.checkMethodAndPath(rw, r, traceID) {
 			return
 		}
-		if !w.checkRateLimit(rw) {
+		if !w.checkRateLimit(rw, traceID) {
 			return
 		}
-		body, ok := w.readRequestBody(rw, r)
+		body, ok := w.readRequestBody(rw, r, traceID)
 		if !ok {
 			return
 		}
-		if !w.checkSignature(rw, r, body) {
+		if !w.checkSignature(rw, r, body, traceID) {
 			return
 		}
-		data, ok := w.parsePayloadAndLog(rw, body)
+		data, ok := w.parsePayloadAndLog(rw, body, traceID)
 		if !ok {
 			return
 		}
-		if !w.dispatchToHandler(rw, data, handler) {
+		if !w.dispatchToHandler(reqCtx, rw, data, handler, traceID) {
 			return
 		}
 
 		logger.Debug("webhook request processed",
+			slog.String(logger.TraceIDField, traceID),
 			"endpoint", w.endpoint,
 			"recordCount", len(data),
 			"duration", time.Since(startTime).String(),
@@ -535,14 +553,14 @@ func (w *Webhook) createHandler(handler WebhookHandler) http.Handler {
 }
 
 // checkMethodAndPath validates HTTP method (POST only) and URL path. Returns false if invalid (response already written).
-func (w *Webhook) checkMethodAndPath(rw http.ResponseWriter, r *http.Request) bool {
+func (w *Webhook) checkMethodAndPath(rw http.ResponseWriter, r *http.Request, traceID string) bool {
 	if r.Method != http.MethodPost {
-		logger.Warn("webhook received non-POST request", "method", r.Method, "endpoint", w.endpoint)
+		logger.Warn("webhook received non-POST request", slog.String(logger.TraceIDField, traceID), "method", r.Method, "endpoint", w.endpoint)
 		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
 		return false
 	}
 	if r.URL.Path != w.endpoint {
-		logger.Warn("webhook received request on wrong endpoint", "expected", w.endpoint, "received", r.URL.Path)
+		logger.Warn("webhook received request on wrong endpoint", slog.String(logger.TraceIDField, traceID), "expected", w.endpoint, "received", r.URL.Path)
 		http.Error(rw, "Not found", http.StatusNotFound)
 		return false
 	}
@@ -550,9 +568,9 @@ func (w *Webhook) checkMethodAndPath(rw http.ResponseWriter, r *http.Request) bo
 }
 
 // checkRateLimit applies rate limiting if configured. Returns false if rate limited (response already written).
-func (w *Webhook) checkRateLimit(rw http.ResponseWriter) bool {
+func (w *Webhook) checkRateLimit(rw http.ResponseWriter, traceID string) bool {
 	if w.limiter != nil && !w.limiter.Allow() {
-		logger.Warn("webhook rate limit exceeded", "endpoint", w.endpoint)
+		logger.Warn("webhook rate limit exceeded", slog.String(logger.TraceIDField, traceID), "endpoint", w.endpoint)
 		http.Error(rw, "Rate limit exceeded", http.StatusTooManyRequests)
 		return false
 	}
@@ -560,20 +578,20 @@ func (w *Webhook) checkRateLimit(rw http.ResponseWriter) bool {
 }
 
 // readRequestBody reads and returns the request body. Returns (nil, false) on error (response already written).
-func (w *Webhook) readRequestBody(rw http.ResponseWriter, r *http.Request) ([]byte, bool) {
+func (w *Webhook) readRequestBody(rw http.ResponseWriter, r *http.Request, traceID string) ([]byte, bool) {
 	defer func() {
 		if closeErr := r.Body.Close(); closeErr != nil {
-			logger.Error("failed to close request body", "endpoint", w.endpoint, "error", closeErr.Error())
+			logger.Error("failed to close request body", slog.String(logger.TraceIDField, traceID), "endpoint", w.endpoint, "error", closeErr.Error())
 		}
 	}()
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		logger.Error("failed to read webhook request body", "endpoint", w.endpoint, "error", err.Error())
+		logger.Error("failed to read webhook request body", slog.String(logger.TraceIDField, traceID), "endpoint", w.endpoint, "error", err.Error())
 		http.Error(rw, "Failed to read request body", http.StatusBadRequest)
 		return nil, false
 	}
 	if len(body) == 0 {
-		logger.Warn("webhook received empty body", "endpoint", w.endpoint)
+		logger.Warn("webhook received empty body", slog.String(logger.TraceIDField, traceID), "endpoint", w.endpoint)
 		http.Error(rw, "Request body is empty", http.StatusBadRequest)
 		return nil, false
 	}
@@ -581,12 +599,12 @@ func (w *Webhook) readRequestBody(rw http.ResponseWriter, r *http.Request) ([]by
 }
 
 // checkSignature validates HMAC signature if configured. Returns false if invalid (response already written).
-func (w *Webhook) checkSignature(rw http.ResponseWriter, r *http.Request, body []byte) bool {
+func (w *Webhook) checkSignature(rw http.ResponseWriter, r *http.Request, body []byte, traceID string) bool {
 	if w.signature == nil || w.signature.Type != "hmac-sha256" {
 		return true
 	}
 	if sigErr := w.validateSignature(r, body); sigErr != nil {
-		logger.Warn("webhook signature validation failed", "endpoint", w.endpoint, "error", sigErr.Error())
+		logger.Warn("webhook signature validation failed", slog.String(logger.TraceIDField, traceID), "endpoint", w.endpoint, "error", sigErr.Error())
 		http.Error(rw, "Invalid signature", http.StatusUnauthorized)
 		return false
 	}
@@ -594,10 +612,10 @@ func (w *Webhook) checkSignature(rw http.ResponseWriter, r *http.Request, body [
 }
 
 // parsePayloadAndLog parses the JSON body into records. Returns (nil, false) on error (response already written).
-func (w *Webhook) parsePayloadAndLog(rw http.ResponseWriter, body []byte) ([]map[string]interface{}, bool) {
+func (w *Webhook) parsePayloadAndLog(rw http.ResponseWriter, body []byte, traceID string) ([]map[string]any, bool) {
 	data, err := w.parsePayload(body)
 	if err != nil {
-		logger.Error("failed to parse webhook payload", "endpoint", w.endpoint, "error", err.Error(), "bodySize", len(body))
+		logger.Error("failed to parse webhook payload", slog.String(logger.TraceIDField, traceID), "endpoint", w.endpoint, "error", err.Error(), "bodySize", len(body))
 		http.Error(rw, "Invalid JSON payload", http.StatusBadRequest)
 		return nil, false
 	}
@@ -605,20 +623,20 @@ func (w *Webhook) parsePayloadAndLog(rw http.ResponseWriter, body []byte) ([]map
 }
 
 // dispatchToHandler invokes the handler or enqueues data. Returns false on error (response already written).
-func (w *Webhook) dispatchToHandler(rw http.ResponseWriter, data []map[string]interface{}, handler WebhookHandler) bool {
+func (w *Webhook) dispatchToHandler(ctx context.Context, rw http.ResponseWriter, data []map[string]any, handler WebhookHandler, traceID string) bool {
 	if handler == nil {
 		return true
 	}
 	if w.queue != nil {
-		if !w.enqueue(data) {
-			logger.Warn("webhook queue full", "endpoint", w.endpoint, "queueSize", w.queueSize)
+		if !w.enqueue(queuedRequest{ctx: ctx, data: data}) {
+			logger.Warn("webhook queue full", slog.String(logger.TraceIDField, traceID), "endpoint", w.endpoint, "queueSize", w.queueSize)
 			http.Error(rw, "Queue full", http.StatusTooManyRequests)
 			return false
 		}
 		return true
 	}
-	if err := handler(data); err != nil {
-		logger.Error("webhook handler returned error", "endpoint", w.endpoint, "error", err.Error(), "recordCount", len(data))
+	if err := handler(ctx, data); err != nil {
+		logger.Error("webhook handler returned error", slog.String(logger.TraceIDField, traceID), "endpoint", w.endpoint, "error", err.Error(), "recordCount", len(data))
 		http.Error(rw, "Internal server error", http.StatusInternalServerError)
 		return false
 	}
@@ -663,15 +681,15 @@ func (w *Webhook) validateSignature(r *http.Request, body []byte) error {
 }
 
 // parsePayload parses the JSON request body into records
-func (w *Webhook) parsePayload(body []byte) ([]map[string]interface{}, error) {
+func (w *Webhook) parsePayload(body []byte) ([]map[string]any, error) {
 	// Try parsing as array first
-	var arrayResult []map[string]interface{}
+	var arrayResult []map[string]any
 	if err := json.Unmarshal(body, &arrayResult); err == nil {
 		return arrayResult, nil
 	}
 
 	// Try parsing as object
-	var objectResult map[string]interface{}
+	var objectResult map[string]any
 	if err := json.Unmarshal(body, &objectResult); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidJSONPayload, err)
 	}
@@ -691,11 +709,11 @@ func (w *Webhook) parsePayload(body []byte) ([]map[string]interface{}, error) {
 	}
 
 	// Return single object as single-element array
-	return []map[string]interface{}{objectResult}, nil
+	return []map[string]any{objectResult}, nil
 }
 
 // extractDataFromField extracts array data from a specific field in the object
-func (w *Webhook) extractDataFromField(obj map[string]interface{}, field string) ([]map[string]interface{}, error) {
+func (w *Webhook) extractDataFromField(obj map[string]any, field string) ([]map[string]any, error) {
 	data, ok := obj[field]
 	if !ok {
 		return nil, fmt.Errorf("field '%s' not found in payload", field)
@@ -704,29 +722,29 @@ func (w *Webhook) extractDataFromField(obj map[string]interface{}, field string)
 	return w.convertToRecords(data)
 }
 
-// convertToRecords converts interface{} to []map[string]interface{}
-func (w *Webhook) convertToRecords(data interface{}) ([]map[string]interface{}, error) {
+// convertToRecords converts any to []map[string]any
+func (w *Webhook) convertToRecords(data any) ([]map[string]any, error) {
 	switch v := data.(type) {
-	case []interface{}:
-		records := make([]map[string]interface{}, 0, len(v))
+	case []any:
+		records := make([]map[string]any, 0, len(v))
 		for _, item := range v {
-			if record, ok := item.(map[string]interface{}); ok {
+			if record, ok := item.(map[string]any); ok {
 				records = append(records, record)
 			} else {
 				return nil, fmt.Errorf("%w: array contains non-object", ErrInvalidJSONPayload)
 			}
 		}
 		return records, nil
-	case []map[string]interface{}:
+	case []map[string]any:
 		return v, nil
 	default:
 		return nil, fmt.Errorf("expected array, got %T", data)
 	}
 }
 
-func (w *Webhook) enqueue(data []map[string]interface{}) bool {
+func (w *Webhook) enqueue(req queuedRequest) bool {
 	select {
-	case w.queue <- data:
+	case w.queue <- req:
 		return true
 	default:
 		return false
@@ -744,7 +762,7 @@ func (w *Webhook) startWorkers(handler WebhookHandler) {
 		w.mu.Unlock()
 		return
 	}
-	w.queue = make(chan []map[string]interface{}, w.queueSize)
+	w.queue = make(chan queuedRequest, w.queueSize)
 	w.workerStop = make(chan struct{})
 	queue := w.queue
 	workerStop := w.workerStop
@@ -761,15 +779,16 @@ func (w *Webhook) startWorkers(handler WebhookHandler) {
 			defer w.workerWG.Done()
 			for {
 				select {
-				case data, ok := <-queue:
+				case req, ok := <-queue:
 					if !ok {
 						return
 					}
-					if err := handler(data); err != nil {
+					if err := handler(req.ctx, req.data); err != nil {
 						logger.Error("webhook handler returned error",
+							slog.String(logger.TraceIDField, logger.TraceIDFrom(req.ctx)),
 							"endpoint", w.endpoint,
 							"error", err.Error(),
-							"recordCount", len(data),
+							"recordCount", len(req.data),
 						)
 					}
 				case <-workerStop:

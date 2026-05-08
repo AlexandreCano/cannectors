@@ -17,10 +17,10 @@ import (
 func Example() {
 	// Mock HTTP server for demonstration
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var records []map[string]interface{}
+		var records []map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&records) // Example code - error handling omitted for clarity
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{ // Example code - error handling omitted for clarity
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"status":  "success",
 			"message": fmt.Sprintf("Received %d records", len(records)),
 		})
@@ -34,7 +34,7 @@ func Example() {
 	}
 
 	// Records to send
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"userId": 1, "fullName": "Alice", "emailAddress": "alice@example.com"},
 		{"userId": 2, "fullName": "Bob", "emailAddress": "bob@example.com"},
 	}
@@ -64,7 +64,7 @@ type ExampleOutputModule struct {
 	client   *http.Client
 }
 
-func (m *ExampleOutputModule) Send(ctx context.Context, records []map[string]interface{}) (int, error) {
+func (m *ExampleOutputModule) Send(ctx context.Context, records []map[string]any) (int, error) {
 	// Respect context cancellation
 	select {
 	case <-ctx.Done():

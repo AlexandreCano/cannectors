@@ -14,7 +14,7 @@ import (
 // The raw map is kept for defaults resolution before serialization to Raw.
 type moduleBuilder struct {
 	mc     *connector.ModuleConfig
-	rawMap map[string]interface{}
+	rawMap map[string]any
 }
 
 // finalize serializes the raw map to ModuleConfig.Raw.
@@ -41,7 +41,7 @@ func (b *moduleBuilder) finalize() error {
 //	}
 //
 // Note: version is optional.
-func ConvertToPipeline(data map[string]interface{}) (*connector.Pipeline, error) {
+func ConvertToPipeline(data map[string]any) (*connector.Pipeline, error) {
 	if data == nil {
 		return nil, fmt.Errorf("configuration data is nil")
 	}
@@ -78,7 +78,7 @@ func newPipeline() *connector.Pipeline {
 }
 
 // extractPipelineMetadata extracts name, version, description, and id.
-func extractPipelineMetadata(p *connector.Pipeline, data map[string]interface{}) error {
+func extractPipelineMetadata(p *connector.Pipeline, data map[string]any) error {
 	name, ok := data["name"].(string)
 	if !ok {
 		return fmt.Errorf("missing required field 'name'")
@@ -103,11 +103,11 @@ func extractPipelineMetadata(p *connector.Pipeline, data map[string]interface{})
 
 // extractModules extracts input, filters, and output modules.
 // Returns all module builders for later defaults resolution.
-func extractModules(p *connector.Pipeline, data map[string]interface{}) ([]*moduleBuilder, error) {
+func extractModules(p *connector.Pipeline, data map[string]any) ([]*moduleBuilder, error) {
 	var builders []*moduleBuilder
 
 	// Extract input
-	inputData, ok := data["input"].(map[string]interface{})
+	inputData, ok := data["input"].(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("missing or invalid 'input' section")
 	}
@@ -119,9 +119,9 @@ func extractModules(p *connector.Pipeline, data map[string]interface{}) ([]*modu
 	builders = append(builders, inputBuilder)
 
 	// Extract filters
-	if filtersData, okFilters := data["filters"].([]interface{}); okFilters {
+	if filtersData, okFilters := data["filters"].([]any); okFilters {
 		for i, filterData := range filtersData {
-			filterMap, isMap := filterData.(map[string]interface{})
+			filterMap, isMap := filterData.(map[string]any)
 			if !isMap {
 				return nil, fmt.Errorf("invalid filter at index %d", i)
 			}
@@ -139,7 +139,7 @@ func extractModules(p *connector.Pipeline, data map[string]interface{}) ([]*modu
 	}
 
 	// Extract output
-	outputData, ok := data["output"].(map[string]interface{})
+	outputData, ok := data["output"].(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("missing or invalid 'output' section")
 	}
@@ -154,21 +154,21 @@ func extractModules(p *connector.Pipeline, data map[string]interface{}) ([]*modu
 }
 
 // extractDefaults extracts defaults (optional).
-func extractDefaults(p *connector.Pipeline, data map[string]interface{}) {
-	if defaults, ok := data["defaults"].(map[string]interface{}); ok {
+func extractDefaults(p *connector.Pipeline, data map[string]any) {
+	if defaults, ok := data["defaults"].(map[string]any); ok {
 		p.Defaults = convertModuleDefaults(defaults)
 	}
 }
 
 // newModuleBuilder creates a module builder from raw config data.
 // All fields except "type" are stored in rawMap for later serialization.
-func newModuleBuilder(data map[string]interface{}) (*moduleBuilder, error) {
+func newModuleBuilder(data map[string]any) (*moduleBuilder, error) {
 	moduleType, ok := data["type"].(string)
 	if !ok {
 		return nil, fmt.Errorf("missing required field 'type'")
 	}
 
-	rawMap := make(map[string]interface{}, len(data)-1)
+	rawMap := make(map[string]any, len(data)-1)
 	for key, value := range data {
 		if key != "type" {
 			rawMap[key] = value
@@ -182,14 +182,14 @@ func newModuleBuilder(data map[string]interface{}) (*moduleBuilder, error) {
 }
 
 // convertModuleDefaults converts connector.defaults to ModuleDefaults.
-func convertModuleDefaults(data map[string]interface{}) *connector.ModuleDefaults {
+func convertModuleDefaults(data map[string]any) *connector.ModuleDefaults {
 	d := &connector.ModuleDefaults{}
 	d.OnError, d.TimeoutMs, d.Retry = extractErrorHandlingFields(data)
 	return d
 }
 
 // extractErrorHandlingFields extracts the common onError/timeoutMs/retry fields from a map.
-func extractErrorHandlingFields(data map[string]interface{}) (string, int, *connector.RetryConfig) {
+func extractErrorHandlingFields(data map[string]any) (string, int, *connector.RetryConfig) {
 	var onError string
 	var timeoutMs int
 	var retry *connector.RetryConfig
@@ -200,14 +200,14 @@ func extractErrorHandlingFields(data map[string]interface{}) (string, int, *conn
 	if v, ok := getIntFromMap(data, "timeoutMs"); ok && v > 0 {
 		timeoutMs = v
 	}
-	if r, ok := data["retry"].(map[string]interface{}); ok && len(r) > 0 {
+	if r, ok := data["retry"].(map[string]any); ok && len(r) > 0 {
 		retry = parseRetryConfigFromMap(r)
 	}
 	return onError, timeoutMs, retry
 }
 
 // parseRetryConfigFromMap parses a retry config from a raw map into *connector.RetryConfig.
-func parseRetryConfigFromMap(m map[string]interface{}) *connector.RetryConfig {
+func parseRetryConfigFromMap(m map[string]any) *connector.RetryConfig {
 	rc := &connector.RetryConfig{}
 	if v, ok := getIntFromMap(m, "maxAttempts"); ok {
 		rc.MaxAttempts = v
@@ -233,7 +233,7 @@ func parseRetryConfigFromMap(m map[string]interface{}) *connector.RetryConfig {
 	return rc
 }
 
-func getIntFromMap(m map[string]interface{}, key string) (int, bool) {
+func getIntFromMap(m map[string]any, key string) (int, bool) {
 	if v, ok := m[key]; !ok {
 		return 0, false
 	} else if f, ok := v.(float64); ok {
@@ -244,7 +244,7 @@ func getIntFromMap(m map[string]interface{}, key string) (int, bool) {
 	return 0, false
 }
 
-func getFloatFromMap(m map[string]interface{}, key string) (float64, bool) {
+func getFloatFromMap(m map[string]any, key string) (float64, bool) {
 	if v, ok := m[key]; !ok {
 		return 0, false
 	} else if f, ok := v.(float64); ok {
@@ -255,12 +255,12 @@ func getFloatFromMap(m map[string]interface{}, key string) (float64, bool) {
 	return 0, false
 }
 
-func getIntSliceFromMap(m map[string]interface{}, key string) ([]int, bool) {
+func getIntSliceFromMap(m map[string]any, key string) ([]int, bool) {
 	v, ok := m[key]
 	if !ok {
 		return nil, false
 	}
-	slice, ok := v.([]interface{})
+	slice, ok := v.([]any)
 	if !ok {
 		return nil, false
 	}
@@ -289,7 +289,7 @@ func applyDefaults(builders []*moduleBuilder, defaults *connector.ModuleDefaults
 // resolveOnErrorInheritance applies inheritance for the onError field with
 // precedence module > defaults. Distinct from errhandling.ParseOnErrorStrategy,
 // which parses a user-provided string into a typed strategy.
-func resolveOnErrorInheritance(m map[string]interface{}, defaults *connector.ModuleDefaults) {
+func resolveOnErrorInheritance(m map[string]any, defaults *connector.ModuleDefaults) {
 	if v, ok := m["onError"].(string); ok && v != "" {
 		return
 	}
@@ -299,7 +299,7 @@ func resolveOnErrorInheritance(m map[string]interface{}, defaults *connector.Mod
 }
 
 // resolveTimeout resolves timeoutMs with precedence: module > defaults.
-func resolveTimeout(m map[string]interface{}, defaults *connector.ModuleDefaults) {
+func resolveTimeout(m map[string]any, defaults *connector.ModuleDefaults) {
 	if v, ok := getIntFromMap(m, "timeoutMs"); ok && v > 0 {
 		return
 	}
@@ -310,8 +310,8 @@ func resolveTimeout(m map[string]interface{}, defaults *connector.ModuleDefaults
 
 // resolveRetry resolves retry config with granular merge.
 // Base config is resolved from defaults, then module fields override individually.
-func resolveRetry(m map[string]interface{}, defaults *connector.ModuleDefaults) {
-	moduleRetry, hasModule := m["retry"].(map[string]interface{})
+func resolveRetry(m map[string]any, defaults *connector.ModuleDefaults) {
+	moduleRetry, hasModule := m["retry"].(map[string]any)
 
 	var base *connector.RetryConfig
 	if defaults != nil && defaults.Retry != nil {
@@ -338,8 +338,8 @@ func resolveRetry(m map[string]interface{}, defaults *connector.ModuleDefaults) 
 }
 
 // retryConfigToMap converts a *connector.RetryConfig to a map for merging.
-func retryConfigToMap(rc *connector.RetryConfig) map[string]interface{} {
-	m := make(map[string]interface{})
+func retryConfigToMap(rc *connector.RetryConfig) map[string]any {
+	m := make(map[string]any)
 	if rc.MaxAttempts != 0 {
 		m["maxAttempts"] = rc.MaxAttempts
 	}
@@ -353,7 +353,7 @@ func retryConfigToMap(rc *connector.RetryConfig) map[string]interface{} {
 		m["maxDelayMs"] = rc.MaxDelayMs
 	}
 	if len(rc.RetryableStatusCodes) > 0 {
-		codes := make([]interface{}, len(rc.RetryableStatusCodes))
+		codes := make([]any, len(rc.RetryableStatusCodes))
 		for i, c := range rc.RetryableStatusCodes {
 			codes[i] = c
 		}

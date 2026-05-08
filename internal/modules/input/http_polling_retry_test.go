@@ -29,15 +29,15 @@ func TestHTTPPolling_Fetch_HonorsRetryAfter(t *testing.T) {
 
 	cfg := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": srv.URL,
-			"retry": map[string]interface{}{
+			"retry": map[string]any{
 				"maxAttempts":          float64(3),
 				"delayMs":              float64(500),
 				"backoffMultiplier":    float64(2),
 				"maxDelayMs":           float64(5000),
 				"useRetryAfterHeader":  true,
-				"retryableStatusCodes": []interface{}{float64(429)},
+				"retryableStatusCodes": []any{float64(429)},
 			},
 		}),
 	}
@@ -80,14 +80,14 @@ func TestHTTPPolling_Fetch_RetryHintFromBody(t *testing.T) {
 
 	cfg := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": srv.URL,
-			"retry": map[string]interface{}{
+			"retry": map[string]any{
 				"maxAttempts":          float64(5),
 				"delayMs":              float64(1),
 				"backoffMultiplier":    float64(1),
 				"maxDelayMs":           float64(5),
-				"retryableStatusCodes": []interface{}{float64(503)},
+				"retryableStatusCodes": []any{float64(503)},
 				"retryHintFromBody":    "body.fatal != true",
 			},
 		}),

@@ -6,7 +6,7 @@ import (
 )
 
 func TestExtractID_SimpleField(t *testing.T) {
-	record := map[string]interface{}{
+	record := map[string]any{
 		"id":   "12345",
 		"name": "test",
 	}
@@ -21,7 +21,7 @@ func TestExtractID_SimpleField(t *testing.T) {
 }
 
 func TestExtractID_NumericID(t *testing.T) {
-	record := map[string]interface{}{
+	record := map[string]any{
 		"id": float64(12345), // JSON numbers are float64
 	}
 
@@ -35,7 +35,7 @@ func TestExtractID_NumericID(t *testing.T) {
 }
 
 func TestExtractID_IntegerID(t *testing.T) {
-	record := map[string]interface{}{
+	record := map[string]any{
 		"id": int(67890),
 	}
 
@@ -49,8 +49,8 @@ func TestExtractID_IntegerID(t *testing.T) {
 }
 
 func TestExtractID_NestedField(t *testing.T) {
-	record := map[string]interface{}{
-		"data": map[string]interface{}{
+	record := map[string]any{
+		"data": map[string]any{
 			"id": "nested-123",
 		},
 	}
@@ -65,10 +65,10 @@ func TestExtractID_NestedField(t *testing.T) {
 }
 
 func TestExtractID_DeeplyNestedField(t *testing.T) {
-	record := map[string]interface{}{
-		"response": map[string]interface{}{
-			"data": map[string]interface{}{
-				"record": map[string]interface{}{
+	record := map[string]any{
+		"response": map[string]any{
+			"data": map[string]any{
+				"record": map[string]any{
 					"cursor": "deep-cursor-456",
 				},
 			},
@@ -85,7 +85,7 @@ func TestExtractID_DeeplyNestedField(t *testing.T) {
 }
 
 func TestExtractID_MissingField(t *testing.T) {
-	record := map[string]interface{}{
+	record := map[string]any{
 		"name": "test",
 	}
 
@@ -96,8 +96,8 @@ func TestExtractID_MissingField(t *testing.T) {
 }
 
 func TestExtractID_MissingNestedField(t *testing.T) {
-	record := map[string]interface{}{
-		"data": map[string]interface{}{
+	record := map[string]any{
+		"data": map[string]any{
 			"name": "test",
 		},
 	}
@@ -109,7 +109,7 @@ func TestExtractID_MissingNestedField(t *testing.T) {
 }
 
 func TestExtractID_InvalidIntermediateType(t *testing.T) {
-	record := map[string]interface{}{
+	record := map[string]any{
 		"data": "not a map",
 	}
 
@@ -120,7 +120,7 @@ func TestExtractID_InvalidIntermediateType(t *testing.T) {
 }
 
 func TestExtractID_EmptyFieldPath(t *testing.T) {
-	record := map[string]interface{}{
+	record := map[string]any{
 		"id": "12345",
 	}
 
@@ -139,7 +139,7 @@ func TestExtractID_NilRecord(t *testing.T) {
 
 func TestExtractLastID_StringIDs(t *testing.T) {
 	// Records in reception order - last record has "bbb"
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": "aaa"},
 		{"id": "ccc"},
 		{"id": "bbb"},
@@ -157,7 +157,7 @@ func TestExtractLastID_StringIDs(t *testing.T) {
 
 func TestExtractLastID_NumericIDs(t *testing.T) {
 	// Records in reception order - last record has 200
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": float64(100)},
 		{"id": float64(300)},
 		{"id": float64(200)},
@@ -174,7 +174,7 @@ func TestExtractLastID_NumericIDs(t *testing.T) {
 }
 
 func TestExtractLastID_SingleRecord(t *testing.T) {
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": "only-one"},
 	}
 
@@ -189,10 +189,10 @@ func TestExtractLastID_SingleRecord(t *testing.T) {
 
 func TestExtractLastID_NestedField(t *testing.T) {
 	// Records in reception order - last record has "002"
-	records := []map[string]interface{}{
-		{"data": map[string]interface{}{"id": "001"}},
-		{"data": map[string]interface{}{"id": "003"}},
-		{"data": map[string]interface{}{"id": "002"}},
+	records := []map[string]any{
+		{"data": map[string]any{"id": "001"}},
+		{"data": map[string]any{"id": "003"}},
+		{"data": map[string]any{"id": "002"}},
 	}
 
 	lastID, err := ExtractLastID(records, "data.id")
@@ -206,7 +206,7 @@ func TestExtractLastID_NestedField(t *testing.T) {
 }
 
 func TestExtractLastID_EmptyRecords(t *testing.T) {
-	records := []map[string]interface{}{}
+	records := []map[string]any{}
 
 	_, err := ExtractLastID(records, "id")
 	if err == nil {
@@ -216,7 +216,7 @@ func TestExtractLastID_EmptyRecords(t *testing.T) {
 
 func TestExtractLastID_LastRecordMissingID(t *testing.T) {
 	// Last record doesn't have the ID field
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": "100"},
 		{"id": "200"},
 		{"name": "no-id"}, // Last record missing ID
@@ -231,7 +231,7 @@ func TestExtractLastID_LastRecordMissingID(t *testing.T) {
 func TestExtractLastID_PreservesReceptionOrder(t *testing.T) {
 	// Simulate API response where records come in chronological order
 	// The last record is the most recent one
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": "event-001", "timestamp": "2026-01-26T10:00:00Z"},
 		{"id": "event-002", "timestamp": "2026-01-26T10:01:00Z"},
 		{"id": "event-003", "timestamp": "2026-01-26T10:02:00Z"},

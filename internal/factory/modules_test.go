@@ -13,7 +13,7 @@ import (
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
-func mustJSON(v interface{}) json.RawMessage {
+func mustJSON(v any) json.RawMessage {
 	b, err := json.Marshal(v)
 	if err != nil {
 		panic(err)
@@ -34,7 +34,7 @@ func TestCreateInputModule_Nil(t *testing.T) {
 func TestCreateInputModule_Registered(t *testing.T) {
 	cfg := &connector.ModuleConfig{
 		Type: "httpPolling",
-		Raw:  mustJSON(map[string]interface{}{"endpoint": "https://example.com/api"}),
+		Raw:  mustJSON(map[string]any{"endpoint": "https://example.com/api"}),
 	}
 
 	got, err := CreateInputModule(cfg)
@@ -49,7 +49,7 @@ func TestCreateInputModule_Registered(t *testing.T) {
 func TestCreateInputModule_Unknown(t *testing.T) {
 	cfg := &connector.ModuleConfig{
 		Type: "unknownType",
-		Raw:  mustJSON(map[string]interface{}{"endpoint": "https://test.com"}),
+		Raw:  mustJSON(map[string]any{"endpoint": "https://test.com"}),
 	}
 
 	got, err := CreateInputModule(cfg)
@@ -75,9 +75,9 @@ func TestCreateFilterModules_Mapping(t *testing.T) {
 	cfgs := []connector.ModuleConfig{
 		{
 			Type: "mapping",
-			Raw: mustJSON(map[string]interface{}{
-				"mappings": []interface{}{
-					map[string]interface{}{"source": "a", "target": "b"},
+			Raw: mustJSON(map[string]any{
+				"mappings": []any{
+					map[string]any{"source": "a", "target": "b"},
 				},
 			}),
 		},
@@ -94,7 +94,7 @@ func TestCreateFilterModules_Mapping(t *testing.T) {
 
 func TestCreateFilterModules_Unknown(t *testing.T) {
 	cfgs := []connector.ModuleConfig{
-		{Type: "unknownFilter", Raw: mustJSON(map[string]interface{}{})},
+		{Type: "unknownFilter", Raw: mustJSON(map[string]any{})},
 	}
 
 	got, err := CreateFilterModules(cfgs)
@@ -119,7 +119,7 @@ func TestCreateOutputModule_Nil(t *testing.T) {
 func TestCreateOutputModule_Registered(t *testing.T) {
 	cfg := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": "https://example.com/api",
 			"method":   "POST",
 		}),
@@ -137,7 +137,7 @@ func TestCreateOutputModule_Registered(t *testing.T) {
 func TestCreateOutputModule_Unknown(t *testing.T) {
 	cfg := &connector.ModuleConfig{
 		Type: "unknownOutput",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": "https://test.com",
 			"method":   "PUT",
 		}),
@@ -175,7 +175,7 @@ func TestCreateInputModule_CustomRegistered(t *testing.T) {
 
 	cfg := &connector.ModuleConfig{
 		Type: "customInput",
-		Raw:  mustJSON(map[string]interface{}{}),
+		Raw:  mustJSON(map[string]any{}),
 	}
 
 	got, err := CreateInputModule(cfg)
@@ -203,7 +203,7 @@ func TestCreateInputModule_ErrorReturnsError(t *testing.T) {
 	// We'll use httpPolling with invalid config to trigger the error path
 	cfg := &connector.ModuleConfig{
 		Type: "httpPolling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			// Missing required endpoint or invalid config that causes NewHTTPPollingFromConfig to error
 			"invalid": "config",
 		}),
@@ -246,7 +246,7 @@ func TestCreateInputModule_ConstructorError(t *testing.T) {
 
 	cfg := &connector.ModuleConfig{
 		Type: "errorInput",
-		Raw:  mustJSON(map[string]interface{}{}),
+		Raw:  mustJSON(map[string]any{}),
 	}
 
 	got, err := CreateInputModule(cfg)
@@ -268,7 +268,7 @@ type stubFilter struct {
 	called bool
 }
 
-func (s *stubFilter) Process(_ context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (s *stubFilter) Process(_ context.Context, records []map[string]any) ([]map[string]any, error) {
 	s.called = true
 	return records, nil
 }
@@ -288,10 +288,10 @@ func TestCondition_NestedThen_ResolvesCustomRegisteredFilter(t *testing.T) {
 
 	cfg := connector.ModuleConfig{
 		Type: "condition",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"expression": "true",
-			"then": []map[string]interface{}{
-				{"type": customType, "config": map[string]interface{}{}},
+			"then": []map[string]any{
+				{"type": customType, "config": map[string]any{}},
 			},
 		}),
 	}
@@ -304,7 +304,7 @@ func TestCondition_NestedThen_ResolvesCustomRegisteredFilter(t *testing.T) {
 		t.Fatalf("expected 1 condition module, got %d", len(mods))
 	}
 
-	if _, err := mods[0].Process(context.Background(), []map[string]interface{}{{"x": 1}}); err != nil {
+	if _, err := mods[0].Process(context.Background(), []map[string]any{{"x": 1}}); err != nil {
 		t.Fatalf("Process error: %v", err)
 	}
 	if !stub.called {

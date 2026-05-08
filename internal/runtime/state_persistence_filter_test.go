@@ -17,7 +17,7 @@ import (
 // works correctly when filters rename or modify the ID field.
 // The ID should be extracted from raw records (before filters), not filtered records.
 
-func mustJSON(v interface{}) json.RawMessage {
+func mustJSON(v any) json.RawMessage {
 	b, err := json.Marshal(v)
 	if err != nil {
 		panic(err)
@@ -32,7 +32,7 @@ func TestExecutor_StatePersistence_ID_WithFilterRenaming(t *testing.T) {
 	// Create test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "10", "name": "Record 10"},
 			{"id": "20", "name": "Record 20"},
 		}
@@ -44,10 +44,10 @@ func TestExecutor_StatePersistence_ID_WithFilterRenaming(t *testing.T) {
 	// ID field is "id" in the raw API response
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
-			"statePersistence": map[string]interface{}{
-				"id": map[string]interface{}{
+			"statePersistence": map[string]any{
+				"id": map[string]any{
 					"enabled":    true,
 					"field":      "id", // Field path matches API response structure
 					"queryParam": "after_id",
@@ -66,8 +66,8 @@ func TestExecutor_StatePersistence_ID_WithFilterRenaming(t *testing.T) {
 	// This would break ID extraction if we used filteredRecords instead of rawRecords
 	mappingConfig := &connector.ModuleConfig{
 		Type: "mapping",
-		Raw: mustJSON(map[string]interface{}{
-			"mappings": []map[string]interface{}{
+		Raw: mustJSON(map[string]any{
+			"mappings": []map[string]any{
 				{
 					"source": "id",
 					"target": "transactionId", // Rename id to transactionId
@@ -152,7 +152,7 @@ func TestExecutor_StatePersistence_ID_WithFilterRemoving(t *testing.T) {
 	// Create test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "100", "name": "Record 100", "status": "active"},
 			{"id": "200", "name": "Record 200", "status": "active"},
 		}
@@ -163,10 +163,10 @@ func TestExecutor_StatePersistence_ID_WithFilterRemoving(t *testing.T) {
 	// Create HTTP polling input with ID persistence
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
-			"statePersistence": map[string]interface{}{
-				"id": map[string]interface{}{
+			"statePersistence": map[string]any{
+				"id": map[string]any{
 					"enabled":    true,
 					"field":      "id",
 					"queryParam": "after_id",
@@ -185,8 +185,8 @@ func TestExecutor_StatePersistence_ID_WithFilterRemoving(t *testing.T) {
 	// (In-place mapping preserves all fields, so we must explicitly delete unwanted ones)
 	mappingConfig := &connector.ModuleConfig{
 		Type: "mapping",
-		Raw: mustJSON(map[string]interface{}{
-			"mappings": []map[string]interface{}{
+		Raw: mustJSON(map[string]any{
+			"mappings": []map[string]any{
 				{
 					// Omit "source" = delete field
 					"target": "id", // Delete the id field

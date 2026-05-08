@@ -114,7 +114,7 @@ type HTTPCallError struct {
 	Endpoint    string
 	StatusCode  int
 	KeyValue    string
-	Details     map[string]interface{}
+	Details     map[string]any
 }
 
 func (e *HTTPCallError) Error() string {
@@ -133,8 +133,8 @@ func (e *HTTPCallError) ErrorRecordIndex() int { return e.RecordIndex }
 // ErrorDetails implements errhandling.ModuleError. Returns a copy of the
 // existing Details enriched with endpoint / status code / key value when
 // available.
-func (e *HTTPCallError) ErrorDetails() map[string]interface{} {
-	d := make(map[string]interface{}, len(e.Details)+3)
+func (e *HTTPCallError) ErrorDetails() map[string]any {
+	d := make(map[string]any, len(e.Details)+3)
 	for k, v := range e.Details {
 		d[k] = v
 	}
@@ -161,7 +161,7 @@ func newHTTPCallError(code, message string, recordIdx int, endpoint string, stat
 		Endpoint:    sanitizedEndpoint,
 		StatusCode:  statusCode,
 		KeyValue:    keyValue,
-		Details:     make(map[string]interface{}),
+		Details:     make(map[string]any),
 	}
 }
 
@@ -239,7 +239,7 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 	}
 
 	logger.Debug("http_call module initialized",
-		slog.String("endpoint", config.Endpoint),
+		slog.String("endpoint", httpclient.SanitizeURL(config.Endpoint)),
 		slog.String("method", method),
 		slog.Int("keys_count", len(config.Keys)),
 		slog.String("merge_strategy", mergeStrategy),
@@ -276,9 +276,9 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 
 // Process enriches each input record by performing an HTTP call and merging the response data.
 // Returns the records with merged enrichment data according to the configured merge strategy.
-func (m *HTTPCallModule) Process(ctx context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (m *HTTPCallModule) Process(ctx context.Context, records []map[string]any) ([]map[string]any, error) {
 	if records == nil {
-		return []map[string]interface{}{}, nil
+		return []map[string]any{}, nil
 	}
 
 	startTime := time.Now()
@@ -290,7 +290,7 @@ func (m *HTTPCallModule) Process(ctx context.Context, records []map[string]inter
 		slog.String("on_error", string(m.onError)),
 	)
 
-	result := make([]map[string]interface{}, 0, len(records))
+	result := make([]map[string]any, 0, len(records))
 	skippedCount := 0
 	errorCount := 0
 	cacheHits := 0
@@ -364,7 +364,7 @@ func (m *HTTPCallModule) Process(ctx context.Context, records []map[string]inter
 
 // processRecord makes an HTTP call for a single record and enriches it with the response data.
 // Returns the enriched record, whether it was a cache hit, and any error.
-func (m *HTTPCallModule) processRecord(ctx context.Context, record map[string]interface{}, recordIdx int) (map[string]interface{}, bool, error) {
+func (m *HTTPCallModule) processRecord(ctx context.Context, record map[string]any, recordIdx int) (map[string]any, bool, error) {
 	// Extract key values from record (may be empty for POST/PUT with template-only mode)
 	var keyValues map[string]string
 	var err error
@@ -378,7 +378,7 @@ func (m *HTTPCallModule) processRecord(ctx context.Context, record map[string]in
 	// Check cache first
 	cacheKey := m.buildCacheKey(keyValues, record)
 	if cachedData, found := m.cache.Get(cacheKey); found {
-		responseData, ok := cachedData.(map[string]interface{})
+		responseData, ok := cachedData.(map[string]any)
 		if ok {
 			logger.Debug("http_call cache hit",
 				slog.String("module_type", "http_call"),
@@ -414,7 +414,7 @@ func (m *HTTPCallModule) processRecord(ctx context.Context, record map[string]in
 }
 
 // extractKeyValues extracts key values from a record using all configured key definitions.
-func (m *HTTPCallModule) extractKeyValues(record map[string]interface{}, recordIdx int) (map[string]string, error) {
+func (m *HTTPCallModule) extractKeyValues(record map[string]any, recordIdx int) (map[string]string, error) {
 	result := make(map[string]string, len(m.keys))
 	for _, k := range m.keys {
 		value, found := recordpath.Get(record, k.Field)
@@ -458,7 +458,7 @@ func (m *HTTPCallModule) extractKeyValues(record map[string]interface{}, recordI
 //   - A dot notation path: "customerId" or "user.profile.id" (extracts value from record)
 //
 // If cacheKey is not configured, uses default: endpoint + "::" + joined key values (in config order)
-func (m *HTTPCallModule) buildCacheKey(keyValues map[string]string, record map[string]interface{}) string {
+func (m *HTTPCallModule) buildCacheKey(keyValues map[string]string, record map[string]any) string {
 	if m.cacheKey != "" {
 		if value, found := recordpath.Get(record, m.cacheKey); found {
 			return fmt.Sprintf("%v", value)
@@ -482,7 +482,7 @@ func (m *HTTPCallModule) compositeKeyString(keyValues map[string]string) string 
 }
 
 // fetchResponseData fetches data from the external API for the given key values and record.
-func (m *HTTPCallModule) fetchResponseData(ctx context.Context, keyValues map[string]string, recordIdx int, record map[string]interface{}) (map[string]interface{}, error) {
+func (m *HTTPCallModule) fetchResponseData(ctx context.Context, keyValues map[string]string, recordIdx int, record map[string]any) (map[string]any, error) {
 	// Build and execute HTTP request
 	body, statusCode, err := m.executeHTTPRequest(ctx, keyValues, recordIdx, record)
 	if err != nil {
@@ -496,7 +496,7 @@ func (m *HTTPCallModule) fetchResponseData(ctx context.Context, keyValues map[st
 // executeHTTPRequest builds the HTTP request, executes it with retry via
 // httpclient.DoWithRetry, and returns the response body and status code.
 // Story 15.5 introduces retry support (previously absent from this filter).
-func (m *HTTPCallModule) executeHTTPRequest(ctx context.Context, keyValues map[string]string, recordIdx int, record map[string]interface{}) ([]byte, int, error) {
+func (m *HTTPCallModule) executeHTTPRequest(ctx context.Context, keyValues map[string]string, recordIdx int, record map[string]any) ([]byte, int, error) {
 	requestURL, err := m.buildRequestURL(keyValues, record)
 	if err != nil {
 		return nil, 0, newHTTPCallError(
@@ -516,7 +516,7 @@ func (m *HTTPCallModule) executeHTTPRequest(ctx context.Context, keyValues map[s
 			if retryErr != nil && nextDelay > 0 {
 				logger.Info("retrying http_call request",
 					slog.String("module_type", "http_call"),
-					slog.String("endpoint", m.endpoint),
+					slog.String("endpoint", httpclient.SanitizeURL(m.endpoint)),
 					slog.Int("attempt", attempt+1),
 					slog.Int("max_attempts", m.retry.MaxAttempts+1),
 					slog.Duration("next_delay", nextDelay),
@@ -578,7 +578,7 @@ func (m *HTTPCallModule) executeHTTPRequest(ctx context.Context, keyValues map[s
 }
 
 // buildHTTPRequest creates and configures an HTTP request with headers and authentication.
-func (m *HTTPCallModule) buildHTTPRequest(ctx context.Context, requestURL string, keyValues map[string]string, recordIdx int, record map[string]interface{}) (*http.Request, error) {
+func (m *HTTPCallModule) buildHTTPRequest(ctx context.Context, requestURL string, keyValues map[string]string, recordIdx int, record map[string]any) (*http.Request, error) {
 	// Build request body for POST/PUT
 	var bodyReader io.Reader
 	if m.method == http.MethodPost || m.method == http.MethodPut {
@@ -644,9 +644,9 @@ func (m *HTTPCallModule) buildHTTPRequest(ctx context.Context, requestURL string
 }
 
 // parseResponseData parses the JSON response and extracts the data field if configured.
-func (m *HTTPCallModule) parseResponseData(body []byte, statusCode int, recordIdx int) (map[string]interface{}, error) {
+func (m *HTTPCallModule) parseResponseData(body []byte, statusCode int, recordIdx int) (map[string]any, error) {
 	// Parse JSON response
-	var responseData map[string]interface{}
+	var responseData map[string]any
 	if err := json.Unmarshal(body, &responseData); err != nil {
 		return nil, newHTTPCallError(
 			ErrCodeHTTPCallJSONParse,
@@ -665,24 +665,24 @@ func (m *HTTPCallModule) parseResponseData(body []byte, statusCode int, recordId
 
 // extractDataField extracts the configured data field from the response.
 // Returns an empty map if the field is not found or invalid.
-func (m *HTTPCallModule) extractDataField(responseData map[string]interface{}, recordIdx int) map[string]interface{} {
+func (m *HTTPCallModule) extractDataField(responseData map[string]any, recordIdx int) map[string]any {
 	data, ok := responseData[m.dataField]
 	if !ok {
 		logger.Warn("http_call dataField not found or invalid",
 			slog.String("data_field", m.dataField),
 			slog.Int("record_index", recordIdx),
 		)
-		return make(map[string]interface{})
+		return make(map[string]any)
 	}
 
 	// If dataField points to a map, return it
-	if dataMap, ok := data.(map[string]interface{}); ok {
+	if dataMap, ok := data.(map[string]any); ok {
 		return dataMap
 	}
 
 	// If dataField points to an array with single element, use that
-	if dataArr, ok := data.([]interface{}); ok && len(dataArr) == 1 {
-		if dataMap, ok := dataArr[0].(map[string]interface{}); ok {
+	if dataArr, ok := data.([]any); ok && len(dataArr) == 1 {
+		if dataMap, ok := dataArr[0].(map[string]any); ok {
 			return dataMap
 		}
 	}
@@ -692,11 +692,11 @@ func (m *HTTPCallModule) extractDataField(responseData map[string]interface{}, r
 		slog.String("data_field", m.dataField),
 		slog.Int("record_index", recordIdx),
 	)
-	return make(map[string]interface{})
+	return make(map[string]any)
 }
 
 // buildRequestURL constructs the HTTP request URL based on the key configurations and template evaluation.
-func (m *HTTPCallModule) buildRequestURL(keyValues map[string]string, record map[string]interface{}) (string, error) {
+func (m *HTTPCallModule) buildRequestURL(keyValues map[string]string, record map[string]any) (string, error) {
 	endpoint := m.endpoint
 
 	// Evaluate template variables in endpoint ({{record.field}} syntax)

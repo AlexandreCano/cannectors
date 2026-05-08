@@ -12,22 +12,22 @@ type fakeModuleError struct {
 	code        string
 	module      string
 	recordIndex int
-	details     map[string]interface{}
+	details     map[string]any
 	msg         string
 }
 
-func (e *fakeModuleError) Error() string                        { return e.msg }
-func (e *fakeModuleError) ErrorCode() string                    { return e.code }
-func (e *fakeModuleError) ErrorModule() string                  { return e.module }
-func (e *fakeModuleError) ErrorRecordIndex() int                { return e.recordIndex }
-func (e *fakeModuleError) ErrorDetails() map[string]interface{} { return e.details }
+func (e *fakeModuleError) Error() string                { return e.msg }
+func (e *fakeModuleError) ErrorCode() string            { return e.code }
+func (e *fakeModuleError) ErrorModule() string          { return e.module }
+func (e *fakeModuleError) ErrorRecordIndex() int        { return e.recordIndex }
+func (e *fakeModuleError) ErrorDetails() map[string]any { return e.details }
 
 func TestAsModuleError_Direct(t *testing.T) {
 	t.Parallel()
 
 	original := &fakeModuleError{
 		code: "X", module: "fake", recordIndex: 7,
-		details: map[string]interface{}{"k": "v"},
+		details: map[string]any{"k": "v"},
 		msg:     "boom",
 	}
 

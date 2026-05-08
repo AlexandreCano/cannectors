@@ -172,7 +172,7 @@ func TestScriptModuleProcess_SimpleTransform(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{"id": 1, "name": "test"},
 	}
 
@@ -222,7 +222,7 @@ func TestScriptModuleProcess_ComputedFields(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{"price": 10.5, "quantity": 2},
 	}
 
@@ -266,9 +266,9 @@ func TestScriptModuleProcess_NestedObjects(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{
-			"user": map[string]interface{}{
+			"user": map[string]any{
 				"firstName": "John",
 				"lastName":  "Doe",
 			},
@@ -284,7 +284,7 @@ func TestScriptModuleProcess_NestedObjects(t *testing.T) {
 		t.Fatalf("expected 1 record, got %d", len(result))
 	}
 
-	user, ok := result[0]["user"].(map[string]interface{})
+	user, ok := result[0]["user"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected user to be map, got %T", result[0]["user"])
 	}
@@ -308,9 +308,9 @@ func TestScriptModuleProcess_Arrays(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{
-			"items": []interface{}{"a", "b", "c"},
+			"items": []any{"a", "b", "c"},
 		},
 	}
 
@@ -353,7 +353,7 @@ func TestScriptModuleProcess_MultipleRecords(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{"value": 1},
 		{"value": 2},
 		{"value": 3},
@@ -400,7 +400,7 @@ func TestScriptModuleProcess_ReturnNewRecord(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{"id": 1, "name": "test"},
 	}
 
@@ -442,7 +442,7 @@ func TestScriptModuleProcess_NullAndUndefined(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{"existing": "value"},
 	}
 
@@ -470,7 +470,7 @@ func TestScriptModuleProcess_EmptyInput(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	result, err := module.Process(context.Background(), []map[string]interface{}{})
+	result, err := module.Process(context.Background(), []map[string]any{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -518,7 +518,7 @@ func TestScriptModuleProcess_JavaScriptException(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{"id": 1},
 	}
 
@@ -548,7 +548,7 @@ func TestScriptModuleProcess_OnErrorSkip(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{"id": 1, "fail": false},
 		{"id": 2, "fail": true},
 		{"id": 3, "fail": false},
@@ -583,7 +583,7 @@ func TestScriptModuleProcess_OnErrorLog(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{"id": 1, "fail": false},
 		{"id": 2, "fail": true},
 		{"id": 3, "fail": false},
@@ -626,7 +626,7 @@ func TestScriptModuleProcess_RuntimeError(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{"id": 1},
 	}
 
@@ -650,7 +650,7 @@ func TestScriptModuleProcess_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{"id": 1},
 	}
 
@@ -691,7 +691,7 @@ func TestScriptModuleProcess_ContextCancellationDuringExecution(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{"id": 1},
 	}
 
@@ -731,7 +731,7 @@ func TestScriptModuleProcess_CancellationStress(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		// Cancel concurrently with the call to maximize the race window.
 		go cancel()
-		_, _ = module.Process(ctx, []map[string]interface{}{{"id": i}})
+		_, _ = module.Process(ctx, []map[string]any{{"id": i}})
 	}
 
 	// Allow any pending watchers triggered by ctx.Cancel() a moment to settle.
@@ -748,14 +748,14 @@ func TestScriptModuleProcess_CancellationStress(t *testing.T) {
 func TestScriptConfig_Parse(t *testing.T) {
 	testCases := []struct {
 		name        string
-		config      map[string]interface{}
+		config      map[string]any
 		expectError bool
 		errorMsg    string
 		expected    ScriptConfig
 	}{
 		{
 			name: "valid inline script config",
-			config: map[string]interface{}{
+			config: map[string]any{
 				"script":  "function transform(r) { return r; }",
 				"onError": "skip",
 			},
@@ -767,7 +767,7 @@ func TestScriptConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "valid script file config",
-			config: map[string]interface{}{
+			config: map[string]any{
 				"scriptFile": "/path/to/script.js",
 				"onError":    "fail",
 			},
@@ -779,7 +779,7 @@ func TestScriptConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "missing both script and scriptFile",
-			config: map[string]interface{}{
+			config: map[string]any{
 				"onError": "fail",
 			},
 			expectError: true,
@@ -787,7 +787,7 @@ func TestScriptConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "both script and scriptFile provided",
-			config: map[string]interface{}{
+			config: map[string]any{
 				"script":     "function transform(r) { return r; }",
 				"scriptFile": "/path/to/script.js",
 			},
@@ -796,7 +796,7 @@ func TestScriptConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "script not string",
-			config: map[string]interface{}{
+			config: map[string]any{
 				"script": 123,
 			},
 			expectError: true,
@@ -804,7 +804,7 @@ func TestScriptConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "scriptFile not string",
-			config: map[string]interface{}{
+			config: map[string]any{
 				"scriptFile": 123,
 			},
 			expectError: true,
@@ -812,7 +812,7 @@ func TestScriptConfig_Parse(t *testing.T) {
 		},
 		{
 			name: "minimal inline config",
-			config: map[string]interface{}{
+			config: map[string]any{
 				"script": "function transform(r) { return r; }",
 			},
 			expectError: false,
@@ -889,7 +889,7 @@ func TestScriptModuleCreation_FromFile(t *testing.T) {
 	}
 
 	// Test that it works
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{"value": 5},
 	}
 
@@ -1026,7 +1026,7 @@ func TestScriptModule_InPipeline(t *testing.T) {
 	}
 
 	// Process through script module first
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{"price": 10.0, "quantity": 2},
 		{"price": 25.5, "quantity": 4},
 	}
@@ -1217,7 +1217,7 @@ func TestScriptModule_ExportToGoMap_Array(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{"id": 1, "name": "test"},
 	}
 
@@ -1266,7 +1266,7 @@ func TestScriptModule_ExportToGoMap_Primitive(t *testing.T) {
 				t.Fatalf("failed to create module: %v", err)
 			}
 
-			input := []map[string]interface{}{
+			input := []map[string]any{
 				{"id": 1},
 			}
 
@@ -1308,7 +1308,7 @@ func TestScriptModule_ExportToGoMap_ComplexNested(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{"id": 1, "value": 10},
 	}
 
@@ -1322,17 +1322,17 @@ func TestScriptModule_ExportToGoMap_ComplexNested(t *testing.T) {
 	}
 
 	// Verify nested structure
-	nested, ok := result[0]["nested"].(map[string]interface{})
+	nested, ok := result[0]["nested"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected nested to be map, got %T", result[0]["nested"])
 	}
 
-	level1, ok := nested["level1"].(map[string]interface{})
+	level1, ok := nested["level1"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected level1 to be map, got %T", nested["level1"])
 	}
 
-	level2, ok := level1["level2"].(map[string]interface{})
+	level2, ok := level1["level2"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected level2 to be map, got %T", level1["level2"])
 	}
@@ -1382,7 +1382,7 @@ func TestScriptModule_ComplexBusinessLogic(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	input := []map[string]interface{}{
+	input := []map[string]any{
 		{"id": "ORD-001", "price": 100.0, "quantity": 3},  // Small: 5% discount
 		{"id": "ORD-002", "price": 100.0, "quantity": 7},  // Medium: 10% discount
 		{"id": "ORD-003", "price": 100.0, "quantity": 15}, // Bulk: 15% discount
@@ -1411,7 +1411,7 @@ func TestScriptModule_ComplexBusinessLogic(t *testing.T) {
 }
 
 // assertNumericEqual compares numeric values handling both int64 and float64.
-func assertNumericEqual(t *testing.T, actual interface{}, expected float64, name string) {
+func assertNumericEqual(t *testing.T, actual any, expected float64, name string) {
 	t.Helper()
 	var actualFloat float64
 	switch v := actual.(type) {

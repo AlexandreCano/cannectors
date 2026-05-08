@@ -56,7 +56,7 @@ var (
 type FieldMapping struct {
 	Source       *string       `json:"source,omitempty"`
 	Target       string        `json:"target"`
-	DefaultValue interface{}   `json:"defaultValue,omitempty"`
+	DefaultValue any           `json:"defaultValue,omitempty"`
 	OnMissing    string        `json:"onMissing,omitempty"`
 	Transforms   []TransformOp `json:"transforms,omitempty"`
 }
@@ -81,7 +81,7 @@ type MappingModuleConfig struct {
 type MappingConfig struct {
 	Source       string
 	Target       string
-	DefaultValue interface{}
+	DefaultValue any
 	OnMissing    string
 	Transforms   []TransformConfig
 }
@@ -112,7 +112,7 @@ type MappingError struct {
 	RecordIndex  int
 	MappingIndex int
 	TransformOp  string
-	SourceValue  interface{}
+	SourceValue  any
 }
 
 func (e *MappingError) Error() string {
@@ -131,8 +131,8 @@ func (e *MappingError) ErrorRecordIndex() int { return e.RecordIndex }
 // ErrorDetails implements errhandling.ModuleError. Surfaces structured
 // mapping context (target/source field, mapping index, transform op, source
 // value) as a flat map for ExecutionError.Details.
-func (e *MappingError) ErrorDetails() map[string]interface{} {
-	d := map[string]interface{}{
+func (e *MappingError) ErrorDetails() map[string]any {
+	d := map[string]any{
 		"source_field":  e.SourceField,
 		"target_field":  e.TargetField,
 		"mapping_index": e.MappingIndex,
@@ -156,7 +156,7 @@ func (e TransformError) Error() string {
 	return fmt.Sprintf("transform %q failed: %v", e.Op, e.Err)
 }
 
-func newMappingError(code, message string, mapping MappingConfig, recordIdx, mappingIdx int, value interface{}, transformOp string) *MappingError {
+func newMappingError(code, message string, mapping MappingConfig, recordIdx, mappingIdx int, value any, transformOp string) *MappingError {
 	return &MappingError{
 		Code:         code,
 		Message:      message,
@@ -211,9 +211,9 @@ func NewMappingFromConfig(mappings []FieldMapping, onError string) (*MappingModu
 //  4. Applies transforms if configured
 //
 // Returns the transformed records and any error that occurred.
-func (m *MappingModule) Process(_ context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (m *MappingModule) Process(_ context.Context, records []map[string]any) ([]map[string]any, error) {
 	if records == nil {
-		return []map[string]interface{}{}, nil
+		return []map[string]any{}, nil
 	}
 
 	startTime := time.Now()
@@ -226,7 +226,7 @@ func (m *MappingModule) Process(_ context.Context, records []map[string]interfac
 		slog.String("on_error", string(m.onError)),
 	)
 
-	result := make([]map[string]interface{}, 0, len(records))
+	result := make([]map[string]any, 0, len(records))
 	skippedCount := 0
 
 	for recordIdx, record := range records {
@@ -309,7 +309,7 @@ func (m *MappingModule) Process(_ context.Context, records []map[string]interfac
 }
 
 // processRecord applies all mappings to a single record in-place.
-func (m *MappingModule) processRecord(record map[string]interface{}, recordIdx int) (map[string]interface{}, error) {
+func (m *MappingModule) processRecord(record map[string]any, recordIdx int) (map[string]any, error) {
 	for mappingIdx, mapping := range m.mappings {
 		// Empty source means delete the target field
 		if mapping.Source == "" {
@@ -339,7 +339,7 @@ func (m *MappingModule) processRecord(record map[string]interface{}, recordIdx i
 }
 
 // getSourceValue retrieves the source value for a mapping, handling missing field cases.
-func (m *MappingModule) getSourceValue(record map[string]interface{}, mapping MappingConfig, recordIdx, mappingIdx int) (interface{}, bool, error) {
+func (m *MappingModule) getSourceValue(record map[string]any, mapping MappingConfig, recordIdx, mappingIdx int) (any, bool, error) {
 	value, found := recordpath.Get(record, mapping.Source)
 
 	if !found {
@@ -361,7 +361,7 @@ func (m *MappingModule) getSourceValue(record map[string]interface{}, mapping Ma
 }
 
 // handleTransformError creates an appropriate error for transform failures.
-func (m *MappingModule) handleTransformError(err error, mapping MappingConfig, recordIdx, mappingIdx int, value interface{}, target map[string]interface{}) (map[string]interface{}, error) {
+func (m *MappingModule) handleTransformError(err error, mapping MappingConfig, recordIdx, mappingIdx int, value any, target map[string]any) (map[string]any, error) {
 	transformOp := ""
 	if transformErr, ok := err.(TransformError); ok {
 		transformOp = transformErr.Op
@@ -376,7 +376,7 @@ func (m *MappingModule) handleTransformError(err error, mapping MappingConfig, r
 }
 
 // handleSetValueError creates an appropriate error for set value failures.
-func (m *MappingModule) handleSetValueError(err error, mapping MappingConfig, recordIdx, mappingIdx int, value interface{}, target map[string]interface{}) (map[string]interface{}, error) {
+func (m *MappingModule) handleSetValueError(err error, mapping MappingConfig, recordIdx, mappingIdx int, value any, target map[string]any) (map[string]any, error) {
 	message := fmt.Sprintf("failed to set target field %q at record %d, mapping %d: %v",
 		mapping.Target, recordIdx, mappingIdx, err)
 	return target, newMappingError(ErrCodeNestedPathFailed, message, mapping, recordIdx, mappingIdx, value, "")
@@ -384,7 +384,7 @@ func (m *MappingModule) handleSetValueError(err error, mapping MappingConfig, re
 
 // applyTransforms applies transform operations to a value.
 // Transforms are applied in order from the Transforms array.
-func (m *MappingModule) applyTransforms(value interface{}, mapping MappingConfig) (interface{}, error) {
+func (m *MappingModule) applyTransforms(value any, mapping MappingConfig) (any, error) {
 	for _, transform := range mapping.Transforms {
 		transformedValue, err := m.applyTransformOp(value, transform)
 		if err != nil {
@@ -398,7 +398,7 @@ func (m *MappingModule) applyTransforms(value interface{}, mapping MappingConfig
 
 // applyTransformOp applies a specific transform operation.
 // Helpers (applyTrim, applyToInt, etc.) live in mapping_transforms.go.
-func (m *MappingModule) applyTransformOp(value interface{}, config TransformConfig) (interface{}, error) {
+func (m *MappingModule) applyTransformOp(value any, config TransformConfig) (any, error) {
 	if value == nil {
 		return nil, nil
 	}

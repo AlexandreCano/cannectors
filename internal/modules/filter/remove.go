@@ -61,7 +61,7 @@ func NewRemoveFromConfig(config RemoveConfig) (*RemoveModule, error) {
 
 // Process implements the filter.Module interface.
 // It removes the configured fields from each record.
-func (m *RemoveModule) Process(ctx context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (m *RemoveModule) Process(ctx context.Context, records []map[string]any) ([]map[string]any, error) {
 	// Respect context cancellation
 	select {
 	case <-ctx.Done():
@@ -73,7 +73,7 @@ func (m *RemoveModule) Process(ctx context.Context, records []map[string]interfa
 		return records, nil
 	}
 
-	result := make([]map[string]interface{}, 0, len(records))
+	result := make([]map[string]any, 0, len(records))
 
 	for i, record := range records {
 		// Check context for long-running operations
@@ -93,7 +93,7 @@ func (m *RemoveModule) Process(ctx context.Context, records []map[string]interfa
 }
 
 // processRecord processes a single record and returns the modified record.
-func (m *RemoveModule) processRecord(record map[string]interface{}) map[string]interface{} {
+func (m *RemoveModule) processRecord(record map[string]any) map[string]any {
 	if record == nil {
 		return record
 	}
@@ -110,7 +110,7 @@ func (m *RemoveModule) processRecord(record map[string]interface{}) map[string]i
 }
 
 // ParseRemoveConfig parses a raw configuration map into RemoveConfig.
-func ParseRemoveConfig(config map[string]interface{}) (RemoveConfig, error) {
+func ParseRemoveConfig(config map[string]any) (RemoveConfig, error) {
 	var cfg RemoveConfig
 
 	// Parse single target (backward compatibility)
@@ -121,7 +121,7 @@ func ParseRemoveConfig(config map[string]interface{}) (RemoveConfig, error) {
 	// Parse targets array
 	if targets, ok := config["targets"]; ok {
 		switch v := targets.(type) {
-		case []interface{}:
+		case []any:
 			cfg.Targets = make([]string, 0, len(v))
 			for _, item := range v {
 				if s, ok := item.(string); ok && s != "" {

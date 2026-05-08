@@ -36,7 +36,7 @@ func (a *Accessor) FieldName() string {
 
 // Get retrieves a metadata value by key from the record.
 // Supports nested keys using dot notation (e.g. "timing.start").
-func (a *Accessor) Get(record map[string]interface{}, key string) (interface{}, bool) {
+func (a *Accessor) Get(record map[string]any, key string) (any, bool) {
 	if record == nil {
 		return nil, false
 	}
@@ -49,7 +49,7 @@ func (a *Accessor) Get(record map[string]interface{}, key string) (interface{}, 
 
 // Set sets a metadata value by key in the record, creating the metadata field
 // if it doesn't exist. Supports nested keys using dot notation.
-func (a *Accessor) Set(record map[string]interface{}, key string, value interface{}) {
+func (a *Accessor) Set(record map[string]any, key string, value any) {
 	if record == nil || key == "" {
 		return
 	}
@@ -58,7 +58,7 @@ func (a *Accessor) Set(record map[string]interface{}, key string, value interfac
 }
 
 // Delete removes a metadata key from the record. Supports nested keys.
-func (a *Accessor) Delete(record map[string]interface{}, key string) {
+func (a *Accessor) Delete(record map[string]any, key string) {
 	if record == nil || key == "" {
 		return
 	}
@@ -70,7 +70,7 @@ func (a *Accessor) Delete(record map[string]interface{}, key string) {
 }
 
 // GetAll returns the entire metadata map. Returns nil if no metadata exists.
-func (a *Accessor) GetAll(record map[string]interface{}) map[string]interface{} {
+func (a *Accessor) GetAll(record map[string]any) map[string]any {
 	if record == nil {
 		return nil
 	}
@@ -79,7 +79,7 @@ func (a *Accessor) GetAll(record map[string]interface{}) map[string]interface{} 
 
 // SetAll replaces the entire metadata map in the record. Passing nil clears
 // the metadata field.
-func (a *Accessor) SetAll(record, meta map[string]interface{}) {
+func (a *Accessor) SetAll(record, meta map[string]any) {
 	if record == nil {
 		return
 	}
@@ -92,7 +92,7 @@ func (a *Accessor) SetAll(record, meta map[string]interface{}) {
 
 // Merge merges new metadata values into existing metadata. Existing keys are
 // overwritten by new values.
-func (a *Accessor) Merge(record, newMeta map[string]interface{}) {
+func (a *Accessor) Merge(record, newMeta map[string]any) {
 	if record == nil || newMeta == nil {
 		return
 	}
@@ -104,7 +104,7 @@ func (a *Accessor) Merge(record, newMeta map[string]interface{}) {
 
 // Copy copies metadata from src to dst, deep-copying maps and slices to avoid
 // shared references.
-func (a *Accessor) Copy(src, dst map[string]interface{}) {
+func (a *Accessor) Copy(src, dst map[string]any) {
 	if src == nil || dst == nil {
 		return
 	}
@@ -116,7 +116,7 @@ func (a *Accessor) Copy(src, dst map[string]interface{}) {
 }
 
 // HasMetadata returns true if the record has a metadata field.
-func (a *Accessor) HasMetadata(record map[string]interface{}) bool {
+func (a *Accessor) HasMetadata(record map[string]any) bool {
 	if record == nil {
 		return false
 	}
@@ -126,7 +126,7 @@ func (a *Accessor) HasMetadata(record map[string]interface{}) bool {
 
 // Strip removes the metadata field from the record (in-place) and returns its
 // value. Used when preparing records for output.
-func (a *Accessor) Strip(record map[string]interface{}) map[string]interface{} {
+func (a *Accessor) Strip(record map[string]any) map[string]any {
 	if record == nil {
 		return nil
 	}
@@ -137,11 +137,11 @@ func (a *Accessor) Strip(record map[string]interface{}) map[string]interface{} {
 
 // StripCopy returns a shallow copy of the record without the metadata field.
 // The original record is not modified.
-func (a *Accessor) StripCopy(record map[string]interface{}) map[string]interface{} {
+func (a *Accessor) StripCopy(record map[string]any) map[string]any {
 	if record == nil {
 		return nil
 	}
-	result := make(map[string]interface{}, len(record))
+	result := make(map[string]any, len(record))
 	for k, v := range record {
 		if k != a.fieldName {
 			result[k] = v
@@ -154,7 +154,7 @@ func (a *Accessor) StripCopy(record map[string]interface{}) map[string]interface
 // — useful for one-off strips without instantiating an Accessor.
 // fieldName falls back to DefaultFieldName when empty. Returns the original
 // record (not a copy) when the metadata field is absent.
-func StripFromRecord(record map[string]interface{}, fieldName string) map[string]interface{} {
+func StripFromRecord(record map[string]any, fieldName string) map[string]any {
 	if record == nil {
 		return nil
 	}
@@ -164,7 +164,7 @@ func StripFromRecord(record map[string]interface{}, fieldName string) map[string
 	if _, exists := record[fieldName]; !exists {
 		return record
 	}
-	result := make(map[string]interface{}, len(record)-1)
+	result := make(map[string]any, len(record)-1)
 	for k, v := range record {
 		if k != fieldName {
 			result[k] = v
@@ -174,47 +174,47 @@ func StripFromRecord(record map[string]interface{}, fieldName string) map[string
 }
 
 // StripFromRecords applies StripFromRecord to a slice of records.
-func StripFromRecords(records []map[string]interface{}, fieldName string) []map[string]interface{} {
+func StripFromRecords(records []map[string]any, fieldName string) []map[string]any {
 	if records == nil {
 		return nil
 	}
-	result := make([]map[string]interface{}, len(records))
+	result := make([]map[string]any, len(records))
 	for i, r := range records {
 		result[i] = StripFromRecord(r, fieldName)
 	}
 	return result
 }
 
-func (a *Accessor) getMap(record map[string]interface{}) map[string]interface{} {
+func (a *Accessor) getMap(record map[string]any) map[string]any {
 	if raw, exists := record[a.fieldName]; exists {
-		if m, ok := raw.(map[string]interface{}); ok {
+		if m, ok := raw.(map[string]any); ok {
 			return m
 		}
 	}
 	return nil
 }
 
-func (a *Accessor) ensureMap(record map[string]interface{}) map[string]interface{} {
+func (a *Accessor) ensureMap(record map[string]any) map[string]any {
 	if raw, exists := record[a.fieldName]; exists {
-		if m, ok := raw.(map[string]interface{}); ok {
+		if m, ok := raw.(map[string]any); ok {
 			return m
 		}
 	}
-	m := make(map[string]interface{})
+	m := make(map[string]any)
 	record[a.fieldName] = m
 	return m
 }
 
-func deepCopyMap(src map[string]interface{}) map[string]interface{} {
+func deepCopyMap(src map[string]any) map[string]any {
 	if src == nil {
 		return nil
 	}
-	dst := make(map[string]interface{}, len(src))
+	dst := make(map[string]any, len(src))
 	for k, v := range src {
 		switch tv := v.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			dst[k] = deepCopyMap(tv)
-		case []interface{}:
+		case []any:
 			dst[k] = deepCopySlice(tv)
 		default:
 			dst[k] = v
@@ -223,16 +223,16 @@ func deepCopyMap(src map[string]interface{}) map[string]interface{} {
 	return dst
 }
 
-func deepCopySlice(src []interface{}) []interface{} {
+func deepCopySlice(src []any) []any {
 	if src == nil {
 		return nil
 	}
-	dst := make([]interface{}, len(src))
+	dst := make([]any, len(src))
 	for i, v := range src {
 		switch tv := v.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			dst[i] = deepCopyMap(tv)
-		case []interface{}:
+		case []any:
 			dst[i] = deepCopySlice(tv)
 		default:
 			dst[i] = v

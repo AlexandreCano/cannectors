@@ -686,7 +686,7 @@ func TestRetryExecutor_Success(t *testing.T) {
 	executor := NewRetryExecutor(config)
 
 	callCount := 0
-	result, err := executor.Execute(context.Background(), func(ctx context.Context) (interface{}, error) {
+	result, err := executor.Execute(context.Background(), func(ctx context.Context) (any, error) {
 		callCount++
 		return "success", nil
 	})
@@ -714,7 +714,7 @@ func TestRetryExecutor_RetryOnTransientError(t *testing.T) {
 	executor := NewRetryExecutor(config)
 
 	var callCount int32
-	result, err := executor.Execute(context.Background(), func(ctx context.Context) (interface{}, error) {
+	result, err := executor.Execute(context.Background(), func(ctx context.Context) (any, error) {
 		count := atomic.AddInt32(&callCount, 1)
 		if count < 3 {
 			return nil, NewServerError(500, "transient error", nil)
@@ -745,7 +745,7 @@ func TestRetryExecutor_RetryOnUnknownError(t *testing.T) {
 	executor := NewRetryExecutor(config)
 
 	var callCount int32
-	result, err := executor.Execute(context.Background(), func(ctx context.Context) (interface{}, error) {
+	result, err := executor.Execute(context.Background(), func(ctx context.Context) (any, error) {
 		count := atomic.AddInt32(&callCount, 1)
 		if count < 3 {
 			return nil, errors.New("unknown transient error")
@@ -776,7 +776,7 @@ func TestRetryExecutor_NoRetryOnFatalError(t *testing.T) {
 	executor := NewRetryExecutor(config)
 
 	callCount := 0
-	_, err := executor.Execute(context.Background(), func(ctx context.Context) (interface{}, error) {
+	_, err := executor.Execute(context.Background(), func(ctx context.Context) (any, error) {
 		callCount++
 		return nil, NewAuthenticationError(401, "unauthorized", nil)
 	})
@@ -801,7 +801,7 @@ func TestRetryExecutor_MaxAttemptsExhausted(t *testing.T) {
 	executor := NewRetryExecutor(config)
 
 	var callCount int32
-	_, err := executor.Execute(context.Background(), func(ctx context.Context) (interface{}, error) {
+	_, err := executor.Execute(context.Background(), func(ctx context.Context) (any, error) {
 		atomic.AddInt32(&callCount, 1)
 		return nil, NewServerError(500, "persistent error", nil)
 	})
@@ -834,7 +834,7 @@ func TestRetryExecutor_ContextCanceled(t *testing.T) {
 		cancel()
 	}()
 
-	_, err := executor.Execute(ctx, func(ctx context.Context) (interface{}, error) {
+	_, err := executor.Execute(ctx, func(ctx context.Context) (any, error) {
 		callCount++
 		return nil, NewServerError(500, "transient error", nil)
 	})
@@ -865,7 +865,7 @@ func TestRetryExecutor_DisabledRetry(t *testing.T) {
 	executor := NewRetryExecutor(config)
 
 	callCount := 0
-	_, err := executor.Execute(context.Background(), func(ctx context.Context) (interface{}, error) {
+	_, err := executor.Execute(context.Background(), func(ctx context.Context) (any, error) {
 		callCount++
 		return nil, NewServerError(500, "transient error", nil)
 	})
@@ -890,7 +890,7 @@ func TestRetryExecutor_ExponentialBackoff(t *testing.T) {
 	executor := NewRetryExecutor(config)
 
 	var timestamps []time.Time
-	_, err := executor.Execute(context.Background(), func(ctx context.Context) (interface{}, error) {
+	_, err := executor.Execute(context.Background(), func(ctx context.Context) (any, error) {
 		timestamps = append(timestamps, time.Now())
 		if len(timestamps) < 4 {
 			return nil, NewServerError(500, "transient error", nil)
@@ -928,7 +928,7 @@ func TestRetryExecutor_GetResult(t *testing.T) {
 		Name  string
 	}
 
-	result, err := executor.Execute(context.Background(), func(ctx context.Context) (interface{}, error) {
+	result, err := executor.Execute(context.Background(), func(ctx context.Context) (any, error) {
 		return testResult{Value: 42, Name: "test"}, nil
 	})
 
@@ -957,7 +957,7 @@ func TestRetryExecutor_RetryInfo(t *testing.T) {
 	executor := NewRetryExecutor(config)
 
 	var callCount int32
-	_, _ = executor.Execute(context.Background(), func(ctx context.Context) (interface{}, error) {
+	_, _ = executor.Execute(context.Background(), func(ctx context.Context) (any, error) {
 		count := atomic.AddInt32(&callCount, 1)
 		if count < 3 {
 			return nil, NewServerError(500, "transient error", nil)
@@ -1002,7 +1002,7 @@ func TestRetryExecutor_ExecuteWithCallback_Success(t *testing.T) {
 		}{attempt, err, nextDelay})
 	}
 
-	result, err := executor.ExecuteWithCallback(context.Background(), func(ctx context.Context) (interface{}, error) {
+	result, err := executor.ExecuteWithCallback(context.Background(), func(ctx context.Context) (any, error) {
 		return "ok", nil
 	}, callback)
 
@@ -1045,7 +1045,7 @@ func TestRetryExecutor_ExecuteWithCallback_RetryThenSuccess(t *testing.T) {
 	}
 
 	var n int32
-	result, err := executor.ExecuteWithCallback(context.Background(), func(ctx context.Context) (interface{}, error) {
+	result, err := executor.ExecuteWithCallback(context.Background(), func(ctx context.Context) (any, error) {
 		count := atomic.AddInt32(&n, 1)
 		if count < 3 {
 			return nil, NewServerError(500, "transient", nil)
@@ -1094,7 +1094,7 @@ func TestRetryExecutor_ExecuteWithCallback_FatalError(t *testing.T) {
 		}
 	}
 
-	_, err := executor.ExecuteWithCallback(context.Background(), func(ctx context.Context) (interface{}, error) {
+	_, err := executor.ExecuteWithCallback(context.Background(), func(ctx context.Context) (any, error) {
 		return nil, NewAuthenticationError(401, "unauthorized", nil)
 	}, callback)
 
@@ -1111,7 +1111,7 @@ func TestRetryExecutor_ExecuteWithCallback_NilCallback(t *testing.T) {
 	config := DefaultRetryConfig()
 	executor := NewRetryExecutor(config)
 
-	result, err := executor.ExecuteWithCallback(context.Background(), func(ctx context.Context) (interface{}, error) {
+	result, err := executor.ExecuteWithCallback(context.Background(), func(ctx context.Context) (any, error) {
 		return "ok", nil
 	}, nil)
 

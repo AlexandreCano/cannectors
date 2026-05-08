@@ -1,6 +1,6 @@
 # Story 19.4: Replace `interface{}` with `any` (cosmétique)
 
-Status: backlog
+Status: review
 
 ## Story
 
@@ -64,4 +64,6 @@ Audit §5 P3.7. Pur cosmétique mais améliore la lisibilité. Go 1.18+ encourag
 
 ## File List
 
-(à compléter)
+- Tous les fichiers `.go` du repo (hors `_bmad/`) ont été passés à `gofmt -r 'interface{} -> any' -w`. Plus aucune occurrence de `interface{}` ne subsiste dans le code source ni les commentaires.
+- Quelques fichiers nécessitaient en plus un `sed` ciblé pour les commentaires/docstrings où `gofmt -r` ne s'applique pas (ex: `internal/modules/output/output.go`, `filter/filter.go`, `input/input.go`, `mapping_parse.go`, `mapping_transforms.go`, `http_polling.go`, `webhook.go`, `recordpath/path.go`, certains `_test.go`).
+- `go build ./...` + `go test ./...` + `golangci-lint run ./...` propres après le refacto.

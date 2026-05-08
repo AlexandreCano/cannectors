@@ -13,8 +13,8 @@ import (
 func TestMarshalDeterministic_StableForPermutedKeys(t *testing.T) {
 	t.Parallel()
 
-	a := map[string]interface{}{"a": 1, "b": 2, "c": "three"}
-	b := map[string]interface{}{"c": "three", "a": 1, "b": 2}
+	a := map[string]any{"a": 1, "b": 2, "c": "three"}
+	b := map[string]any{"c": "three", "a": 1, "b": 2}
 
 	gotA, err := marshalDeterministic(a)
 	if err != nil {
@@ -35,11 +35,11 @@ func TestMarshalDeterministic_StableForPermutedKeys(t *testing.T) {
 func TestMarshalDeterministic_NestedKeysSorted(t *testing.T) {
 	t.Parallel()
 
-	a := map[string]interface{}{
-		"user": map[string]interface{}{"id": 1, "name": "x", "addr": map[string]interface{}{"city": "Paris", "zip": "75001"}},
+	a := map[string]any{
+		"user": map[string]any{"id": 1, "name": "x", "addr": map[string]any{"city": "Paris", "zip": "75001"}},
 	}
-	b := map[string]interface{}{
-		"user": map[string]interface{}{"name": "x", "addr": map[string]interface{}{"zip": "75001", "city": "Paris"}, "id": 1},
+	b := map[string]any{
+		"user": map[string]any{"name": "x", "addr": map[string]any{"zip": "75001", "city": "Paris"}, "id": 1},
 	}
 
 	gotA, _ := marshalDeterministic(a)
@@ -55,18 +55,18 @@ func TestMarshalDeterministic_StressLoop(t *testing.T) {
 	t.Parallel()
 
 	const iterations = 1000
-	first, err := marshalDeterministic(map[string]interface{}{
+	first, err := marshalDeterministic(map[string]any{
 		"a": 1, "b": 2, "c": 3, "d": 4, "e": 5,
-		"nested": map[string]interface{}{"x": "X", "y": "Y", "z": "Z"},
+		"nested": map[string]any{"x": "X", "y": "Y", "z": "Z"},
 	})
 	if err != nil {
 		t.Fatalf("marshalDeterministic error = %v", err)
 	}
 	for i := 0; i < iterations; i++ {
 		// Each iteration uses a freshly-built map (Go map iteration is randomized).
-		got, err := marshalDeterministic(map[string]interface{}{
+		got, err := marshalDeterministic(map[string]any{
 			"e": 5, "c": 3, "a": 1, "d": 4, "b": 2,
-			"nested": map[string]interface{}{"z": "Z", "x": "X", "y": "Y"},
+			"nested": map[string]any{"z": "Z", "x": "X", "y": "Y"},
 		})
 		if err != nil {
 			t.Fatalf("iteration %d: marshalDeterministic error = %v", i, err)
@@ -114,12 +114,12 @@ func TestNewSQLCallFromConfig_Validation(t *testing.T) {
 func TestGetSQLNestedValue(t *testing.T) {
 	t.Parallel()
 
-	record := map[string]interface{}{
+	record := map[string]any{
 		"id":   123,
 		"name": "test",
-		"nested": map[string]interface{}{
+		"nested": map[string]any{
 			"field": "value",
-			"deep": map[string]interface{}{
+			"deep": map[string]any{
 				"key": "deep_value",
 			},
 		},
@@ -128,7 +128,7 @@ func TestGetSQLNestedValue(t *testing.T) {
 	tests := []struct {
 		name string
 		path string
-		want interface{}
+		want any
 	}{
 		{
 			name: "top-level field",
@@ -177,37 +177,37 @@ func TestDeepMerge(t *testing.T) {
 
 	tests := []struct {
 		name string
-		a    map[string]interface{}
-		b    map[string]interface{}
-		want map[string]interface{}
+		a    map[string]any
+		b    map[string]any
+		want map[string]any
 	}{
 		{
 			name: "simple merge",
-			a:    map[string]interface{}{"a": 1, "b": 2},
-			b:    map[string]interface{}{"c": 3},
-			want: map[string]interface{}{"a": 1, "b": 2, "c": 3},
+			a:    map[string]any{"a": 1, "b": 2},
+			b:    map[string]any{"c": 3},
+			want: map[string]any{"a": 1, "b": 2, "c": 3},
 		},
 		{
 			name: "override value",
-			a:    map[string]interface{}{"a": 1, "b": 2},
-			b:    map[string]interface{}{"b": 10},
-			want: map[string]interface{}{"a": 1, "b": 10},
+			a:    map[string]any{"a": 1, "b": 2},
+			b:    map[string]any{"b": 10},
+			want: map[string]any{"a": 1, "b": 10},
 		},
 		{
 			name: "nested merge",
-			a: map[string]interface{}{
-				"outer": map[string]interface{}{
+			a: map[string]any{
+				"outer": map[string]any{
 					"a": 1,
 					"b": 2,
 				},
 			},
-			b: map[string]interface{}{
-				"outer": map[string]interface{}{
+			b: map[string]any{
+				"outer": map[string]any{
 					"c": 3,
 				},
 			},
-			want: map[string]interface{}{
-				"outer": map[string]interface{}{
+			want: map[string]any{
+				"outer": map[string]any{
 					"a": 1,
 					"b": 2,
 					"c": 3,
@@ -216,9 +216,9 @@ func TestDeepMerge(t *testing.T) {
 		},
 		{
 			name: "b nil map",
-			a:    map[string]interface{}{"a": 1},
-			b:    map[string]interface{}{},
-			want: map[string]interface{}{"a": 1},
+			a:    map[string]any{"a": 1},
+			b:    map[string]any{},
+			want: map[string]any{"a": 1},
 		},
 	}
 
@@ -233,8 +233,8 @@ func TestDeepMerge(t *testing.T) {
 					continue
 				}
 				// For nested maps, just check they exist
-				if _, ok := v.(map[string]interface{}); ok {
-					if _, ok := gotV.(map[string]interface{}); !ok {
+				if _, ok := v.(map[string]any); ok {
+					if _, ok := gotV.(map[string]any); !ok {
 						t.Errorf("key %q should be a map", k)
 					}
 				} else if gotV != v {

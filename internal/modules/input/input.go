@@ -18,7 +18,7 @@ var ErrNotImplemented = errors.New("not implemented")
 //
 // Input modules are responsible for:
 //   - Fetching data from external source systems (APIs, databases, files, etc.)
-//   - Returning data in a standardized format ([]map[string]interface{})
+//   - Returning data in a standardized format ([]map[string]any)
 //   - Managing resources (connections, file handles, etc.) and cleaning them up via Close()
 //
 // # What Input Modules Should NOT Do
@@ -51,14 +51,14 @@ var ErrNotImplemented = errors.New("not implemented")
 //
 // # Return Format
 //
-// Fetch() must return []map[string]interface{} where:
+// Fetch() must return []map[string]any where:
 //   - Each map represents a single record/entity
 //   - Keys are field names (strings)
 //   - Values can be any JSON-serializable type (string, number, bool, nested maps/slices)
 //
 // Example:
 //
-//	records := []map[string]interface{}{
+//	records := []map[string]any{
 //	    {"id": 1, "name": "Alice", "email": "alice@example.com"},
 //	    {"id": 2, "name": "Bob", "email": "bob@example.com"},
 //	}
@@ -89,7 +89,7 @@ var ErrNotImplemented = errors.New("not implemented")
 //	    url    string
 //	}
 //
-//	func (m *MyInputModule) Fetch(ctx context.Context) ([]map[string]interface{}, error) {
+//	func (m *MyInputModule) Fetch(ctx context.Context) ([]map[string]any, error) {
 //	    // Respect context cancellation
 //	    select {
 //	    case <-ctx.Done():
@@ -109,8 +109,8 @@ var ErrNotImplemented = errors.New("not implemented")
 //	    }
 //	    defer resp.Body.Close()
 //
-//	    // Parse response into []map[string]interface{}
-//	    var records []map[string]interface{}
+//	    // Parse response into []map[string]any
+//	    var records []map[string]any
 //	    if err := json.NewDecoder(resp.Body).Decode(&records); err != nil {
 //	        return nil, err
 //	    }
@@ -132,9 +132,9 @@ type Module interface {
 	// The context can be used to cancel long-running operations.
 	// Implementations should respect ctx.Done() and return promptly when canceled.
 	//
-	// Returns the fetched data as a slice of records, where each record is a map[string]interface{}.
+	// Returns the fetched data as a slice of records, where each record is a map[string]any.
 	// Returns an error if data cannot be retrieved.
-	Fetch(ctx context.Context) ([]map[string]interface{}, error)
+	Fetch(ctx context.Context) ([]map[string]any, error)
 
 	// Close releases any resources held by the module.
 	//

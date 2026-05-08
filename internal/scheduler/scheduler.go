@@ -453,12 +453,10 @@ func (s *Scheduler) executePipeline(reg *registeredPipeline) {
 	startTime := time.Now()
 	schedule := GetScheduleFromInput(pipeline)
 
-	// Mint a trace ID for this scheduled tick so all downstream logs
-	// (scheduler + executor + module logs) share the same correlation key.
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	ctx, traceID := logger.EnsureTraceID(ctx)
+	// Mint a fresh trace ID for this scheduled tick so each invocation has its
+	// own correlation key, regardless of any trace present in the parent context.
+	traceID := logger.NewTraceID()
+	ctx = logger.WithTraceID(ctx, traceID)
 
 	logger.Info("scheduled pipeline execution starting",
 		slog.String(logger.TraceIDField, traceID),
@@ -576,13 +574,10 @@ func (s *Scheduler) executeQueuedPipeline(reg *registeredPipeline) {
 	pipeline := reg.pipeline
 	startTime := time.Now()
 
-	// Mint a trace ID for this queued tick so all downstream logs share the
-	// same correlation key. Each queued execution gets its own trace ID, even
-	// when triggered by an earlier tick that overran.
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	ctx, traceID := logger.EnsureTraceID(ctx)
+	// Mint a fresh trace ID for this queued tick so each invocation has its own
+	// correlation key, regardless of any trace present in the parent context.
+	traceID := logger.NewTraceID()
+	ctx = logger.WithTraceID(ctx, traceID)
 
 	logger.Info("queued pipeline execution starting",
 		slog.String(logger.TraceIDField, traceID),

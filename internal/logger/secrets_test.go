@@ -1,7 +1,11 @@
 package logger_test
 
 import (
+	"context"
+	"encoding/json"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"strings"
 	"testing"
@@ -9,6 +13,10 @@ import (
 	"github.com/cannectors/runtime/internal/auth"
 	"github.com/cannectors/runtime/internal/httpclient"
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/internal/modules/input"
+	"github.com/cannectors/runtime/internal/modules/output"
+	"github.com/cannectors/runtime/internal/runtime"
+	"github.com/cannectors/runtime/pkg/connector"
 )
 
 // secretPatterns are regular expressions that should never match content in
@@ -122,4 +130,69 @@ func TestAuthError_DoesNotLeakInvalidCredentialsURL(t *testing.T) {
 
 	out := buf.String()
 	assertNoSecretLeak(t, out)
+}
+
+func TestPipelineExecution_LogsDoNotLeakSecrets(t *testing.T) {
+	buf, restore := captureLogger(t)
+	defer restore()
+
+	inputServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"id":"1","name":"alice"}]`))
+	}))
+	defer inputServer.Close()
+
+	outputServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer outputServer.Close()
+
+	inputURL := inputServer.URL + "/records?api_key=INPUT_SECRET&access_token=INPUT_TOKEN"
+	outputURL := outputServer.URL + "/sink?password=OUTPUT_SECRET&token=OUTPUT_TOKEN"
+
+	inputCfgRaw, err := json.Marshal(map[string]any{
+		"endpoint":  inputURL,
+		"timeoutMs": 1000,
+	})
+	if err != nil {
+		t.Fatalf("marshal input config: %v", err)
+	}
+	outputCfgRaw, err := json.Marshal(map[string]any{
+		"endpoint":  outputURL,
+		"method":    "POST",
+		"timeoutMs": 1000,
+	})
+	if err != nil {
+		t.Fatalf("marshal output config: %v", err)
+	}
+
+	inputModule, err := input.NewHTTPPollingFromConfig(&connector.ModuleConfig{
+		Type: "httpPolling",
+		Raw:  inputCfgRaw,
+	})
+	if err != nil {
+		t.Fatalf("NewHTTPPollingFromConfig() error: %v", err)
+	}
+
+	outputModule, err := output.NewHTTPRequestFromConfig(&connector.ModuleConfig{
+		Type: "httpRequest",
+		Raw:  outputCfgRaw,
+	})
+	if err != nil {
+		t.Fatalf("NewHTTPRequestFromConfig() error: %v", err)
+	}
+
+	executor := runtime.NewExecutorWithModules(inputModule, nil, outputModule, false)
+	pipeline := &connector.Pipeline{
+		ID:      "secrets-e2e",
+		Name:    "Secrets E2E",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	if _, err := executor.ExecuteWithContext(context.Background(), pipeline); err != nil {
+		t.Fatalf("ExecuteWithContext() error: %v", err)
+	}
+
+	assertNoSecretLeak(t, buf.String())
 }

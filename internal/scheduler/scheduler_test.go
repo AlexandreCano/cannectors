@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
@@ -19,6 +20,37 @@ type mockExecutor struct {
 	shouldError    bool
 	mu             sync.Mutex
 	executedIDs    []string
+}
+
+type mockContextExecutor struct {
+	executeCalls int32
+	mu           sync.Mutex
+	traceIDs     []string
+}
+
+func (m *mockContextExecutor) Execute(pipeline *connector.Pipeline) (*connector.ExecutionResult, error) {
+	return m.ExecuteWithContext(context.Background(), pipeline)
+}
+
+func (m *mockContextExecutor) ExecuteWithContext(ctx context.Context, pipeline *connector.Pipeline) (*connector.ExecutionResult, error) {
+	atomic.AddInt32(&m.executeCalls, 1)
+	traceID := logger.TraceIDFrom(ctx)
+	m.mu.Lock()
+	m.traceIDs = append(m.traceIDs, traceID)
+	m.mu.Unlock()
+	return &connector.ExecutionResult{
+		PipelineID:       pipeline.ID,
+		Status:           "success",
+		RecordsProcessed: 1,
+	}, nil
+}
+
+func (m *mockContextExecutor) TraceIDs() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]string, len(m.traceIDs))
+	copy(out, m.traceIDs)
+	return out
 }
 
 func mustJSON(v any) json.RawMessage {
@@ -288,6 +320,48 @@ func TestScheduler_Start_ExecutesPipelines(t *testing.T) {
 	calls := executor.GetExecuteCalls()
 	if calls < 1 {
 		t.Errorf("Expected at least 1 execution, got %d", calls)
+	}
+}
+
+func TestScheduler_Start_MintsFreshTraceIDPerTick(t *testing.T) {
+	executor := &mockContextExecutor{}
+	s := NewWithExecutor(executor)
+
+	pipeline := &connector.Pipeline{
+		ID:      "trace-fresh-per-tick",
+		Name:    "Trace Fresh Per Tick",
+		Input:   &connector.ModuleConfig{Type: "httpPolling", Raw: mustJSON(map[string]any{"schedule": "* * * * * *"})},
+		Enabled: true,
+	}
+
+	if err := s.Register(pipeline); err != nil {
+		t.Fatalf("Register() error: %v", err)
+	}
+
+	parentCtx := logger.WithTraceID(context.Background(), "parent-trace-id")
+	if err := s.Start(parentCtx); err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+	time.Sleep(3200 * time.Millisecond)
+	_ = s.Stop(context.Background())
+
+	traceIDs := executor.TraceIDs()
+	if len(traceIDs) < 2 {
+		t.Fatalf("expected at least 2 executions, got %d (%v)", len(traceIDs), traceIDs)
+	}
+
+	uniq := make(map[string]struct{}, len(traceIDs))
+	for _, id := range traceIDs {
+		if id == "" {
+			t.Fatalf("expected non-empty trace_id for each execution, got %v", traceIDs)
+		}
+		if id == "parent-trace-id" {
+			t.Fatalf("scheduler reused parent trace_id, got %v", traceIDs)
+		}
+		uniq[id] = struct{}{}
+	}
+	if len(uniq) < 2 {
+		t.Fatalf("expected distinct trace_ids across ticks, got %v", traceIDs)
 	}
 }
 

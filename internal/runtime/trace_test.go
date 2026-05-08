@@ -2,28 +2,47 @@
 package runtime
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/internal/modules/output"
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
+type safeBuffer struct {
+	mu  sync.Mutex
+	buf strings.Builder
+}
+
+func (b *safeBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *safeBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
 // captureLogger swaps the package-global logger for one writing to a buffer
 // and returns the buffer plus a restore function.
-func captureLogger(t *testing.T) (*bytes.Buffer, func()) {
+func captureLogger(t *testing.T) (*safeBuffer, func()) {
 	t.Helper()
-	var buf bytes.Buffer
+	buf := &safeBuffer{}
 	original := logger.Logger
-	logger.Logger = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
+	logger.Logger = slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}))
-	return &buf, func() { logger.Logger = original }
+	return buf, func() { logger.Logger = original }
 }
 
 // collectTraceIDs scans every JSON log line and returns the unique set of
@@ -162,5 +181,76 @@ func TestExecuteWithRecordsContext_KeepsCallerTraceID(t *testing.T) {
 	ids := collectTraceIDs(t, buf.String())
 	if _, ok := ids[presetID]; !ok {
 		t.Fatalf("expected preset trace_id %q to appear in logs, got %#v", presetID, ids)
+	}
+}
+
+type collectingOutputModule struct {
+	mu   sync.Mutex
+	seen map[string]int
+}
+
+func (m *collectingOutputModule) Send(_ context.Context, records []map[string]any) (int, error) {
+	time.Sleep(2 * time.Millisecond) // Encourage overlap between goroutines.
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.seen == nil {
+		m.seen = make(map[string]int)
+	}
+	for _, record := range records {
+		id, _ := record["id"].(string)
+		m.seen[id]++
+	}
+	return len(records), nil
+}
+
+func (m *collectingOutputModule) Close() error { return nil }
+
+var _ output.Module = (*collectingOutputModule)(nil)
+
+func TestExecuteWithRecordsContext_ParallelCalls_IsolatedInputRecords(t *testing.T) {
+	output := &collectingOutputModule{}
+	executor := NewExecutorWithModules(nil, nil, output, false)
+	pipeline := &connector.Pipeline{
+		ID:      "records-parallel",
+		Name:    "Records Parallel",
+		Version: "1.0.0",
+		Enabled: true,
+	}
+
+	const N = 50
+	var (
+		wg    sync.WaitGroup
+		errMu sync.Mutex
+		errs  []error
+	)
+	wg.Add(N)
+	for i := 0; i < N; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			records := []map[string]any{{"id": fmt.Sprintf("r-%d", i)}}
+			if _, err := executor.ExecuteWithRecordsContext(context.Background(), pipeline, records); err != nil {
+				errMu.Lock()
+				errs = append(errs, err)
+				errMu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+
+	if len(errs) > 0 {
+		t.Fatalf("parallel ExecuteWithRecordsContext returned errors: %v", errs)
+	}
+
+	output.mu.Lock()
+	defer output.mu.Unlock()
+	if len(output.seen) != N {
+		t.Fatalf("expected %d distinct record IDs, got %d (%v)", N, len(output.seen), output.seen)
+	}
+	for i := 0; i < N; i++ {
+		id := fmt.Sprintf("r-%d", i)
+		if output.seen[id] != 1 {
+			t.Fatalf("record %s processed %d times, want 1", id, output.seen[id])
+		}
 	}
 }

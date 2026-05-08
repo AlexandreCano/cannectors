@@ -858,8 +858,10 @@ func (e *Executor) ExecuteWithRecords(pipeline *connector.Pipeline, records []ma
 // State persistence is intentionally not engaged: pre-fetched records carry no
 // notion of incremental state.
 func (e *Executor) ExecuteWithRecordsContext(ctx context.Context, pipeline *connector.Pipeline, records []map[string]any) (*connector.ExecutionResult, error) {
-	originalInput := e.inputModule
-	e.inputModule = newRecordsInput(records)
-	defer func() { e.inputModule = originalInput }()
-	return e.ExecuteWithContext(ctx, pipeline)
+	// Execute with a per-call clone to avoid mutating shared executor state.
+	// This keeps ExecuteWithRecordsContext safe when the same executor instance
+	// is used concurrently.
+	exec := *e
+	exec.inputModule = newRecordsInput(records)
+	return exec.ExecuteWithContext(ctx, pipeline)
 }

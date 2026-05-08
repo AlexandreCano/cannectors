@@ -1,6 +1,6 @@
 # Story 20.2: Raise database input/output modules test coverage
 
-Status: backlog
+Status: in-progress
 
 ## Story
 
@@ -101,4 +101,5 @@ Audit §4.1. Database modules critiques pour tout pipeline ETL. L'incrémental e
 
 ## File List
 
-(à compléter)
+- `internal/modules/input/database_fetch_test.go`
+- `internal/modules/output/database_send_test.go`

@@ -1,6 +1,6 @@
 # Story 20.4: Add E2E non-regression tests for example configs
 
-Status: backlog
+Status: in-progress
 
 ## Story
 
@@ -98,4 +98,6 @@ Audit §4.1 note que les E2E tests sont limités. Plan.md §6.3 recommande d'uti
 
 ## File List
 
-(à compléter)
+- `internal/e2e/e2e_test.go`
+- `.github/workflows/ci.yml`
+- `docs/MODULE_EXTENSIBILITY.md`

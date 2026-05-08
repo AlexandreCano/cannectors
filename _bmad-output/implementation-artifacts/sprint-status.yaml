@@ -153,22 +153,22 @@ development_status:
   # Epic 19: Observability & Developer Experience (from audit 2026-04-21)
   # Trace ID, secrets sanitization, dégraissage logger, any vs interface{}, code mort
   # Source: docs/AUDIT_TECHNIQUE_2026-04-21.md §5 P3.1, P3.2, P3.3, P3.5, P3.7
-  epic-19: review
-  19-1-add-trace-id-to-execution-logs: review
-  19-2-audit-secrets-leakage-in-logs: review
-  19-3-trim-logger-package: review
-  19-4-replace-interface-with-any: review
-  19-5-remove-dead-code: review
+  epic-19: done
+  19-1-add-trace-id-to-execution-logs: done
+  19-2-audit-secrets-leakage-in-logs: done
+  19-3-trim-logger-package: done
+  19-4-replace-interface-with-any: done
+  19-5-remove-dead-code: done
   epic-19-retrospective: optional
 
   # Epic 20: Test Hygiene & Coverage (from audit 2026-04-21)
   # Couverture des modules sous-testés (sql_call 29%, database 55-68%) + E2E
   # Source: docs/AUDIT_TECHNIQUE_2026-04-21.md §4.1, §4.3, §5 P2.6
-  epic-20: backlog
-  20-1-raise-sql-call-test-coverage: backlog
-  20-2-raise-database-modules-test-coverage: backlog
-  20-3-refactor-mapping-test-fixtures: backlog
-  20-4-e2e-tests-per-module-combination: backlog
+  epic-20: review
+  20-1-raise-sql-call-test-coverage: review
+  20-2-raise-database-modules-test-coverage: review
+  20-3-refactor-mapping-test-fixtures: review
+  20-4-e2e-tests-per-module-combination: review
   epic-20-retrospective: optional
 
   # Epic 4: Advanced Runtime Features (remaining stories - after Epic 14)

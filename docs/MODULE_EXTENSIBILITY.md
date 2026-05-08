@@ -489,3 +489,14 @@ case errhandling.OnErrorLog:
 6. **Write tests** - Test your constructor and module behavior
 7. **Respect module boundaries** - Don't perform tasks outside your module's responsibility
 8. **Keep modules stateless** - Avoid storing state between pipeline executions (or manage it internally)
+
+## E2E Coverage
+
+When adding a module or a new module combination, add an E2E non-regression test in `internal/e2e/`.
+These tests use the `e2e` build tag and local fixtures only:
+
+```bash
+go test -tags=e2e -timeout=2m ./internal/e2e/
+```
+
+Prefer `httptest.Server` for HTTP source/destination behavior and SQLite test databases for database modules. Do not call external services from E2E tests.

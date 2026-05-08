@@ -1,6 +1,6 @@
 # Story 20.3: Refactor `mapping_test.go` with fixture builders
 
-Status: backlog
+Status: in-progress
 
 ## Story
 
@@ -78,4 +78,7 @@ Audit §4.1 et §4.3. `mapping_test.go` est le 2e plus gros fichier de test (230
 
 ## File List
 
-(à compléter)
+- `internal/modules/filter/mapping_test.go`
+- `internal/modules/filter/mapping_fixtures_test.go`
+- `internal/modules/filter/mapping_scenarios_test.go`
+- `test-patterns.md`

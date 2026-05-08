@@ -1,6 +1,6 @@
 # Story 20.1: Raise `sql_call` filter test coverage to 70 %+
 
-Status: backlog
+Status: in-progress
 
 ## Story
 
@@ -88,4 +88,4 @@ Audit §4.1 identifie sql_call comme point chaud sous-testé (29 %). Module crit
 
 ## File List
 
-(à compléter)
+- `internal/modules/filter/sql_call_test.go`

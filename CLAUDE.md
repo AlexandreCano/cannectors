@@ -1,6 +1,9 @@
 # Cannectors — AI Agent Instructions
 
-@_bmad-output/project-context.md
+## Fichiers liés
+
+- @_bmad-output/project-context.md
+- @test-patterns.md
 
 ## Project Maturity
 

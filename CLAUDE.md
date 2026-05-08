@@ -3,7 +3,7 @@
 ## Fichiers liés
 
 - @_bmad-output/project-context.md
-- @test-pattern
+- @test-patterns.md
 
 ## Project Maturity
 

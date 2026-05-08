@@ -9,8 +9,8 @@ import (
 )
 
 type simpleConfig struct {
-	Target string      `json:"target"`
-	Value  interface{} `json:"value"`
+	Target string `json:"target"`
+	Value  any    `json:"value"`
 }
 
 type httpConfig struct {

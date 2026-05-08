@@ -3,9 +3,9 @@ package output
 import "testing"
 
 func TestGetRecordFieldString_DotNotation(t *testing.T) {
-	record := map[string]interface{}{
-		"user": map[string]interface{}{
-			"profile": map[string]interface{}{
+	record := map[string]any{
+		"user": map[string]any{
+			"profile": map[string]any{
 				"name": "Alice",
 				"age":  float64(42),
 			},
@@ -24,10 +24,10 @@ func TestGetRecordFieldString_DotNotation(t *testing.T) {
 }
 
 func TestGetRecordFieldString_WithArrayIndex(t *testing.T) {
-	record := map[string]interface{}{
-		"items": []interface{}{
-			map[string]interface{}{"id": "abc", "name": "first"},
-			map[string]interface{}{"id": "def", "name": "second"},
+	record := map[string]any{
+		"items": []any{
+			map[string]any{"id": "abc", "name": "first"},
+			map[string]any{"id": "def", "name": "second"},
 		},
 	}
 
@@ -52,7 +52,7 @@ func TestGetRecordFieldString_WithArrayIndex(t *testing.T) {
 }
 
 func TestGetRecordFieldString_TypeConversions(t *testing.T) {
-	record := map[string]interface{}{
+	record := map[string]any{
 		"str":   "hello",
 		"int":   42,
 		"int64": int64(123456789),

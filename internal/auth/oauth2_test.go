@@ -42,7 +42,7 @@ func TestOAuth2Handler_ApplyAuth_Success(t *testing.T) {
 
 		// Return token response
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token": "test-access-token",
 			"token_type":   "Bearer",
 			"expires_in":   3600,
@@ -83,7 +83,7 @@ func TestOAuth2Handler_TokenCaching(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&tokenRequestCount, 1)
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token": "cached-token",
 			"token_type":   "Bearer",
 			"expires_in":   3600,
@@ -126,7 +126,7 @@ func TestOAuth2Handler_TokenExpiry(t *testing.T) {
 		count := atomic.AddInt32(&tokenRequestCount, 1)
 		w.Header().Set("Content-Type", "application/json")
 		// Return token that expires immediately (expires_in: 1s - 60s buffer = 0 effective)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token": "token-" + string(rune(int('0')+int(count))),
 			"token_type":   "Bearer",
 			"expires_in":   1, // After 60s buffer subtraction, becomes 0 = expires immediately
@@ -177,7 +177,7 @@ func TestOAuth2Handler_Concurrent(t *testing.T) {
 		// Simulate slow token endpoint
 		time.Sleep(50 * time.Millisecond)
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token": "concurrent-token",
 			"token_type":   "Bearer",
 			"expires_in":   3600,
@@ -256,7 +256,7 @@ func TestOAuth2Handler_TokenRequestFailure(t *testing.T) {
 func TestOAuth2Handler_EmptyToken(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token": "",
 			"token_type":   "Bearer",
 			"expires_in":   3600,
@@ -331,7 +331,7 @@ func TestOAuth2Handler_WithScopes(t *testing.T) {
 		receivedScopes = r.Form.Get("scope")
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token": "scoped-token",
 			"token_type":   "Bearer",
 			"expires_in":   3600,
@@ -341,7 +341,7 @@ func TestOAuth2Handler_WithScopes(t *testing.T) {
 
 	config := &connector.AuthConfig{
 		Type: "oauth2",
-		Credentials: toJSON(t, map[string]interface{}{
+		Credentials: toJSON(t, map[string]any{
 			"tokenUrl":     tokenServer.URL,
 			"clientId":     "client",
 			"clientSecret": "secret",
@@ -392,7 +392,7 @@ func TestOAuth2Handler_ScopeFieldString(t *testing.T) {
 
 	cfg := &connector.AuthConfig{
 		Type: "oauth2",
-		Credentials: toJSON(t, map[string]interface{}{
+		Credentials: toJSON(t, map[string]any{
 			"tokenUrl":     srv.URL,
 			"clientId":     "client",
 			"clientSecret": "secret",
@@ -421,7 +421,7 @@ func TestOAuth2Handler_NoScopesOmitted(t *testing.T) {
 
 	cfg := &connector.AuthConfig{
 		Type: "oauth2",
-		Credentials: toJSON(t, map[string]interface{}{
+		Credentials: toJSON(t, map[string]any{
 			"tokenUrl":     srv.URL,
 			"clientId":     "client",
 			"clientSecret": "secret",
@@ -446,7 +446,7 @@ func TestOAuth2Handler_InvalidateToken(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count := atomic.AddInt32(&tokenRequestCount, 1)
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token": "token-" + string(rune(int('0')+int(count))),
 			"token_type":   "Bearer",
 			"expires_in":   3600,
@@ -518,7 +518,7 @@ func TestOAuth2Handler_NetworkError(t *testing.T) {
 func TestOAuth2Handler_DeterministicWithCache(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token": "deterministic-token",
 			"token_type":   "Bearer",
 			"expires_in":   3600,
@@ -564,7 +564,7 @@ func TestOAuth2Handler_InvalidateTokenOn401(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count := atomic.AddInt32(&tokenRequestCount, 1)
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token": fmt.Sprintf("token-%d", count),
 			"token_type":   "Bearer",
 			"expires_in":   3600,

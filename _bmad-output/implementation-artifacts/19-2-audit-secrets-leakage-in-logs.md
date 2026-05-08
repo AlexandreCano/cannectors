@@ -1,6 +1,6 @@
 # Story 19.2: Audit and fix secret leakage in logs
 
-Status: backlog
+Status: review
 
 ## Story
 
@@ -85,4 +85,10 @@ Plan.md §7.1 mentionne ce risque. L'audit §3 sécurité confirme : OAuth2 `tok
 
 ## File List
 
-(à compléter)
+- `internal/logger/secrets_test.go` (new) — automated regression test scanning logs for `api_key=`, `access_token=`, `token=`, `password=`, `Bearer …`, `Basic …`.
+- `internal/modules/output/http_request.go`, `http_request_send.go`, `http_request_url.go` — every `slog.String("endpoint", …)` / `slog.String("url", …)` wrapped with `httpclient.SanitizeURL(...)`.
+- `internal/modules/output/stub.go`, `internal/modules/input/stub.go` — endpoint logs sanitized for consistency.
+- `internal/modules/input/http_polling.go`, `http_polling_request.go` — endpoint logs sanitized.
+- `internal/modules/filter/http_call.go` — endpoint logs sanitized.
+- `internal/auth/oauth2.go` — `token_url` logged via `httpclient.SanitizeURL`.
+- `httpclient.SanitizeURL` was already promoted in epic 17; no relocation required.

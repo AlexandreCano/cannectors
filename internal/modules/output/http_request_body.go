@@ -10,7 +10,7 @@ import (
 
 // buildBodyForRecord builds the request body for a single record (template or JSON marshal).
 // Returns an error only on marshal failure; invalid JSON from templates is logged but not returned.
-func (h *HTTPRequestModule) buildBodyForRecord(record map[string]interface{}, recordIndex int) ([]byte, error) {
+func (h *HTTPRequestModule) buildBodyForRecord(record map[string]any, recordIndex int) ([]byte, error) {
 	if h.request.bodyTemplateRaw != "" {
 		bodyStr := h.templateEvaluator.Evaluate(h.request.bodyTemplateRaw, record)
 		body := []byte(bodyStr)

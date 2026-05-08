@@ -35,7 +35,7 @@ const (
 
 // filterResult holds the result of filter module execution
 type filterResult struct {
-	records []map[string]interface{}
+	records []map[string]any
 	err     error
 	errIdx  int
 }
@@ -97,14 +97,6 @@ type Executor struct {
 	stateStore *persistence.StateStore
 }
 
-// NewExecutor creates a new pipeline executor with only dry-run flag.
-// This is the basic constructor - modules must be set separately.
-func NewExecutor(dryRun bool) *Executor {
-	return &Executor{
-		dryRun: dryRun,
-	}
-}
-
 // NewExecutorWithModules creates a new pipeline executor with all modules configured.
 // This is the primary constructor for dependency injection.
 //
@@ -138,7 +130,7 @@ func (e *Executor) SetStateStore(store *persistence.StateStore) {
 // It persists the execution start timestamp and/or last ID.
 // lastID is the ID extracted from raw records (before filters) to ensure the field path
 // matches the API response structure, not transformed records.
-func (e *Executor) persistState(pipelineID string, executionStart time.Time, lastID *string, config *persistence.StatePersistenceConfig) {
+func (e *Executor) persistState(pipelineID string, executionStart time.Time, lastID *string, config *persistence.StatePersistenceConfig, traceID string) {
 	state := &persistence.State{
 		PipelineID: pipelineID,
 		UpdatedAt:  time.Now(),
@@ -148,6 +140,7 @@ func (e *Executor) persistState(pipelineID string, executionStart time.Time, las
 	if config.TimestampEnabled() {
 		state.LastTimestamp = &executionStart
 		logger.Debug("persisting execution timestamp",
+			slog.String(logger.TraceIDField, traceID),
 			slog.String("pipeline_id", pipelineID),
 			slog.String("timestamp", executionStart.Format(time.RFC3339)),
 		)
@@ -157,6 +150,7 @@ func (e *Executor) persistState(pipelineID string, executionStart time.Time, las
 	if config.IDEnabled() && lastID != nil {
 		state.LastID = lastID
 		logger.Debug("persisting last ID from most recent record",
+			slog.String(logger.TraceIDField, traceID),
 			slog.String("pipeline_id", pipelineID),
 			slog.String("id_field", config.ID.Field),
 			slog.String("last_id", *lastID),
@@ -167,11 +161,13 @@ func (e *Executor) persistState(pipelineID string, executionStart time.Time, las
 	if state.LastTimestamp != nil || state.LastID != nil {
 		if err := e.stateStore.Save(pipelineID, state); err != nil {
 			logger.Warn("failed to persist state after execution",
+				slog.String(logger.TraceIDField, traceID),
 				slog.String("pipeline_id", pipelineID),
 				slog.String("error", err.Error()),
 			)
 		} else {
 			logger.Debug("state persisted successfully",
+				slog.String(logger.TraceIDField, traceID),
 				slog.String("pipeline_id", pipelineID),
 				slog.Bool("has_timestamp", state.LastTimestamp != nil),
 				slog.Bool("has_id", state.LastID != nil),
@@ -182,11 +178,13 @@ func (e *Executor) persistState(pipelineID string, executionStart time.Time, las
 
 // executeFilters runs all filter modules in sequence on the given records.
 // Returns the filtered records and any error that occurred.
-func (e *Executor) executeFilters(ctx context.Context, pipelineID string, records []map[string]interface{}) filterResult {
+func (e *Executor) executeFilters(ctx context.Context, pipelineID string, records []map[string]any) filterResult {
+	traceID := logger.TraceIDFrom(ctx)
 	currentRecords := records
 	for i, filterModule := range e.filterModules {
 		if filterModule == nil {
 			logger.Warn("nil filter module encountered; skipping",
+				slog.String(logger.TraceIDField, traceID),
 				slog.String("pipeline_id", pipelineID),
 				slog.String("stage", "filter"),
 				slog.Int("filter_index", i),
@@ -196,6 +194,7 @@ func (e *Executor) executeFilters(ctx context.Context, pipelineID string, record
 		}
 
 		logger.Debug("executing filter module",
+			slog.String(logger.TraceIDField, traceID),
 			slog.String("pipeline_id", pipelineID),
 			slog.String("stage", "filter"),
 			slog.Int("filter_index", i),
@@ -209,6 +208,7 @@ func (e *Executor) executeFilters(ctx context.Context, pipelineID string, record
 
 		if err != nil {
 			logger.Error("filter module execution failed",
+				slog.String(logger.TraceIDField, traceID),
 				slog.String("pipeline_id", pipelineID),
 				slog.String("module", "filter"),
 				slog.Int("filter_index", i),
@@ -219,6 +219,7 @@ func (e *Executor) executeFilters(ctx context.Context, pipelineID string, record
 		}
 
 		logger.Debug("filter module completed",
+			slog.String(logger.TraceIDField, traceID),
 			slog.String("pipeline_id", pipelineID),
 			slog.String("stage", "filter"),
 			slog.Int("filter_index", i),
@@ -231,9 +232,11 @@ func (e *Executor) executeFilters(ctx context.Context, pipelineID string, record
 
 // executeOutput runs the output module on the given records.
 // In dry-run mode, calls preview if available and returns the record count without actually sending.
-func (e *Executor) executeOutput(ctx context.Context, pipelineID string, records []map[string]interface{}) outputResult {
+func (e *Executor) executeOutput(ctx context.Context, pipelineID string, records []map[string]any) outputResult {
+	traceID := logger.TraceIDFrom(ctx)
 	if e.dryRun {
 		logger.Debug("dry-run mode: skipping output module",
+			slog.String(logger.TraceIDField, traceID),
 			slog.String("pipeline_id", pipelineID),
 			slog.Int("records_would_send", len(records)),
 		)
@@ -241,6 +244,7 @@ func (e *Executor) executeOutput(ctx context.Context, pipelineID string, records
 	}
 
 	logger.Debug("executing output module",
+		slog.String(logger.TraceIDField, traceID),
 		slog.String("pipeline_id", pipelineID),
 		slog.String("stage", "output"),
 		slog.Int("records_to_send", len(records)),
@@ -252,6 +256,7 @@ func (e *Executor) executeOutput(ctx context.Context, pipelineID string, records
 
 	if err != nil {
 		logger.Error("output module execution failed",
+			slog.String(logger.TraceIDField, traceID),
 			slog.String("pipeline_id", pipelineID),
 			slog.String("module", "output"),
 			slog.Int("records_sent", recordsSent),
@@ -263,6 +268,7 @@ func (e *Executor) executeOutput(ctx context.Context, pipelineID string, records
 	}
 
 	logger.Debug("output module completed",
+		slog.String(logger.TraceIDField, traceID),
 		slog.String("pipeline_id", pipelineID),
 		slog.String("stage", "output"),
 		slog.Int("records_sent", recordsSent),
@@ -273,7 +279,7 @@ func (e *Executor) executeOutput(ctx context.Context, pipelineID string, records
 
 // executeDryRunPreview generates request previews for dry-run mode.
 // Returns nil if the output module doesn't implement PreviewableModule.
-func (e *Executor) executeDryRunPreview(pipelineID string, records []map[string]interface{}, dryRunOpts *connector.DryRunOptions) []connector.RequestPreview {
+func (e *Executor) executeDryRunPreview(pipelineID string, records []map[string]any, dryRunOpts *connector.DryRunOptions, traceID string) []connector.RequestPreview {
 	if !e.dryRun || e.outputModule == nil {
 		return nil
 	}
@@ -282,6 +288,7 @@ func (e *Executor) executeDryRunPreview(pipelineID string, records []map[string]
 	previewable, ok := e.outputModule.(output.PreviewableModule)
 	if !ok {
 		logger.Debug("output module does not implement PreviewableModule, skipping preview",
+			slog.String(logger.TraceIDField, traceID),
 			slog.String("pipeline_id", pipelineID),
 		)
 		return nil
@@ -294,6 +301,7 @@ func (e *Executor) executeDryRunPreview(pipelineID string, records []map[string]
 	}
 
 	logger.Debug("generating dry-run preview",
+		slog.String(logger.TraceIDField, traceID),
 		slog.String("pipeline_id", pipelineID),
 		slog.Int("records", len(records)),
 		slog.Bool("show_credentials", previewOpts.ShowCredentials),
@@ -303,6 +311,7 @@ func (e *Executor) executeDryRunPreview(pipelineID string, records []map[string]
 	outputPreviews, err := previewable.PreviewRequest(records, previewOpts)
 	if err != nil {
 		logger.Error("failed to generate dry-run preview",
+			slog.String(logger.TraceIDField, traceID),
 			slog.String("pipeline_id", pipelineID),
 			slog.Int("record_count", len(records)),
 			slog.Bool("show_credentials", previewOpts.ShowCredentials),
@@ -335,6 +344,7 @@ func (e *Executor) executeDryRunPreview(pipelineID string, records []map[string]
 	}
 
 	logger.Debug("dry-run preview generated",
+		slog.String(logger.TraceIDField, traceID),
 		slog.String("pipeline_id", pipelineID),
 		slog.Int("preview_count", len(previews)),
 	)
@@ -389,44 +399,50 @@ func (e *Executor) ExecuteWithContext(ctx context.Context, pipeline *connector.P
 	startedAt := time.Now()
 	result := e.newErrorResult(startedAt)
 
+	// Ensure a trace ID is propagated for log correlation across the entire
+	// execution. If the caller already set one (e.g. scheduler, webhook), we
+	// keep it; otherwise we generate a UUID v4.
+	ctx, traceID := logger.EnsureTraceID(ctx)
+
 	// Validate pipeline and modules first (before logging, in case pipeline is nil)
 	if err := e.validateExecution(pipeline, result); err != nil {
-		e.handleValidationError(pipeline, startedAt)
+		e.handleValidationError(pipeline, startedAt, traceID)
 		return result, err
 	}
 	result.PipelineID = pipeline.ID
 
 	// Setup execution context and logging
-	execCtx := e.createExecutionContext(pipeline)
+	execCtx := e.createExecutionContext(pipeline, traceID)
 	logger.LogExecutionStart(execCtx)
 
 	// Setup output module cleanup (deferred to end of execution)
 	if e.outputModule != nil {
-		defer e.closeModule(pipeline.ID, "output", e.outputModule)
+		defer e.closeModule(pipeline.ID, "output", e.outputModule, traceID)
 	}
 
 	// Setup state persistence if input module supports it
-	persistenceConfig := e.setupStatePersistence(pipeline)
+	persistenceConfig := e.setupStatePersistence(pipeline, traceID)
 
 	// Execute pipeline stages (Input → Filter → Output)
 	// Extract ID from raw records immediately after input to free memory early
-	timings, lastID, err := e.executePipelineStages(ctx, pipeline, result, execCtx, startedAt, persistenceConfig)
+	timings, lastID, err := e.executePipelineStages(ctx, pipeline, result, execCtx, startedAt, persistenceConfig, traceID)
 	if err != nil {
 		return result, err
 	}
 
 	// Persist state after successful execution (Input → Filter → Output all succeeded)
 	if persistenceConfig != nil && persistenceConfig.IsEnabled() && e.stateStore != nil {
-		e.persistState(pipeline.ID, startedAt, lastID, persistenceConfig)
+		e.persistState(pipeline.ID, startedAt, lastID, persistenceConfig, traceID)
 	}
 
-	e.finalizeSuccessWithMetrics(result, startedAt, pipeline, timings)
+	e.finalizeSuccessWithMetrics(result, startedAt, pipeline, timings, traceID)
 	return result, nil
 }
 
 // createExecutionContext creates the execution context for logging.
-func (e *Executor) createExecutionContext(pipeline *connector.Pipeline) logger.ExecutionContext {
+func (e *Executor) createExecutionContext(pipeline *connector.Pipeline, traceID string) logger.ExecutionContext {
 	return logger.ExecutionContext{
+		TraceID:      traceID,
 		PipelineID:   pipeline.ID,
 		PipelineName: pipeline.Name,
 		DryRun:       e.dryRun,
@@ -434,9 +450,10 @@ func (e *Executor) createExecutionContext(pipeline *connector.Pipeline) logger.E
 }
 
 // handleValidationError logs execution start and end for validation errors.
-func (e *Executor) handleValidationError(pipeline *connector.Pipeline, startedAt time.Time) {
+func (e *Executor) handleValidationError(pipeline *connector.Pipeline, startedAt time.Time, traceID string) {
 	if pipeline != nil {
 		execCtx := logger.ExecutionContext{
+			TraceID:      traceID,
 			PipelineID:   pipeline.ID,
 			PipelineName: pipeline.Name,
 			DryRun:       e.dryRun,
@@ -449,7 +466,7 @@ func (e *Executor) handleValidationError(pipeline *connector.Pipeline, startedAt
 
 // setupStatePersistence configures state persistence for the input module if supported.
 // Returns the persistence config if enabled, nil otherwise.
-func (e *Executor) setupStatePersistence(pipeline *connector.Pipeline) *persistence.StatePersistenceConfig {
+func (e *Executor) setupStatePersistence(pipeline *connector.Pipeline, traceID string) *persistence.StatePersistenceConfig {
 	var persistenceConfig *persistence.StatePersistenceConfig
 	if spInput, ok := e.inputModule.(StatePersistentInput); ok {
 		spInput.SetPipelineID(pipeline.ID)
@@ -468,11 +485,13 @@ func (e *Executor) setupStatePersistence(pipeline *connector.Pipeline) *persiste
 			// Log warning but continue - state loading failure is not fatal
 			// Pipeline will execute without state-based filtering (first execution behavior)
 			logger.Warn("failed to load state for pipeline, continuing without persistence",
+				slog.String(logger.TraceIDField, traceID),
 				slog.String("pipeline_id", pipeline.ID),
 				slog.String("error", err.Error()),
 			)
 		} else if state != nil {
 			logger.Debug("loaded persisted state for pipeline",
+				slog.String(logger.TraceIDField, traceID),
 				slog.String("pipeline_id", pipeline.ID),
 				slog.Bool("has_timestamp", state.LastTimestamp != nil),
 				slog.Bool("has_id", state.LastID != nil),
@@ -493,12 +512,13 @@ func (e *Executor) executePipelineStages(
 	execCtx logger.ExecutionContext,
 	startedAt time.Time,
 	persistenceConfig *persistence.StatePersistenceConfig,
+	traceID string,
 ) (stageTimings, *string, error) {
 	var timings stageTimings
 	var lastID *string
 
 	// Execute Input module (returns duration measured inside)
-	rawRecords, inputDuration, err := e.executeInput(ctx, pipeline, result)
+	rawRecords, inputDuration, err := e.executeInput(ctx, pipeline, result, traceID)
 	timings.inputDuration = inputDuration
 
 	// Close input module immediately after input execution completes.
@@ -506,7 +526,7 @@ func (e *Executor) executePipelineStages(
 	// before filter and output execution begins. Fetched records remain in memory.
 	// For HTTP Polling modules, this closes idle connections in the connection pool.
 	if e.inputModule != nil {
-		e.closeModule(pipeline.ID, "input", e.inputModule)
+		e.closeModule(pipeline.ID, "input", e.inputModule, traceID)
 		e.inputModule = nil // Prevent double-close
 	}
 
@@ -521,6 +541,7 @@ func (e *Executor) executePipelineStages(
 		extractedID, extractErr := persistence.ExtractLastID(rawRecords, persistenceConfig.ID.Field)
 		if extractErr != nil {
 			logger.Warn("failed to extract last ID for state persistence",
+				slog.String(logger.TraceIDField, traceID),
 				slog.String("pipeline_id", pipeline.ID),
 				slog.String("id_field", persistenceConfig.ID.Field),
 				slog.String("error", extractErr.Error()),
@@ -529,6 +550,7 @@ func (e *Executor) executePipelineStages(
 		} else {
 			lastID = &extractedID
 			logger.Debug("extracted last ID from raw records",
+				slog.String(logger.TraceIDField, traceID),
 				slog.String("pipeline_id", pipeline.ID),
 				slog.String("id_field", persistenceConfig.ID.Field),
 				slog.String("last_id", extractedID),
@@ -537,7 +559,7 @@ func (e *Executor) executePipelineStages(
 	}
 
 	// Execute Filter modules (returns duration measured inside)
-	filteredRecords, filterDuration, err := e.executeFiltersWithResult(ctx, pipeline, rawRecords, result)
+	filteredRecords, filterDuration, err := e.executeFiltersWithResult(ctx, pipeline, rawRecords, result, traceID)
 	timings.filterDuration = filterDuration
 	// rawRecords can now be garbage collected after filters start processing
 	if err != nil {
@@ -547,11 +569,11 @@ func (e *Executor) executePipelineStages(
 
 	// Generate dry-run preview if applicable
 	if e.dryRun {
-		result.DryRunPreview = e.executeDryRunPreview(pipeline.ID, filteredRecords, pipeline.DryRunOptions)
+		result.DryRunPreview = e.executeDryRunPreview(pipeline.ID, filteredRecords, pipeline.DryRunOptions, traceID)
 	}
 
 	// Execute Output module (returns duration measured inside)
-	outputDuration, err := e.executeOutputWithResult(ctx, pipeline, filteredRecords, result)
+	outputDuration, err := e.executeOutputWithResult(ctx, pipeline, filteredRecords, result, traceID)
 	timings.outputDuration = outputDuration
 	if err != nil {
 		e.handleExecutionFailure(execCtx, startedAt, StatusError, result.RecordsProcessed)
@@ -601,7 +623,7 @@ func buildExecutionError(code, module string, err error) *connector.ExecutionErr
 			if idx >= 0 {
 				size++
 			}
-			merged := make(map[string]interface{}, size)
+			merged := make(map[string]any, size)
 			for k, v := range details {
 				merged[k] = v
 			}
@@ -655,9 +677,10 @@ type moduleCloser interface {
 }
 
 // closeModule closes a module and logs any error.
-func (e *Executor) closeModule(pipelineID, moduleName string, m moduleCloser) {
+func (e *Executor) closeModule(pipelineID, moduleName string, m moduleCloser, traceID string) {
 	if err := m.Close(); err != nil {
 		logger.Warn("failed to close module",
+			slog.String(logger.TraceIDField, traceID),
 			slog.String("pipeline_id", pipelineID),
 			slog.String("module", moduleName),
 			slog.String("error", err.Error()),
@@ -666,9 +689,10 @@ func (e *Executor) closeModule(pipelineID, moduleName string, m moduleCloser) {
 }
 
 // executeInput executes the input module and returns fetched records and duration.
-func (e *Executor) executeInput(ctx context.Context, pipeline *connector.Pipeline, result *connector.ExecutionResult) ([]map[string]interface{}, time.Duration, error) {
+func (e *Executor) executeInput(ctx context.Context, pipeline *connector.Pipeline, result *connector.ExecutionResult, traceID string) ([]map[string]any, time.Duration, error) {
 	// Log stage start
 	stageCtx := logger.ExecutionContext{
+		TraceID:      traceID,
 		PipelineID:   pipeline.ID,
 		PipelineName: pipeline.Name,
 		Stage:        "input",
@@ -702,9 +726,10 @@ func (e *Executor) executeInput(ctx context.Context, pipeline *connector.Pipelin
 
 // executeFiltersWithResult executes filter modules and updates result on error.
 // Returns filtered records, duration, and error.
-func (e *Executor) executeFiltersWithResult(ctx context.Context, pipeline *connector.Pipeline, records []map[string]interface{}, result *connector.ExecutionResult) ([]map[string]interface{}, time.Duration, error) {
+func (e *Executor) executeFiltersWithResult(ctx context.Context, pipeline *connector.Pipeline, records []map[string]any, result *connector.ExecutionResult, traceID string) ([]map[string]any, time.Duration, error) {
 	// Log stage start
 	stageCtx := logger.ExecutionContext{
+		TraceID:      traceID,
 		PipelineID:   pipeline.ID,
 		PipelineName: pipeline.Name,
 		Stage:        "filter",
@@ -721,7 +746,7 @@ func (e *Executor) executeFiltersWithResult(ctx context.Context, pipeline *conne
 		errMsg := fmt.Sprintf("filter module %d failed: %v", filterRes.errIdx, filterRes.err)
 		result.Error = buildExecutionError(ErrCodeFilterFailed, "filter", filterRes.err)
 		result.Error.Message = errMsg
-		result.Error.Details = map[string]interface{}{"filterIndex": filterRes.errIdx}
+		result.Error.Details = map[string]any{"filterIndex": filterRes.errIdx}
 		logger.LogStageEnd(stageCtx, len(records), filterDuration, &logger.ExecutionError{
 			Code:    ErrCodeFilterFailed,
 			Message: errMsg,
@@ -736,9 +761,10 @@ func (e *Executor) executeFiltersWithResult(ctx context.Context, pipeline *conne
 
 // executeOutputWithResult executes the output module and updates result.
 // Returns duration and error.
-func (e *Executor) executeOutputWithResult(ctx context.Context, pipeline *connector.Pipeline, records []map[string]interface{}, result *connector.ExecutionResult) (time.Duration, error) {
+func (e *Executor) executeOutputWithResult(ctx context.Context, pipeline *connector.Pipeline, records []map[string]any, result *connector.ExecutionResult, traceID string) (time.Duration, error) {
 	// Log stage start
 	stageCtx := logger.ExecutionContext{
+		TraceID:      traceID,
 		PipelineID:   pipeline.ID,
 		PipelineName: pipeline.Name,
 		Stage:        "output",
@@ -774,7 +800,7 @@ func (e *Executor) executeOutputWithResult(ctx context.Context, pipeline *connec
 }
 
 // finalizeSuccessWithMetrics marks the execution as successful and logs completion with detailed metrics.
-func (e *Executor) finalizeSuccessWithMetrics(result *connector.ExecutionResult, startedAt time.Time, pipeline *connector.Pipeline, timings stageTimings) {
+func (e *Executor) finalizeSuccessWithMetrics(result *connector.ExecutionResult, startedAt time.Time, pipeline *connector.Pipeline, timings stageTimings, traceID string) {
 	result.Status = StatusSuccess
 	result.RecordsFailed = 0
 	result.CompletedAt = time.Now()
@@ -793,6 +819,7 @@ func (e *Executor) finalizeSuccessWithMetrics(result *connector.ExecutionResult,
 
 	// Log detailed metrics using the new helper
 	ctx := logger.ExecutionContext{
+		TraceID:      traceID,
 		PipelineID:   pipeline.ID,
 		PipelineName: pipeline.Name,
 		DryRun:       e.dryRun,
@@ -815,114 +842,24 @@ func (e *Executor) finalizeSuccessWithMetrics(result *connector.ExecutionResult,
 }
 
 // ExecuteWithRecords runs a pipeline configuration using pre-fetched records.
-// This is intended for push-based inputs (e.g., webhooks) that already have data.
+// This is intended for push-based inputs (e.g. webhooks) that already have data.
 // Uses a background context. For cancellation support, use ExecuteWithRecordsContext.
-func (e *Executor) ExecuteWithRecords(pipeline *connector.Pipeline, records []map[string]interface{}) (*connector.ExecutionResult, error) {
+func (e *Executor) ExecuteWithRecords(pipeline *connector.Pipeline, records []map[string]any) (*connector.ExecutionResult, error) {
 	return e.ExecuteWithRecordsContext(context.Background(), pipeline, records)
 }
 
-// ExecuteWithRecordsContext runs a pipeline configuration using pre-fetched records with context.
-// This is intended for push-based inputs (e.g., webhooks) that already have data.
+// ExecuteWithRecordsContext runs a pipeline configuration using pre-fetched
+// records with context. This is intended for push-based inputs (e.g. webhooks)
+// that already have data.
 //
-// Note: This method does NOT use or cleanup input modules. Records are provided directly,
-// so no input module resources need to be managed. Only the output module is cleaned up.
-func (e *Executor) ExecuteWithRecordsContext(ctx context.Context, pipeline *connector.Pipeline, records []map[string]interface{}) (*connector.ExecutionResult, error) {
-	startedAt := time.Now()
-
-	result := &connector.ExecutionResult{
-		StartedAt:        startedAt,
-		Status:           StatusError,
-		RecordsProcessed: 0,
-		RecordsFailed:    0,
-	}
-
-	if pipeline == nil {
-		logger.Error("pipeline execution failed: nil pipeline configuration")
-		result.CompletedAt = time.Now()
-		result.Error = buildExecutionError(ErrCodeInvalidInput, "", ErrNilPipeline)
-		return result, ErrNilPipeline
-	}
-
-	result.PipelineID = pipeline.ID
-
-	logger.Info("starting pipeline execution (pre-fetched records)",
-		slog.String("pipeline_id", pipeline.ID),
-		slog.String("pipeline_name", pipeline.Name),
-		slog.String("version", pipeline.Version),
-		slog.Bool("dry_run", e.dryRun),
-		slog.Int("filter_count", len(e.filterModules)),
-		slog.Int("input_records", len(records)),
-	)
-
-	// Output module is required unless in dry-run mode
-	if e.outputModule == nil && !e.dryRun {
-		logger.Error("pipeline execution failed: output module is nil",
-			slog.String("pipeline_id", pipeline.ID),
-		)
-		result.CompletedAt = time.Now()
-		result.Error = buildExecutionError(ErrCodeInvalidInput, "output", ErrNilOutputModule)
-		return result, ErrNilOutputModule
-	}
-
-	if e.outputModule != nil {
-		defer func() {
-			if err := e.outputModule.Close(); err != nil {
-				logger.Warn("failed to close output module",
-					slog.String("pipeline_id", pipeline.ID),
-					slog.String("error", err.Error()),
-				)
-			}
-		}()
-	}
-
-	// Step 1: Skip input module, use provided records
-	// Step 2: Execute Filter modules in sequence
-	filterRes := e.executeFilters(ctx, pipeline.ID, records)
-	if filterRes.err != nil {
-		result.CompletedAt = time.Now()
-		result.Error = buildExecutionError(ErrCodeFilterFailed, "filter", filterRes.err)
-		result.Error.Message = fmt.Sprintf("filter module %d failed: %v", filterRes.errIdx, filterRes.err)
-		result.Error.Details = map[string]interface{}{"filterIndex": filterRes.errIdx}
-		return result, fmt.Errorf("executing filter module %d: %w", filterRes.errIdx, filterRes.err)
-	}
-
-	// Step 3: Generate dry-run preview if applicable
-	if e.dryRun {
-		result.DryRunPreview = e.executeDryRunPreview(pipeline.ID, filterRes.records, pipeline.DryRunOptions)
-	}
-
-	// Step 4: Execute Output module (skip in dry-run mode)
-	outputRes := e.executeOutput(ctx, pipeline.ID, filterRes.records)
-	if outputRes.err != nil {
-		result.CompletedAt = time.Now()
-		result.RecordsProcessed = outputRes.recordsSent
-		result.RecordsFailed = outputRes.recordsFailed
-		result.Error = buildExecutionError(ErrCodeOutputFailed, "output", outputRes.err)
-		if p, ok := e.outputModule.(connector.RetryInfoProvider); ok {
-			result.RetryInfo = p.GetRetryInfo()
-		}
-		return result, fmt.Errorf("executing output module: %w", outputRes.err)
-	}
-	if p, ok := e.outputModule.(connector.RetryInfoProvider); ok {
-		result.RetryInfo = p.GetRetryInfo()
-	}
-
-	result.Status = StatusSuccess
-	result.RecordsProcessed = outputRes.recordsSent
-	result.RecordsFailed = 0
-	result.CompletedAt = time.Now()
-	result.Error = nil
-
-	totalDuration := time.Since(startedAt)
-
-	logger.Info("pipeline execution completed",
-		slog.String("pipeline_id", pipeline.ID),
-		slog.String("status", StatusSuccess),
-		slog.Int("records_processed", outputRes.recordsSent),
-		slog.Int("records_failed", 0),
-		slog.Duration("total_duration", totalDuration),
-		slog.Bool("dry_run", e.dryRun),
-	)
-
-	return result, nil
+// The method substitutes the executor's input module with an in-memory
+// records source, so the rest of the execution flows through the same path as
+// ExecuteWithContext (logging helpers, stage timings, dry-run preview, etc.).
+// State persistence is intentionally not engaged: pre-fetched records carry no
+// notion of incremental state.
+func (e *Executor) ExecuteWithRecordsContext(ctx context.Context, pipeline *connector.Pipeline, records []map[string]any) (*connector.ExecutionResult, error) {
+	originalInput := e.inputModule
+	e.inputModule = newRecordsInput(records)
+	defer func() { e.inputModule = originalInput }()
+	return e.ExecuteWithContext(ctx, pipeline)
 }

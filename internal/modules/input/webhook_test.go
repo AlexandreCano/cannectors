@@ -41,7 +41,7 @@ func waitForServer(w *Webhook, timeout time.Duration) bool { //nolint:unparam
 func TestNewWebhookFromConfig_ValidConfig(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/orders",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -75,7 +75,7 @@ func TestNewWebhookFromConfig_NilConfig(t *testing.T) {
 func TestNewWebhookFromConfig_MissingPath(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"listenAddress": "127.0.0.1:0",
 		}),
 	}
@@ -92,7 +92,7 @@ func TestNewWebhookFromConfig_MissingPath(t *testing.T) {
 func TestNewWebhookFromConfig_PathField(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/hook/orders",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -110,7 +110,7 @@ func TestNewWebhookFromConfig_PathField(t *testing.T) {
 func TestNewWebhookFromConfig_DefaultListenAddress(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path": "/webhook/test",
 		}),
 	}
@@ -128,9 +128,9 @@ func TestNewWebhookFromConfig_DefaultListenAddress(t *testing.T) {
 func TestNewWebhookFromConfig_SignatureMissingType(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path": "/webhook/test",
-			"signature": map[string]interface{}{
+			"signature": map[string]any{
 				"secret": "test-secret",
 			},
 		}),
@@ -145,9 +145,9 @@ func TestNewWebhookFromConfig_SignatureMissingType(t *testing.T) {
 func TestNewWebhookFromConfig_SignatureUnsupportedType(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path": "/webhook/test",
-			"signature": map[string]interface{}{
+			"signature": map[string]any{
 				"type":   "rsa-sha256",
 				"secret": "test-secret",
 			},
@@ -163,7 +163,7 @@ func TestNewWebhookFromConfig_SignatureUnsupportedType(t *testing.T) {
 func TestWebhook_Start_StartsServer(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0", // Port 0 for dynamic allocation
 		}),
@@ -205,7 +205,7 @@ func TestWebhook_Start_StartsServer(t *testing.T) {
 func TestWebhook_Start_UsesConfiguredTimeout(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 			"timeoutMs":     2000.0,
@@ -243,7 +243,7 @@ func TestWebhook_Start_UsesConfiguredTimeout(t *testing.T) {
 func TestWebhook_GracefulShutdown(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -290,7 +290,7 @@ func TestWebhook_GracefulShutdown(t *testing.T) {
 func TestWebhook_Stop_StopsServer(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -334,7 +334,7 @@ func TestWebhook_Stop_StopsServer(t *testing.T) {
 func TestWebhook_HTTPPostHandler_RegisteredCorrectly(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/orders",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -349,9 +349,9 @@ func TestWebhook_HTTPPostHandler_RegisteredCorrectly(t *testing.T) {
 	defer cancel()
 
 	// Track received data
-	var receivedData []map[string]interface{}
+	var receivedData []map[string]any
 	var mu sync.Mutex
-	handler := func(data []map[string]interface{}) error { //nolint:unparam
+	handler := func(_ context.Context, data []map[string]any) error { //nolint:unparam
 		mu.Lock()
 		receivedData = data
 		mu.Unlock()
@@ -404,7 +404,7 @@ func TestWebhook_HTTPPostHandler_RegisteredCorrectly(t *testing.T) {
 func TestWebhook_ParsePayload_JSONArray(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -418,9 +418,9 @@ func TestWebhook_ParsePayload_JSONArray(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var receivedData []map[string]interface{}
+	var receivedData []map[string]any
 	var mu sync.Mutex
-	handler := func(data []map[string]interface{}) error { //nolint:unparam
+	handler := func(_ context.Context, data []map[string]any) error { //nolint:unparam
 		mu.Lock()
 		receivedData = data
 		mu.Unlock()
@@ -461,7 +461,7 @@ func TestWebhook_ParsePayload_JSONArray(t *testing.T) {
 func TestWebhook_ParsePayload_SingleObject(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -475,9 +475,9 @@ func TestWebhook_ParsePayload_SingleObject(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var receivedData []map[string]interface{}
+	var receivedData []map[string]any
 	var mu sync.Mutex
-	handler := func(data []map[string]interface{}) error { //nolint:unparam
+	handler := func(_ context.Context, data []map[string]any) error { //nolint:unparam
 		mu.Lock()
 		receivedData = data
 		mu.Unlock()
@@ -523,7 +523,7 @@ func TestWebhook_ParsePayload_SingleObject(t *testing.T) {
 func TestWebhook_ParsePayload_WithDataField(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 			"dataField":     "items",
@@ -538,9 +538,9 @@ func TestWebhook_ParsePayload_WithDataField(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var receivedData []map[string]interface{}
+	var receivedData []map[string]any
 	var mu sync.Mutex
-	handler := func(data []map[string]interface{}) error { //nolint:unparam
+	handler := func(_ context.Context, data []map[string]any) error { //nolint:unparam
 		mu.Lock()
 		receivedData = data
 		mu.Unlock()
@@ -581,7 +581,7 @@ func TestWebhook_ParsePayload_WithDataField(t *testing.T) {
 func TestWebhook_ParsePayload_MalformedJSON(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -595,7 +595,7 @@ func TestWebhook_ParsePayload_MalformedJSON(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := func(_ []map[string]interface{}) error {
+	handler := func(_ context.Context, _ []map[string]any) error {
 		return nil
 	}
 
@@ -626,7 +626,7 @@ func TestWebhook_ParsePayload_MalformedJSON(t *testing.T) {
 func TestWebhook_ParsePayload_DataFieldWithNonObject(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 			"dataField":     "items",
@@ -641,7 +641,7 @@ func TestWebhook_ParsePayload_DataFieldWithNonObject(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := func(_ []map[string]interface{}) error {
+	handler := func(_ context.Context, _ []map[string]any) error {
 		return nil
 	}
 
@@ -672,7 +672,7 @@ func TestWebhook_ParsePayload_DataFieldWithNonObject(t *testing.T) {
 func TestWebhook_RejectNonPOST(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -686,7 +686,7 @@ func TestWebhook_RejectNonPOST(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := func(_ []map[string]interface{}) error {
+	handler := func(_ context.Context, _ []map[string]any) error {
 		return nil
 	}
 
@@ -718,7 +718,7 @@ func TestWebhook_RejectNonPOST(t *testing.T) {
 func TestWebhook_MissingBody(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -732,7 +732,7 @@ func TestWebhook_MissingBody(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := func(_ []map[string]interface{}) error {
+	handler := func(_ context.Context, _ []map[string]any) error {
 		return nil
 	}
 
@@ -767,10 +767,10 @@ func TestWebhook_SignatureValidation_Valid(t *testing.T) {
 	secret := "test-webhook-secret"
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
-			"signature": map[string]interface{}{
+			"signature": map[string]any{
 				"type":   "hmac-sha256",
 				"header": "X-Webhook-Signature",
 				"secret": secret,
@@ -786,9 +786,9 @@ func TestWebhook_SignatureValidation_Valid(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var receivedData []map[string]interface{}
+	var receivedData []map[string]any
 	var mu sync.Mutex
-	handler := func(data []map[string]interface{}) error { //nolint:unparam
+	handler := func(_ context.Context, data []map[string]any) error { //nolint:unparam
 		mu.Lock()
 		receivedData = data
 		mu.Unlock()
@@ -842,10 +842,10 @@ func TestWebhook_SignatureValidation_Invalid(t *testing.T) {
 	secret := "test-webhook-secret"
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
-			"signature": map[string]interface{}{
+			"signature": map[string]any{
 				"type":   "hmac-sha256",
 				"header": "X-Webhook-Signature",
 				"secret": secret,
@@ -861,7 +861,7 @@ func TestWebhook_SignatureValidation_Invalid(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := func(_ []map[string]interface{}) error {
+	handler := func(_ context.Context, _ []map[string]any) error {
 		return nil
 	}
 
@@ -898,10 +898,10 @@ func TestWebhook_SignatureValidation_Invalid(t *testing.T) {
 func TestWebhook_SignatureValidation_MissingSignature(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
-			"signature": map[string]interface{}{
+			"signature": map[string]any{
 				"type":   "hmac-sha256",
 				"header": "X-Webhook-Signature",
 				"secret": "test-secret",
@@ -917,7 +917,7 @@ func TestWebhook_SignatureValidation_MissingSignature(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := func(_ []map[string]interface{}) error {
+	handler := func(_ context.Context, _ []map[string]any) error {
 		return nil
 	}
 
@@ -951,10 +951,10 @@ func TestWebhook_SignatureValidation_CustomHeader(t *testing.T) {
 	secret := "my-secret"
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
-			"signature": map[string]interface{}{
+			"signature": map[string]any{
 				"type":   "hmac-sha256",
 				"header": "X-Custom-Signature",
 				"secret": secret,
@@ -970,9 +970,9 @@ func TestWebhook_SignatureValidation_CustomHeader(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var receivedData []map[string]interface{}
+	var receivedData []map[string]any
 	var mu sync.Mutex
-	handler := func(data []map[string]interface{}) error { //nolint:unparam
+	handler := func(_ context.Context, data []map[string]any) error { //nolint:unparam
 		mu.Lock()
 		receivedData = data
 		mu.Unlock()
@@ -1026,10 +1026,10 @@ func TestWebhook_RateLimiting(t *testing.T) {
 	// Burst of 1 means only 1 token available initially
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
-			"rateLimit": map[string]interface{}{
+			"rateLimit": map[string]any{
 				"requestsPerSecond": float64(1), // 1 token per second refill
 				"burst":             float64(1), // Only 1 token available
 			},
@@ -1044,7 +1044,7 @@ func TestWebhook_RateLimiting(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := func(_ []map[string]interface{}) error {
+	handler := func(_ context.Context, _ []map[string]any) error {
 		return nil
 	}
 
@@ -1095,7 +1095,7 @@ func TestWebhook_RateLimiting(t *testing.T) {
 func TestWebhook_ConcurrentRequests(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -1110,7 +1110,7 @@ func TestWebhook_ConcurrentRequests(t *testing.T) {
 	defer cancel()
 
 	var receivedCount int64
-	handler := func(data []map[string]interface{}) error { //nolint:unparam
+	handler := func(_ context.Context, data []map[string]any) error { //nolint:unparam
 		atomic.AddInt64(&receivedCount, int64(len(data)))
 		return nil
 	}
@@ -1160,7 +1160,7 @@ func TestWebhook_ConcurrentRequests(t *testing.T) {
 func TestWebhook_ThreadSafeDataProcessing(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -1174,9 +1174,9 @@ func TestWebhook_ThreadSafeDataProcessing(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var allData [][]map[string]interface{}
+	var allData [][]map[string]any
 	var mu sync.Mutex
-	handler := func(data []map[string]interface{}) error { //nolint:unparam
+	handler := func(_ context.Context, data []map[string]any) error { //nolint:unparam
 		mu.Lock()
 		allData = append(allData, data)
 		mu.Unlock()
@@ -1232,7 +1232,7 @@ func TestWebhook_QueueBackpressure(t *testing.T) {
 	// - 3rd request should be rejected
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 			"queueSize":     float64(1),
@@ -1251,7 +1251,7 @@ func TestWebhook_QueueBackpressure(t *testing.T) {
 	// Handler blocks until we signal it - this ensures queue fills up
 	blocker := make(chan struct{})
 	var handled int64
-	handler := func(data []map[string]interface{}) error { //nolint:unparam
+	handler := func(_ context.Context, data []map[string]any) error { //nolint:unparam
 		<-blocker
 		atomic.AddInt64(&handled, int64(len(data)))
 		return nil
@@ -1323,7 +1323,7 @@ func TestWebhook_QueueBackpressure(t *testing.T) {
 func TestWebhook_Fetch_NotImplemented(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -1347,7 +1347,7 @@ func TestWebhook_Fetch_NotImplemented(t *testing.T) {
 func TestWebhook_DataFlowToHandler(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -1361,8 +1361,8 @@ func TestWebhook_DataFlowToHandler(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	receivedChan := make(chan []map[string]interface{}, 10)
-	handler := func(data []map[string]interface{}) error { //nolint:unparam
+	receivedChan := make(chan []map[string]any, 10)
+	handler := func(_ context.Context, data []map[string]any) error { //nolint:unparam
 		receivedChan <- data
 		return nil
 	}
@@ -1375,7 +1375,7 @@ func TestWebhook_DataFlowToHandler(t *testing.T) {
 		t.Fatal("Server did not start within timeout")
 	}
 	addr := w.Address()
-	expectedData := []map[string]interface{}{
+	expectedData := []map[string]any{
 		{"orderId": 1, "product": "Widget A", "quantity": 5},
 		{"orderId": 2, "product": "Widget B", "quantity": 3},
 	}
@@ -1405,7 +1405,7 @@ func TestWebhook_DataFlowToHandler(t *testing.T) {
 func TestWebhook_HandlerError_ReturnsServerError(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -1420,7 +1420,7 @@ func TestWebhook_HandlerError_ReturnsServerError(t *testing.T) {
 	defer cancel()
 
 	// Handler that returns an error
-	handler := func(_ []map[string]interface{}) error {
+	handler := func(_ context.Context, _ []map[string]any) error {
 		return fmt.Errorf("pipeline execution failed")
 	}
 
@@ -1456,7 +1456,7 @@ func TestWebhook_HandlerError_ReturnsServerError(t *testing.T) {
 func TestWebhook_InvalidEndpoint_Returns404(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/orders",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -1470,7 +1470,7 @@ func TestWebhook_InvalidEndpoint_Returns404(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := func(_ []map[string]interface{}) error {
+	handler := func(_ context.Context, _ []map[string]any) error {
 		return nil
 	}
 
@@ -1502,7 +1502,7 @@ func TestWebhook_InvalidEndpoint_Returns404(t *testing.T) {
 func TestWebhook_DeterministicBehavior(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -1516,9 +1516,9 @@ func TestWebhook_DeterministicBehavior(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var results [][]map[string]interface{}
+	var results [][]map[string]any
 	var mu sync.Mutex
-	handler := func(data []map[string]interface{}) error { //nolint:unparam
+	handler := func(_ context.Context, data []map[string]any) error { //nolint:unparam
 		mu.Lock()
 		results = append(results, data)
 		mu.Unlock()
@@ -1568,7 +1568,7 @@ func TestWebhook_DeterministicBehavior(t *testing.T) {
 func BenchmarkWebhook_HandleRequest(b *testing.B) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/bench",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -1578,7 +1578,7 @@ func BenchmarkWebhook_HandleRequest(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := func(_ []map[string]interface{}) error {
+	handler := func(_ context.Context, _ []map[string]any) error {
 		return nil
 	}
 
@@ -1612,8 +1612,8 @@ func TestWebhookHandler_ParsesJSONArray(t *testing.T) {
 		endpoint: "/webhook/test",
 	}
 
-	var receivedData []map[string]interface{}
-	handler := func(data []map[string]interface{}) error { //nolint:unparam
+	var receivedData []map[string]any
+	handler := func(_ context.Context, data []map[string]any) error { //nolint:unparam
 		receivedData = data
 		return nil
 	}
@@ -1643,7 +1643,7 @@ func TestWebhookHandler_RejectsPUT(t *testing.T) {
 		endpoint: "/webhook/test",
 	}
 
-	handler := func(_ []map[string]interface{}) error {
+	handler := func(_ context.Context, _ []map[string]any) error {
 		return nil
 	}
 

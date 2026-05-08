@@ -64,7 +64,7 @@ func ParseJSONString(content string) *ParseResult {
 	}
 
 	// Parse JSON
-	var data interface{}
+	var data any
 	err := json.Unmarshal([]byte(content), &data)
 	if err != nil {
 		parseErr := parseJSONError(err, content)
@@ -78,7 +78,7 @@ func ParseJSONString(content string) *ParseResult {
 		return result
 	}
 
-	dataMap, ok := data.(map[string]interface{})
+	dataMap, ok := data.(map[string]any)
 	if !ok {
 		result.Errors = append(result.Errors, ParseError{
 			Message: fmt.Sprintf("invalid configuration: expected JSON object, got %T", data),
@@ -264,11 +264,11 @@ func ParseConfigString(content string, format string) *Result {
 // by every file under `configs/examples/`, where the pipeline lives under a
 // single `connector` key. When the latter is detected, the inner object is
 // returned so the schema and converter see the canonical layout.
-func unwrapConnectorRoot(data map[string]interface{}) map[string]interface{} {
+func unwrapConnectorRoot(data map[string]any) map[string]any {
 	if len(data) != 1 {
 		return data
 	}
-	inner, ok := data["connector"].(map[string]interface{})
+	inner, ok := data["connector"].(map[string]any)
 	if !ok {
 		return data
 	}
@@ -308,7 +308,7 @@ func IsYAML(content string) bool {
 	}
 
 	// Try to parse as YAML
-	var data interface{}
+	var data any
 	err := yaml.Unmarshal([]byte(content), &data)
 	return err == nil && data != nil
 }
@@ -369,7 +369,7 @@ func ParseYAMLString(content string) *ParseResult {
 	}
 
 	// Parse YAML
-	var data interface{}
+	var data any
 	err := yaml.Unmarshal([]byte(content), &data)
 	if err != nil {
 		parseErr := parseYAMLError(err)
@@ -383,7 +383,7 @@ func ParseYAMLString(content string) *ParseResult {
 		return result
 	}
 
-	dataMap, ok := data.(map[string]interface{})
+	dataMap, ok := data.(map[string]any)
 	if !ok {
 		result.Errors = append(result.Errors, ParseError{
 			Message: fmt.Sprintf("invalid configuration: expected YAML mapping, got %T", data),

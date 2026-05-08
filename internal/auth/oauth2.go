@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cannectors/runtime/internal/httpclient"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/pkg/connector"
 )
@@ -221,7 +222,7 @@ func (h *oauth2Handler) fetchToken(ctx context.Context) (string, time.Time, erro
 		// Security: Never log clientId, clientSecret, or response body to prevent credential leakage.
 		logger.Error("OAuth2 token request failed",
 			"status_code", resp.StatusCode,
-			"token_url", h.tokenURL,
+			"token_url", httpclient.SanitizeURL(h.tokenURL),
 		)
 		return "", time.Time{}, fmt.Errorf("%w: token endpoint returned status %d", ErrOAuth2TokenFailed, resp.StatusCode)
 	}

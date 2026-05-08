@@ -186,7 +186,7 @@ func ParseOnErrorStrategy(s string) OnErrorStrategy {
 
 // RetryFunc is a function that can be retried.
 // It takes a context and returns a result and an error.
-type RetryFunc func(ctx context.Context) (interface{}, error)
+type RetryFunc func(ctx context.Context) (any, error)
 
 // RetryExecutor executes functions with retry logic.
 //
@@ -213,7 +213,7 @@ func NewRetryExecutor(config connector.RetryConfig) *RetryExecutor {
 // Execute runs the given function with retry logic.
 // It retries on transient errors up to MaxAttempts times.
 // Returns the result and any error encountered.
-func (e *RetryExecutor) Execute(ctx context.Context, fn RetryFunc) (interface{}, error) {
+func (e *RetryExecutor) Execute(ctx context.Context, fn RetryFunc) (any, error) {
 	startTime := time.Now()
 	e.resetRetryState()
 
@@ -322,7 +322,7 @@ func (e *RetryExecutor) ExecuteWithCallback(
 	ctx context.Context,
 	fn RetryFunc,
 	callback func(attempt int, err error, nextDelay time.Duration),
-) (interface{}, error) {
+) (any, error) {
 	return e.ExecuteWithHooks(ctx, fn, Hooks{}, callback)
 }
 
@@ -345,7 +345,7 @@ func (e *RetryExecutor) ExecuteWithHooks(
 	fn RetryFunc,
 	hooks Hooks,
 	callback func(attempt int, err error, nextDelay time.Duration),
-) (interface{}, error) {
+) (any, error) {
 	startTime := time.Now()
 	e.resetRetryState()
 

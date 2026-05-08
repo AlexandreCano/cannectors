@@ -10,7 +10,7 @@ import (
 // ParseResult contains the result of parsing a configuration file.
 type ParseResult struct {
 	// Data contains the parsed configuration as a map
-	Data map[string]interface{}
+	Data map[string]any
 	// Errors contains any parsing errors encountered
 	Errors []ParseError
 	// FilePath is the path to the parsed file (empty if parsed from string)
@@ -91,7 +91,7 @@ func (e ValidationError) Error() string {
 // Result contains the combined result of parsing and validation.
 type Result struct {
 	// Data contains the parsed and validated configuration
-	Data map[string]interface{}
+	Data map[string]any
 	// ParseErrors contains parsing errors
 	ParseErrors []ParseError
 	// ValidationErrors contains validation errors

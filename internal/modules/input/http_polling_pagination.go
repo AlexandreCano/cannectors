@@ -13,7 +13,7 @@ import (
 // fetchWithPagination dispatches to the correct pagination strategy based on
 // the module configuration. Non-paginated endpoints are handled by
 // fetchSingle directly, not through this file.
-func (h *HTTPPolling) fetchWithPagination(ctx context.Context) ([]map[string]interface{}, error) {
+func (h *HTTPPolling) fetchWithPagination(ctx context.Context) ([]map[string]any, error) {
 	baseEndpoint, err := h.buildEndpointWithState(h.endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("building endpoint with state: %w", err)
@@ -30,8 +30,8 @@ func (h *HTTPPolling) fetchWithPagination(ctx context.Context) ([]map[string]int
 	}
 }
 
-func (h *HTTPPolling) fetchPageBased(ctx context.Context, baseEndpoint string) ([]map[string]interface{}, error) {
-	var allRecords []map[string]interface{}
+func (h *HTTPPolling) fetchPageBased(ctx context.Context, baseEndpoint string) ([]map[string]any, error) {
+	var allRecords []map[string]any
 	page := 1
 	pagesFetched := 0
 
@@ -80,8 +80,8 @@ func (h *HTTPPolling) fetchPageBased(ctx context.Context, baseEndpoint string) (
 	return allRecords, nil
 }
 
-func (h *HTTPPolling) fetchOffsetBased(ctx context.Context, baseEndpoint string) ([]map[string]interface{}, error) {
-	var allRecords []map[string]interface{}
+func (h *HTTPPolling) fetchOffsetBased(ctx context.Context, baseEndpoint string) ([]map[string]any, error) {
+	var allRecords []map[string]any
 	offset := 0
 	limit := h.pagination.Limit
 	if limit == 0 {
@@ -140,8 +140,8 @@ func (h *HTTPPolling) fetchOffsetBased(ctx context.Context, baseEndpoint string)
 	return allRecords, nil
 }
 
-func (h *HTTPPolling) fetchCursorBased(ctx context.Context, baseEndpoint string) ([]map[string]interface{}, error) {
-	var allRecords []map[string]interface{}
+func (h *HTTPPolling) fetchCursorBased(ctx context.Context, baseEndpoint string) ([]map[string]any, error) {
+	var allRecords []map[string]any
 	cursor := ""
 	iterationsFetched := 0
 
@@ -193,7 +193,7 @@ func (h *HTTPPolling) fetchCursorBased(ctx context.Context, baseEndpoint string)
 	return allRecords, nil
 }
 
-func (h *HTTPPolling) fetchPageWithMeta(ctx context.Context, endpoint, totalPagesField string) ([]map[string]interface{}, int, error) {
+func (h *HTTPPolling) fetchPageWithMeta(ctx context.Context, endpoint, totalPagesField string) ([]map[string]any, int, error) {
 	obj, err := h.fetchAndParseObject(ctx, endpoint)
 	if err != nil {
 		return nil, 0, err
@@ -205,7 +205,7 @@ func (h *HTTPPolling) fetchPageWithMeta(ctx context.Context, endpoint, totalPage
 	return records, extractIntField(obj, totalPagesField), nil
 }
 
-func (h *HTTPPolling) fetchOffsetWithMeta(ctx context.Context, endpoint, totalField string) ([]map[string]interface{}, int, error) {
+func (h *HTTPPolling) fetchOffsetWithMeta(ctx context.Context, endpoint, totalField string) ([]map[string]any, int, error) {
 	obj, err := h.fetchAndParseObject(ctx, endpoint)
 	if err != nil {
 		return nil, 0, err
@@ -217,7 +217,7 @@ func (h *HTTPPolling) fetchOffsetWithMeta(ctx context.Context, endpoint, totalFi
 	return records, extractIntField(obj, totalField), nil
 }
 
-func (h *HTTPPolling) fetchCursorWithMeta(ctx context.Context, endpoint, nextCursorField string) ([]map[string]interface{}, string, error) {
+func (h *HTTPPolling) fetchCursorWithMeta(ctx context.Context, endpoint, nextCursorField string) ([]map[string]any, string, error) {
 	obj, err := h.fetchAndParseObject(ctx, endpoint)
 	if err != nil {
 		return nil, "", err
@@ -229,19 +229,19 @@ func (h *HTTPPolling) fetchCursorWithMeta(ctx context.Context, endpoint, nextCur
 	return records, extractStringField(obj, nextCursorField), nil
 }
 
-func (h *HTTPPolling) fetchAndParseObject(ctx context.Context, endpoint string) (map[string]interface{}, error) {
+func (h *HTTPPolling) fetchAndParseObject(ctx context.Context, endpoint string) (map[string]any, error) {
 	body, err := h.doRequestWithRetry(ctx, endpoint)
 	if err != nil {
 		return nil, err
 	}
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrJSONParse, err)
 	}
 	return result, nil
 }
 
-func extractIntField(obj map[string]interface{}, field string) int {
+func extractIntField(obj map[string]any, field string) int {
 	if field == "" {
 		return 0
 	}
@@ -251,7 +251,7 @@ func extractIntField(obj map[string]interface{}, field string) int {
 	return 0
 }
 
-func extractStringField(obj map[string]interface{}, field string) string {
+func extractStringField(obj map[string]any, field string) string {
 	if field == "" {
 		return ""
 	}
@@ -261,7 +261,7 @@ func extractStringField(obj map[string]interface{}, field string) string {
 	return ""
 }
 
-func (h *HTTPPolling) extractRecordsFromObject(obj map[string]interface{}) ([]map[string]interface{}, error) {
+func (h *HTTPPolling) extractRecordsFromObject(obj map[string]any) ([]map[string]any, error) {
 	if h.dataField != "" {
 		return h.extractDataFromField(obj, h.dataField)
 	}

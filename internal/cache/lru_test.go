@@ -52,10 +52,10 @@ func TestLRUCache_GetSet(t *testing.T) {
 
 	t.Run("stores complex values", func(t *testing.T) {
 		cache := NewLRUCache(10, time.Minute)
-		data := map[string]interface{}{
+		data := map[string]any{
 			"name":   "test",
 			"count":  42,
-			"nested": map[string]interface{}{"key": "val"},
+			"nested": map[string]any{"key": "val"},
 		}
 		cache.Set("complex", data, 0)
 
@@ -64,7 +64,7 @@ func TestLRUCache_GetSet(t *testing.T) {
 			t.Fatal("expected to find complex key")
 		}
 
-		result, ok := value.(map[string]interface{})
+		result, ok := value.(map[string]any)
 		if !ok {
 			t.Fatalf("expected map, got %T", value)
 		}

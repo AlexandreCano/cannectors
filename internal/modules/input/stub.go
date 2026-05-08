@@ -5,6 +5,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/cannectors/runtime/internal/httpclient"
 	"github.com/cannectors/runtime/internal/logger"
 )
 
@@ -24,12 +25,12 @@ func NewStub(moduleType, endpoint string) *StubModule {
 }
 
 // Fetch returns sample data to demonstrate pipeline flow.
-func (m *StubModule) Fetch(_ context.Context) ([]map[string]interface{}, error) {
+func (m *StubModule) Fetch(_ context.Context) ([]map[string]any, error) {
 	logger.Info("Input module fetching data",
 		slog.String("type", m.ModuleType),
-		slog.String("endpoint", m.Endpoint))
+		slog.String("endpoint", httpclient.SanitizeURL(m.Endpoint)))
 
-	return []map[string]interface{}{
+	return []map[string]any{
 		{"id": "1", "name": "Sample Record 1", "value": 100},
 		{"id": "2", "name": "Sample Record 2", "value": 200},
 	}, nil

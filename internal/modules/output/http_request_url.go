@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/cannectors/runtime/internal/httpclient"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/template"
 )
@@ -22,7 +23,7 @@ func (h *HTTPRequestModule) resolveEndpointWithStaticQuery(endpoint string) stri
 	parsedURL, err := url.Parse(endpoint)
 	if err != nil {
 		logger.Warn("failed to parse endpoint URL for query params",
-			slog.String("endpoint", endpoint),
+			slog.String("endpoint", httpclient.SanitizeURL(endpoint)),
 			slog.String("error", err.Error()),
 		)
 		return endpoint
@@ -38,7 +39,7 @@ func (h *HTTPRequestModule) resolveEndpointWithStaticQuery(endpoint string) stri
 // resolveEndpointForBatch resolves template variables and keys in the
 // endpoint for batch mode. Uses the first record for template evaluation
 // and key extraction.
-func (h *HTTPRequestModule) resolveEndpointForBatch(endpoint string, records []map[string]interface{}) string {
+func (h *HTTPRequestModule) resolveEndpointForBatch(endpoint string, records []map[string]any) string {
 	if len(records) == 0 {
 		return h.resolveEndpointWithStaticQuery(endpoint)
 	}
@@ -48,7 +49,7 @@ func (h *HTTPRequestModule) resolveEndpointForBatch(endpoint string, records []m
 // resolveEndpointForRecord resolves path parameters, template variables, and
 // query params for a single record. Templates ({{record.field}}) are
 // evaluated first, then path parameters ({param}) are substituted.
-func (h *HTTPRequestModule) resolveEndpointForRecord(record map[string]interface{}) string {
+func (h *HTTPRequestModule) resolveEndpointForRecord(record map[string]any) string {
 	endpoint := h.endpoint
 	if template.HasVariables(endpoint) {
 		endpoint = h.templateEvaluator.EvaluateForURL(endpoint, record)
@@ -67,7 +68,7 @@ func (h *HTTPRequestModule) resolveEndpointForRecord(record map[string]interface
 	parsedURL, err := url.Parse(endpoint)
 	if err != nil {
 		logger.Warn("failed to parse endpoint URL for record",
-			slog.String("endpoint", endpoint),
+			slog.String("endpoint", httpclient.SanitizeURL(endpoint)),
 			slog.String("error", err.Error()),
 		)
 		return endpoint
@@ -90,7 +91,7 @@ func (h *HTTPRequestModule) resolveEndpointForRecord(record map[string]interface
 
 	if err := validateURL(finalURL); err != nil {
 		logger.Warn("invalid URL after template evaluation",
-			slog.String("url", finalURL),
+			slog.String("url", httpclient.SanitizeURL(finalURL)),
 			slog.String("error", err.Error()),
 		)
 	}

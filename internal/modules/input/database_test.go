@@ -10,7 +10,7 @@ import (
 
 // parseDatabaseInputConfigFromMap is a test helper that converts a map to DatabaseInputConfig via JSON.
 
-func mustJSON(v interface{}) json.RawMessage {
+func mustJSON(v any) json.RawMessage {
 	b, err := json.Marshal(v)
 	if err != nil {
 		panic(err)
@@ -18,7 +18,7 @@ func mustJSON(v interface{}) json.RawMessage {
 	return b
 }
 
-func parseDatabaseInputConfigFromMap(cfg map[string]interface{}) DatabaseInputConfig {
+func parseDatabaseInputConfigFromMap(cfg map[string]any) DatabaseInputConfig {
 	data, _ := json.Marshal(cfg)
 	var config DatabaseInputConfig
 	_ = json.Unmarshal(data, &config)
@@ -30,13 +30,13 @@ func TestParseDatabaseInputConfig(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		cfg     map[string]interface{}
+		cfg     map[string]any
 		wantErr bool
 		check   func(t *testing.T, config DatabaseInputConfig)
 	}{
 		{
 			name: "basic config",
-			cfg: map[string]interface{}{
+			cfg: map[string]any{
 				"connectionString": "postgres://user:pass@localhost:5432/db",
 				"query":            "SELECT * FROM users",
 			},
@@ -51,7 +51,7 @@ func TestParseDatabaseInputConfig(t *testing.T) {
 		},
 		{
 			name: "config with env ref",
-			cfg: map[string]interface{}{
+			cfg: map[string]any{
 				"connectionStringRef": "${DATABASE_URL}",
 				"query":               "SELECT * FROM orders",
 				"driver":              "postgres",
@@ -67,10 +67,10 @@ func TestParseDatabaseInputConfig(t *testing.T) {
 		},
 		{
 			name: "config with pagination",
-			cfg: map[string]interface{}{
+			cfg: map[string]any{
 				"connectionString": "postgres://localhost/db",
 				"query":            "SELECT * FROM items",
-				"pagination": map[string]interface{}{
+				"pagination": map[string]any{
 					"type":        "limit-offset",
 					"limit":       float64(500),
 					"offsetParam": "offset",
@@ -90,10 +90,10 @@ func TestParseDatabaseInputConfig(t *testing.T) {
 		},
 		{
 			name: "config with incremental",
-			cfg: map[string]interface{}{
+			cfg: map[string]any{
 				"connectionString": "postgres://localhost/db",
 				"query":            "SELECT * FROM events WHERE created_at > :since",
-				"incremental": map[string]interface{}{
+				"incremental": map[string]any{
 					"enabled":        true,
 					"timestampField": "created_at",
 					"timestampParam": "since",
@@ -116,7 +116,7 @@ func TestParseDatabaseInputConfig(t *testing.T) {
 		},
 		{
 			name: "config with pool settings",
-			cfg: map[string]interface{}{
+			cfg: map[string]any{
 				"connectionString":       "postgres://localhost/db",
 				"query":                  "SELECT 1",
 				"maxOpenConns":           float64(20),
@@ -164,12 +164,12 @@ func TestParseDatabasePaginationConfig(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		cfg   map[string]interface{}
+		cfg   map[string]any
 		check func(t *testing.T, config *moduleconfig.DatabasePaginationConfig)
 	}{
 		{
 			name: "limit-offset pagination",
-			cfg: map[string]interface{}{
+			cfg: map[string]any{
 				"type":        "limit-offset",
 				"limit":       float64(100),
 				"offsetParam": "offset",
@@ -188,7 +188,7 @@ func TestParseDatabasePaginationConfig(t *testing.T) {
 		},
 		{
 			name: "cursor pagination",
-			cfg: map[string]interface{}{
+			cfg: map[string]any{
 				"type":        "cursor",
 				"limit":       float64(50),
 				"cursorField": "id",
@@ -208,7 +208,7 @@ func TestParseDatabasePaginationConfig(t *testing.T) {
 		},
 		{
 			name: "default limit",
-			cfg: map[string]interface{}{
+			cfg: map[string]any{
 				"type": "limit-offset",
 			},
 			check: func(t *testing.T, config *moduleconfig.DatabasePaginationConfig) {
@@ -237,12 +237,12 @@ func TestParseIncrementalConfig(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		cfg   map[string]interface{}
+		cfg   map[string]any
 		check func(t *testing.T, config *IncrementalConfig)
 	}{
 		{
 			name: "timestamp-based incremental",
-			cfg: map[string]interface{}{
+			cfg: map[string]any{
 				"enabled":        true,
 				"timestampField": "updated_at",
 				"timestampParam": "since",
@@ -261,7 +261,7 @@ func TestParseIncrementalConfig(t *testing.T) {
 		},
 		{
 			name: "id-based incremental",
-			cfg: map[string]interface{}{
+			cfg: map[string]any{
 				"enabled": true,
 				"idField": "id",
 				"idParam": "after_id",
@@ -309,7 +309,7 @@ func TestNewDatabaseInputFromConfig_Validation(t *testing.T) {
 			name: "missing query",
 			cfg: &connector.ModuleConfig{
 				Type: "database",
-				Raw: mustJSON(map[string]interface{}{
+				Raw: mustJSON(map[string]any{
 					"connectionString": "postgres://localhost/db",
 				}),
 			},
@@ -319,7 +319,7 @@ func TestNewDatabaseInputFromConfig_Validation(t *testing.T) {
 			name: "missing connection string",
 			cfg: &connector.ModuleConfig{
 				Type: "database",
-				Raw: mustJSON(map[string]interface{}{
+				Raw: mustJSON(map[string]any{
 					"query": "SELECT * FROM users",
 				}),
 			},

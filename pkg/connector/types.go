@@ -176,7 +176,7 @@ type ExecutionError struct {
 	ErrorType string `json:"errorType,omitempty"`
 
 	// Details contains additional error context
-	Details map[string]interface{} `json:"details,omitempty"`
+	Details map[string]any `json:"details,omitempty"`
 }
 
 // ModuleBase contains properties common to all modules.

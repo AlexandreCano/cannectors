@@ -92,9 +92,9 @@ type ConditionConfig struct {
 
 // NestedModuleConfig represents a nested filter module configuration.
 type NestedModuleConfig struct {
-	Type     string                 `json:"type"`
-	Config   map[string]interface{} `json:"config,omitempty"`
-	Mappings []FieldMapping         `json:"mappings,omitempty"`
+	Type     string         `json:"type"`
+	Config   map[string]any `json:"config,omitempty"`
+	Mappings []FieldMapping `json:"mappings,omitempty"`
 	// For nested conditions
 	Expression string                `json:"expression,omitempty"`
 	Lang       string                `json:"lang,omitempty"`
@@ -125,7 +125,7 @@ type ConditionError struct {
 	Expression  string
 	RecordIndex int
 	FieldPath   string
-	Details     map[string]interface{}
+	Details     map[string]any
 }
 
 func (e *ConditionError) Error() string {
@@ -144,8 +144,8 @@ func (e *ConditionError) ErrorRecordIndex() int { return e.RecordIndex }
 // ErrorDetails implements errhandling.ModuleError. Returns a copy of the
 // existing Details map enriched with the expression and field path so
 // callers get a flat view suitable for ExecutionError.Details.
-func (e *ConditionError) ErrorDetails() map[string]interface{} {
-	d := make(map[string]interface{}, len(e.Details)+2)
+func (e *ConditionError) ErrorDetails() map[string]any {
+	d := make(map[string]any, len(e.Details)+2)
 	for k, v := range e.Details {
 		d[k] = v
 	}
@@ -161,7 +161,7 @@ func (e *ConditionError) ErrorDetails() map[string]interface{} {
 // newConditionError creates a ConditionError with optional debugging details.
 // If underlyingErr is provided, it will be included in the Details field.
 func newConditionError(code, message, expression string, recordIdx int, fieldPath string, underlyingErr error) *ConditionError {
-	details := make(map[string]interface{})
+	details := make(map[string]any)
 	if underlyingErr != nil {
 		details["underlying_error"] = underlyingErr.Error()
 		details["error_type"] = fmt.Sprintf("%T", underlyingErr)
@@ -464,9 +464,9 @@ func (c *ConditionModule) handleNestedModuleError(err error, recordIdx int) erro
 //  5. If false and no 'else' module: apply onFalse behavior
 //
 // Returns the filtered/routed records and any error that occurred.
-func (c *ConditionModule) Process(ctx context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (c *ConditionModule) Process(ctx context.Context, records []map[string]any) ([]map[string]any, error) {
 	if records == nil {
-		return []map[string]interface{}{}, nil
+		return []map[string]any{}, nil
 	}
 
 	startTime := time.Now()
@@ -481,7 +481,7 @@ func (c *ConditionModule) Process(ctx context.Context, records []map[string]inte
 		slog.Bool("has_else", len(c.elseModules) > 0),
 	)
 
-	result := make([]map[string]interface{}, 0, len(records))
+	result := make([]map[string]any, 0, len(records))
 	trueCount := 0
 	falseCount := 0
 	errorCount := 0
@@ -567,31 +567,31 @@ func (c *ConditionModule) Process(ctx context.Context, records []map[string]inte
 }
 
 // processConditionResult handles the result of condition evaluation for a single record.
-func (c *ConditionModule) processConditionResult(ctx context.Context, conditionTrue bool, record map[string]interface{}) ([]map[string]interface{}, error) {
+func (c *ConditionModule) processConditionResult(ctx context.Context, conditionTrue bool, record map[string]any) ([]map[string]any, error) {
 	if conditionTrue {
 		if len(c.thenModules) > 0 {
 			return c.runNestedModules(ctx, c.thenModules, record)
 		}
 		if c.onTrue == OnConditionContinue {
-			return []map[string]interface{}{record}, nil
+			return []map[string]any{record}, nil
 		}
-		return []map[string]interface{}{}, nil
+		return []map[string]any{}, nil
 	}
 
 	if len(c.elseModules) > 0 {
 		return c.runNestedModules(ctx, c.elseModules, record)
 	}
 	if c.onFalse == OnConditionContinue {
-		return []map[string]interface{}{record}, nil
+		return []map[string]any{record}, nil
 	}
-	return []map[string]interface{}{}, nil
+	return []map[string]any{}, nil
 }
 
 // runNestedModules executes a chain of nested filter modules in sequence.
 // When onError is "skip" or "log", a module error does not stop the chain:
 // subsequent modules receive the records from before the failed module.
-func (c *ConditionModule) runNestedModules(ctx context.Context, modules []Module, record map[string]interface{}) ([]map[string]interface{}, error) {
-	records := []map[string]interface{}{record}
+func (c *ConditionModule) runNestedModules(ctx context.Context, modules []Module, record map[string]any) ([]map[string]any, error) {
+	records := []map[string]any{record}
 	for _, m := range modules {
 		processed, err := m.Process(ctx, records)
 		if err != nil {
@@ -621,7 +621,7 @@ func (c *ConditionModule) runNestedModules(ctx context.Context, modules []Module
 
 // toBool converts a value to boolean.
 // Empty collections (slices, maps) are considered falsy.
-func toBool(value interface{}) bool {
+func toBool(value any) bool {
 	if value == nil {
 		return false
 	}
@@ -636,15 +636,15 @@ func toBool(value interface{}) bool {
 		return v != 0
 	case string:
 		return v != ""
-	case []interface{}:
+	case []any:
 		return len(v) > 0
 	case []string:
 		return len(v) > 0
 	case []int:
 		return len(v) > 0
-	case map[string]interface{}:
+	case map[string]any:
 		return len(v) > 0
-	case map[interface{}]interface{}:
+	case map[any]any:
 		return len(v) > 0
 	default:
 		// For other types, use reflection to check if it's an empty collection

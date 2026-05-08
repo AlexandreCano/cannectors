@@ -20,7 +20,7 @@ func (h *HTTPPolling) buildRequest(ctx context.Context, endpoint string) (*http.
 	if err != nil {
 		logger.Error("http request creation failed",
 			"module_type", "httpPolling",
-			"endpoint", endpoint,
+			"endpoint", httpclient.SanitizeURL(endpoint),
 			"error", err.Error(),
 		)
 		return nil, fmt.Errorf("creating http request: %w", err)
@@ -38,7 +38,7 @@ func (h *HTTPPolling) buildRequest(ctx context.Context, endpoint string) (*http.
 	if err := h.applyAuthentication(ctx, req); err != nil {
 		logger.Error("authentication failed",
 			"module_type", "httpPolling",
-			"endpoint", endpoint,
+			"endpoint", httpclient.SanitizeURL(endpoint),
 			"error", err.Error(),
 		)
 		return nil, fmt.Errorf("applying authentication: %w", err)
@@ -66,7 +66,7 @@ func (h *HTTPPolling) doRequestWithRetry(ctx context.Context, endpoint string) (
 				delaysMs = append(delaysMs, nextDelay.Milliseconds())
 				logger.Info("retrying http request",
 					"module_type", "httpPolling",
-					"endpoint", endpoint,
+					"endpoint", httpclient.SanitizeURL(endpoint),
 					"attempt", attempt+1,
 					"max_attempts", h.retryConfig.MaxAttempts+1,
 					"next_delay", nextDelay.String(),
@@ -88,7 +88,7 @@ func (h *HTTPPolling) doRequestWithRetry(ctx context.Context, endpoint string) (
 		defer func() {
 			if closeErr := resp.Body.Close(); closeErr != nil {
 				logger.Warn("failed to close response body",
-					"endpoint", endpoint,
+					"endpoint", httpclient.SanitizeURL(endpoint),
 					"error", closeErr.Error(),
 				)
 			}
@@ -108,7 +108,7 @@ func (h *HTTPPolling) doRequestWithRetry(ctx context.Context, endpoint string) (
 		if len(delaysMs) > 0 {
 			logger.Error("http request failed after retries",
 				"module_type", "httpPolling",
-				"endpoint", endpoint,
+				"endpoint", httpclient.SanitizeURL(endpoint),
 				"total_attempts", len(delaysMs)+1,
 				"total_duration", time.Since(startTime).String(),
 				"error", err.Error(),
@@ -130,7 +130,7 @@ func (h *HTTPPolling) doRequestWithRetry(ctx context.Context, endpoint string) (
 	if len(delaysMs) > 0 {
 		logger.Info("http request succeeded after retries",
 			"module_type", "httpPolling",
-			"endpoint", endpoint,
+			"endpoint", httpclient.SanitizeURL(endpoint),
 			"total_attempts", len(delaysMs)+1,
 			"retry_count", len(delaysMs),
 			"total_duration", time.Since(startTime).String(),
@@ -138,7 +138,7 @@ func (h *HTTPPolling) doRequestWithRetry(ctx context.Context, endpoint string) (
 	}
 	logger.Debug("http request completed",
 		"module_type", "httpPolling",
-		"endpoint", endpoint,
+		"endpoint", httpclient.SanitizeURL(endpoint),
 		"method", http.MethodGet,
 		"status_code", resp.StatusCode,
 		"response_size", len(body),
@@ -161,13 +161,13 @@ func (h *HTTPPolling) handleOAuth2Unauthorized(resp *http.Response, endpoint str
 	}
 	if h.oauth2RetryCount >= auth.MaxOAuth2Retries {
 		logger.Warn("401 Unauthorized persists after OAuth2 token refresh, likely invalid credentials",
-			"endpoint", endpoint,
+			"endpoint", httpclient.SanitizeURL(endpoint),
 			"oauth2_retry_count", h.oauth2RetryCount,
 		)
 		return false
 	}
 	logger.Debug("401 Unauthorized with OAuth2, invalidating cached token",
-		"endpoint", endpoint,
+		"endpoint", httpclient.SanitizeURL(endpoint),
 		"oauth2_retry_count", h.oauth2RetryCount,
 	)
 	invalidator.InvalidateToken()

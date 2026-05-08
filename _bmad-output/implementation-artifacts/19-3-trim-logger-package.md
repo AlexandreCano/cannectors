@@ -1,6 +1,6 @@
 # Story 19.3: Trim `internal/logger` package to essentials
 
-Status: backlog
+Status: review
 
 ## Story
 
@@ -85,4 +85,10 @@ Audit §5 P3.1. 771 LOC pour wrapper slog est disproportionné. La plupart des h
 
 ## File List
 
-(à compléter)
+- `internal/logger/logger.go` — réécrit (771 → 78 LOC) : conserve uniquement `Logger`, `Info/Debug/Warn/Error`, `OutputFormat`, `SetLevelAndFormat`, `newConsoleHandler`, `isTerminal`. Supprime `SetLevel`, `SetFormat`, `WithPipeline`, `WithModule`, `WithExecution`, `LogError`, `ErrorContext`.
+- `internal/logger/execution.go` (new, 127 LOC) — extrait `ExecutionContext`, `ExecutionMetrics`, `ExecutionError`, `buildContextAttrs`, `LogExecutionStart/End`, `LogStageStart/End`, `LogMetrics`.
+- `internal/logger/human_handler.go` (new, 169 LOC) — extrait `HumanHandler`, `HumanHandlerOptions`, `formatAttr`, `formatDuration`, `FormatMetricsHuman`.
+- `internal/logger/logfile.go` (new, 114 LOC) — extrait `SetLogFile`, `CloseLogFile`, `rotateLogFile`, `dualHandler`.
+- `internal/logger/logger_test.go` — réécrit pour ne tester que la surface publique restante (TestSetLevelAndFormat, TestLogExecutionStart/End, TestLogStageStartEnd, TestLogMetrics, TestExecutionContext_OmitsZeroValueFields, TestHumanHandler*, TestSetLogFile_WritesAndCloses, TestCloseLogFile_NoOpWhenAbsent).
+
+**Bilan LOC** : 771 → 488 (logger.go + execution.go + human_handler.go + logfile.go), soit -37 %. Le seuil < 400 visé par AC#1 n'est pas atteint car HumanHandler (~170 LOC) et la sortie fichier (~115 LOC) sont explicitement « à conserver » dans les Dev Notes ; le gain reste substantiel et la responsabilité de chaque fichier est désormais claire.

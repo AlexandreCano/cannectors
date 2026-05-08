@@ -125,7 +125,7 @@ func (e *Evaluator) ParseVariables(template string) []Variable {
 //
 // Missing fields return empty string unless a default is specified.
 // Null values are converted to empty string.
-func (e *Evaluator) Evaluate(template string, record map[string]interface{}) string {
+func (e *Evaluator) Evaluate(template string, record map[string]any) string {
 	if !HasVariables(template) {
 		return template
 	}
@@ -166,7 +166,7 @@ func truncateForLog(s string, maxLen int) string {
 // maximum safety. This means path segments containing "/" will be encoded as "%2F",
 // which is acceptable for most APIs. If an API requires unencoded "/" in paths,
 // the template should be structured to avoid placing dynamic values in path segments.
-func (e *Evaluator) EvaluateForURL(template string, record map[string]interface{}) string {
+func (e *Evaluator) EvaluateForURL(template string, record map[string]any) string {
 	if !HasVariables(template) {
 		return template
 	}
@@ -190,7 +190,7 @@ func (e *Evaluator) EvaluateForURL(template string, record map[string]interface{
 }
 
 // resolveVariable resolves a single template variable using record data.
-func (e *Evaluator) resolveVariable(v Variable, record map[string]interface{}) string {
+func (e *Evaluator) resolveVariable(v Variable, record map[string]any) string {
 	// Extract the field path (remove "record." prefix if present)
 	path := strings.TrimPrefix(v.Path, "record.")
 
@@ -220,7 +220,7 @@ func (e *Evaluator) resolveVariable(v Variable, record map[string]interface{}) s
 }
 
 // ValueToString converts any value to its string representation.
-func ValueToString(value interface{}) string {
+func ValueToString(value any) string {
 	if value == nil {
 		return ""
 	}
@@ -290,7 +290,7 @@ func ValidateSyntax(template string) error {
 
 // EvaluateHeaders evaluates template variables in HTTP header values.
 // Returns a new map with evaluated header values.
-func (e *Evaluator) EvaluateHeaders(headers map[string]string, record map[string]interface{}) map[string]string {
+func (e *Evaluator) EvaluateHeaders(headers map[string]string, record map[string]any) map[string]string {
 	if len(headers) == 0 {
 		return headers
 	}
@@ -304,21 +304,21 @@ func (e *Evaluator) EvaluateHeaders(headers map[string]string, record map[string
 
 // EvaluateMapValues evaluates template variables in map values (used for JSON body construction).
 // Recursively processes nested maps and arrays.
-func (e *Evaluator) EvaluateMapValues(data interface{}, record map[string]interface{}) interface{} {
+func (e *Evaluator) EvaluateMapValues(data any, record map[string]any) any {
 	switch v := data.(type) {
 	case string:
 		if HasVariables(v) {
 			return e.Evaluate(v, record)
 		}
 		return v
-	case map[string]interface{}:
-		result := make(map[string]interface{}, len(v))
+	case map[string]any:
+		result := make(map[string]any, len(v))
 		for key, val := range v {
 			result[key] = e.EvaluateMapValues(val, record)
 		}
 		return result
-	case []interface{}:
-		result := make([]interface{}, len(v))
+	case []any:
+		result := make([]any, len(v))
 		for i, item := range v {
 			result[i] = e.EvaluateMapValues(item, record)
 		}

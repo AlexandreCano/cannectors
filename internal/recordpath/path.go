@@ -1,5 +1,5 @@
 // Package recordpath provides navigation helpers for nested record values
-// expressed as map[string]interface{} (decoded JSON). It supports dot
+// expressed as map[string]any (decoded JSON). It supports dot
 // notation (e.g. "user.profile.name") and array indexing
 // (e.g. "items[0].label").
 //
@@ -34,14 +34,14 @@ func IsNested(path string) bool {
 // Get extracts a value from a nested object using dot notation.
 // Supports paths like "user.profile.name" and array indexing like
 // "items[0].name".
-func Get(obj map[string]interface{}, path string) (interface{}, bool) {
+func Get(obj map[string]any, path string) (any, bool) {
 	value, _, ok := navigate(obj, path, false)
 	return value, ok
 }
 
 // Set sets a value in a nested object using dot notation. Intermediate maps
 // and arrays are created as needed.
-func Set(obj map[string]interface{}, path string, value interface{}) error {
+func Set(obj map[string]any, path string, value any) error {
 	if path == "" {
 		return ErrEmptyPath
 	}
@@ -76,7 +76,7 @@ func Set(obj map[string]interface{}, path string, value interface{}) error {
 
 // Delete removes a value from a nested object using dot notation. Missing
 // paths are silently ignored.
-func Delete(obj map[string]interface{}, path string) {
+func Delete(obj map[string]any, path string) {
 	parent, lastPart, ok := navigate(obj, path, true)
 	if !ok {
 		return
@@ -107,7 +107,7 @@ func ParsePart(part string) (key string, index int, hasIndex bool, err error) {
 }
 
 // navigate walks a path through nested maps and arrays.
-func navigate(obj map[string]interface{}, path string, stopBeforeLast bool) (current interface{}, lastPart string, ok bool) {
+func navigate(obj map[string]any, path string, stopBeforeLast bool) (current any, lastPart string, ok bool) {
 	if path == "" {
 		return nil, "", false
 	}
@@ -122,7 +122,7 @@ func navigate(obj map[string]interface{}, path string, stopBeforeLast bool) (cur
 			return nil, "", false
 		}
 	}
-	current = interface{}(obj)
+	current = any(obj)
 	for i := 0; i < endIdx; i++ {
 		current, ok = navigateStep(current, parts[i])
 		if !ok {
@@ -135,7 +135,7 @@ func navigate(obj map[string]interface{}, path string, stopBeforeLast bool) (cur
 	return current, lastPart, true
 }
 
-func navigateStep(current interface{}, part string) (next interface{}, ok bool) {
+func navigateStep(current any, part string) (next any, ok bool) {
 	key, arrayIdx, hasIndex, err := ParsePart(part)
 	if err != nil {
 		return nil, false
@@ -150,8 +150,8 @@ func navigateStep(current interface{}, part string) (next interface{}, ok bool) 
 	return next, ok
 }
 
-func getFromMap(current interface{}, key string) (interface{}, bool) {
-	m, ok := current.(map[string]interface{})
+func getFromMap(current any, key string) (any, bool) {
+	m, ok := current.(map[string]any)
 	if !ok {
 		return nil, false
 	}
@@ -159,30 +159,30 @@ func getFromMap(current interface{}, key string) (interface{}, bool) {
 	return val, ok
 }
 
-func getFromArray(current interface{}, index int) (interface{}, bool) {
-	arr, ok := current.([]interface{})
+func getFromArray(current any, index int) (any, bool) {
+	arr, ok := current.([]any)
 	if !ok || index < 0 || index >= len(arr) {
 		return nil, false
 	}
 	return arr[index], true
 }
 
-func deleteLeafFromParent(parent interface{}, lastPart string) {
+func deleteLeafFromParent(parent any, lastPart string) {
 	key, arrayIdx, hasIndex, err := ParsePart(lastPart)
 	if err != nil {
 		return
 	}
 	switch p := parent.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		deleteFromMap(p, key, arrayIdx, hasIndex)
-	case []interface{}:
+	case []any:
 		deleteFromArray(p, key, arrayIdx, hasIndex)
 	}
 }
 
-func deleteFromMap(parent map[string]interface{}, key string, arrayIdx int, hasIndex bool) {
+func deleteFromMap(parent map[string]any, key string, arrayIdx int, hasIndex bool) {
 	if hasIndex {
-		arr, ok := parent[key].([]interface{})
+		arr, ok := parent[key].([]any)
 		if !ok || arrayIdx >= len(arr) {
 			return
 		}
@@ -192,54 +192,54 @@ func deleteFromMap(parent map[string]interface{}, key string, arrayIdx int, hasI
 	}
 }
 
-func deleteFromArray(parent []interface{}, key string, arrayIdx int, hasIndex bool) {
+func deleteFromArray(parent []any, key string, arrayIdx int, hasIndex bool) {
 	if hasIndex && arrayIdx < len(parent) {
-		if elem, ok := parent[arrayIdx].(map[string]interface{}); ok {
+		if elem, ok := parent[arrayIdx].(map[string]any); ok {
 			delete(elem, key)
 		}
 	}
 }
 
-func ensureMapAtPath(current map[string]interface{}, key string) map[string]interface{} {
-	next, ok := current[key].(map[string]interface{})
+func ensureMapAtPath(current map[string]any, key string) map[string]any {
+	next, ok := current[key].(map[string]any)
 	if !ok {
-		next = make(map[string]interface{})
+		next = make(map[string]any)
 		current[key] = next
 	}
 	return next
 }
 
-func setArrayElement(current map[string]interface{}, key string, index int, value interface{}) error {
+func setArrayElement(current map[string]any, key string, index int, value any) error {
 	arr := ensureArrayAtPath(current, key)
 	if len(arr) <= index {
-		arr = append(arr, make([]interface{}, index+1-len(arr))...)
+		arr = append(arr, make([]any, index+1-len(arr))...)
 		current[key] = arr
 	}
 	arr[index] = value
 	return nil
 }
 
-func ensureArrayAtPath(current map[string]interface{}, key string) []interface{} {
-	arr, ok := current[key].([]interface{})
+func ensureArrayAtPath(current map[string]any, key string) []any {
+	arr, ok := current[key].([]any)
 	if !ok {
-		arr = make([]interface{}, 0)
+		arr = make([]any, 0)
 		current[key] = arr
 	}
 	return arr
 }
 
-func ensureMapInArray(current map[string]interface{}, key string, index int) map[string]interface{} {
+func ensureMapInArray(current map[string]any, key string, index int) map[string]any {
 	arr := ensureArrayAtPath(current, key)
 	if len(arr) <= index {
-		arr = append(arr, make([]interface{}, index+1-len(arr))...)
+		arr = append(arr, make([]any, index+1-len(arr))...)
 		current[key] = arr
 	}
 	if arr[index] == nil {
-		arr[index] = make(map[string]interface{})
+		arr[index] = make(map[string]any)
 	}
-	next, ok := arr[index].(map[string]interface{})
+	next, ok := arr[index].(map[string]any)
 	if !ok {
-		next = make(map[string]interface{})
+		next = make(map[string]any)
 		arr[index] = next
 	}
 	return next

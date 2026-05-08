@@ -41,7 +41,7 @@ func waitForRecords(outputModule *MockOutputModule, expected int, timeout time.D
 func TestWebhook_ExecutorIntegration(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"path":          "/webhook/test",
 			"listenAddress": "127.0.0.1:0",
 		}),
@@ -65,7 +65,7 @@ func TestWebhook_ExecutorIntegration(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := func(data []map[string]interface{}) error {
+	handler := func(_ context.Context, data []map[string]any) error {
 		_, execErr := executor.ExecuteWithRecords(pipeline, data)
 		return execErr
 	}

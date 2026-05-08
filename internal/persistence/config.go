@@ -60,12 +60,12 @@ func (c *StatePersistenceConfig) IDEnabled() bool {
 
 // ParseStatePersistenceConfig parses state persistence configuration from a map.
 // Returns nil if the map is nil or empty.
-func ParseStatePersistenceConfig(config map[string]interface{}) *StatePersistenceConfig {
+func ParseStatePersistenceConfig(config map[string]any) *StatePersistenceConfig {
 	if config == nil {
 		return nil
 	}
 
-	spConfig, ok := config["statePersistence"].(map[string]interface{})
+	spConfig, ok := config["statePersistence"].(map[string]any)
 	if !ok || spConfig == nil {
 		return nil
 	}
@@ -73,7 +73,7 @@ func ParseStatePersistenceConfig(config map[string]interface{}) *StatePersistenc
 	result := &StatePersistenceConfig{}
 
 	// Parse timestamp config
-	if tsConfig, ok := spConfig["timestamp"].(map[string]interface{}); ok {
+	if tsConfig, ok := spConfig["timestamp"].(map[string]any); ok {
 		result.Timestamp = &TimestampConfig{}
 		if enabled, ok := tsConfig["enabled"].(bool); ok {
 			result.Timestamp.Enabled = enabled
@@ -84,7 +84,7 @@ func ParseStatePersistenceConfig(config map[string]interface{}) *StatePersistenc
 	}
 
 	// Parse ID config
-	if idConfig, ok := spConfig["id"].(map[string]interface{}); ok {
+	if idConfig, ok := spConfig["id"].(map[string]any); ok {
 		result.ID = &IDConfig{}
 		if enabled, ok := idConfig["enabled"].(bool); ok {
 			result.ID.Enabled = enabled

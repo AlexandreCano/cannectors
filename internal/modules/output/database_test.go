@@ -9,7 +9,7 @@ import (
 
 // parseDatabaseOutputConfigFromMap is a test helper that converts a map to DatabaseOutputConfig via JSON.
 
-func mustJSON(v interface{}) json.RawMessage {
+func mustJSON(v any) json.RawMessage {
 	b, err := json.Marshal(v)
 	if err != nil {
 		panic(err)
@@ -17,7 +17,7 @@ func mustJSON(v interface{}) json.RawMessage {
 	return b
 }
 
-func parseDatabaseOutputConfigFromMap(cfg map[string]interface{}) DatabaseOutputConfig {
+func parseDatabaseOutputConfigFromMap(cfg map[string]any) DatabaseOutputConfig {
 	data, _ := json.Marshal(cfg)
 	var config DatabaseOutputConfig
 	_ = json.Unmarshal(data, &config)
@@ -29,13 +29,13 @@ func TestParseDatabaseOutputConfig(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		cfg     map[string]interface{}
+		cfg     map[string]any
 		wantErr bool
 		check   func(t *testing.T, config DatabaseOutputConfig)
 	}{
 		{
 			name: "basic query config",
-			cfg: map[string]interface{}{
+			cfg: map[string]any{
 				"connectionString": "postgres://localhost/db",
 				"query":            "INSERT INTO users (name, email) VALUES ({{record.name}}, {{record.email}})",
 			},
@@ -50,7 +50,7 @@ func TestParseDatabaseOutputConfig(t *testing.T) {
 		},
 		{
 			name: "config with env ref",
-			cfg: map[string]interface{}{
+			cfg: map[string]any{
 				"connectionStringRef": "${DATABASE_URL}",
 				"driver":              "mysql",
 				"query":               "INSERT INTO orders (id, total) VALUES ({{record.id}}, {{record.total}})",
@@ -66,7 +66,7 @@ func TestParseDatabaseOutputConfig(t *testing.T) {
 		},
 		{
 			name: "config with queryFile",
-			cfg: map[string]interface{}{
+			cfg: map[string]any{
 				"connectionString": "postgres://localhost/db",
 				"queryFile":        "/path/to/insert.sql",
 			},
@@ -78,7 +78,7 @@ func TestParseDatabaseOutputConfig(t *testing.T) {
 		},
 		{
 			name: "transaction config",
-			cfg: map[string]interface{}{
+			cfg: map[string]any{
 				"connectionString": "postgres://localhost/db",
 				"query":            "INSERT INTO events (data) VALUES ({{record.data}})",
 				"transaction":      true,
@@ -91,7 +91,7 @@ func TestParseDatabaseOutputConfig(t *testing.T) {
 		},
 		{
 			name: "pool and timeout config",
-			cfg: map[string]interface{}{
+			cfg: map[string]any{
 				"connectionString":       "postgres://localhost/db",
 				"query":                  "INSERT INTO data (value) VALUES ({{record.value}})",
 				"maxOpenConns":           float64(30),
@@ -120,7 +120,7 @@ func TestParseDatabaseOutputConfig(t *testing.T) {
 		},
 		{
 			name: "error handling config",
-			cfg: map[string]interface{}{
+			cfg: map[string]any{
 				"connectionString": "postgres://localhost/db",
 				"query":            "INSERT INTO data (value) VALUES ({{record.value}})",
 				"onError":          "skip",
@@ -164,7 +164,7 @@ func TestNewDatabaseOutputFromConfig_Validation(t *testing.T) {
 			name: "missing connection string",
 			cfg: &connector.ModuleConfig{
 				Type: "database",
-				Raw: mustJSON(map[string]interface{}{
+				Raw: mustJSON(map[string]any{
 					"query": "INSERT INTO users (name) VALUES ({{record.name}})",
 				}),
 			},
@@ -174,7 +174,7 @@ func TestNewDatabaseOutputFromConfig_Validation(t *testing.T) {
 			name: "missing query",
 			cfg: &connector.ModuleConfig{
 				Type: "database",
-				Raw: mustJSON(map[string]interface{}{
+				Raw: mustJSON(map[string]any{
 					"connectionString": "postgres://localhost/db",
 				}),
 			},
@@ -199,12 +199,12 @@ func TestNewDatabaseOutputFromConfig_Validation(t *testing.T) {
 func TestGetDBFieldValue(t *testing.T) {
 	t.Parallel()
 
-	record := map[string]interface{}{
+	record := map[string]any{
 		"id":   1,
 		"name": "test",
-		"data": map[string]interface{}{
+		"data": map[string]any{
 			"nested": "value",
-			"deep": map[string]interface{}{
+			"deep": map[string]any{
 				"key": 42,
 			},
 		},
@@ -213,7 +213,7 @@ func TestGetDBFieldValue(t *testing.T) {
 	tests := []struct {
 		name  string
 		field string
-		want  interface{}
+		want  any
 	}{
 		{
 			name:  "top-level int",

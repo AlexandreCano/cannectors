@@ -1,6 +1,6 @@
 # Story 19.5: Remove dead code (NewExecutor, Execute duplication, others)
 
-Status: backlog
+Status: review
 
 ## Story
 
@@ -82,4 +82,8 @@ Audit §5 P3.2, P3.3. Le code mort diminue la charge cognitive pour les nouveaux
 
 ## File List
 
-(à compléter)
+- `internal/runtime/pipeline.go` — supprime `NewExecutor(dryRun bool)` (aucun caller). `ExecuteWithRecordsContext` est maintenant une délégation à `ExecuteWithContext` via un module d'entrée temporaire ; supprime ~100 LOC dupliquées (validation, logs, défer, étapes filter/output).
+- `internal/runtime/records_input.go` (new) — petit module d'input interne `recordsInputModule` qui retourne des records pré-chargés ; permet à `ExecuteWithRecordsContext` de réutiliser le chemin standard.
+- `runtime/retry.go` : déjà absent (nettoyé en epic 16) — pas d'action nécessaire.
+- Stubs (`input/stub.go`, `filter/stub.go`, `output/stub.go`) : conservés. Ils sont uniquement utilisés par `registry_test.go` et `factory_test.go`, mais retirer leur visibilité externe casserait ces tests cross-package. Le coût d'un `internal/.../testutil/` séparé n'est pas justifié pour quelques structs simples.
+- `internal/logger/logger.go` (sous l'epic) : nettoyage des helpers non utilisés (`SetLevel`, `WithPipeline`, `WithModule`, `WithExecution`, `LogError`, `ErrorContext`) — voir story 19.3.

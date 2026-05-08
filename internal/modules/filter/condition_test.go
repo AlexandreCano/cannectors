@@ -19,67 +19,67 @@ func TestConditionBasicEquality(t *testing.T) {
 	tests := []struct {
 		name       string
 		expression string
-		record     map[string]interface{}
+		record     map[string]any
 		wantPass   bool
 	}{
 		{
 			name:       "string equality - match",
 			expression: "status == 'active'",
-			record:     map[string]interface{}{"status": "active"},
+			record:     map[string]any{"status": "active"},
 			wantPass:   true,
 		},
 		{
 			name:       "string equality - no match",
 			expression: "status == 'active'",
-			record:     map[string]interface{}{"status": "inactive"},
+			record:     map[string]any{"status": "inactive"},
 			wantPass:   false,
 		},
 		{
 			name:       "string inequality - match",
 			expression: "status != 'deleted'",
-			record:     map[string]interface{}{"status": "active"},
+			record:     map[string]any{"status": "active"},
 			wantPass:   true,
 		},
 		{
 			name:       "string inequality - no match",
 			expression: "status != 'active'",
-			record:     map[string]interface{}{"status": "active"},
+			record:     map[string]any{"status": "active"},
 			wantPass:   false,
 		},
 		{
 			name:       "number equality - match",
 			expression: "total == 5",
-			record:     map[string]interface{}{"total": 5},
+			record:     map[string]any{"total": 5},
 			wantPass:   true,
 		},
 		{
 			name:       "number equality - no match",
 			expression: "total == 5",
-			record:     map[string]interface{}{"total": 10},
+			record:     map[string]any{"total": 10},
 			wantPass:   false,
 		},
 		{
 			name:       "boolean equality - match true",
 			expression: "isActive == true",
-			record:     map[string]interface{}{"isActive": true},
+			record:     map[string]any{"isActive": true},
 			wantPass:   true,
 		},
 		{
 			name:       "boolean equality - match false",
 			expression: "isActive == false",
-			record:     map[string]interface{}{"isActive": false},
+			record:     map[string]any{"isActive": false},
 			wantPass:   true,
 		},
 		{
 			name:       "null equality - match",
 			expression: "value == null",
-			record:     map[string]interface{}{"value": nil},
+			record:     map[string]any{"value": nil},
 			wantPass:   true,
 		},
 		{
 			name:       "null inequality - match",
 			expression: "value != null",
-			record:     map[string]interface{}{"value": "something"},
+			record:     map[string]any{"value": "something"},
 			wantPass:   true,
 		},
 	}
@@ -96,7 +96,7 @@ func TestConditionBasicEquality(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			records := []map[string]interface{}{tt.record}
+			records := []map[string]any{tt.record}
 			result, err := cond.Process(context.Background(), records)
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
@@ -117,79 +117,79 @@ func TestConditionNumericComparisons(t *testing.T) {
 	tests := []struct {
 		name       string
 		expression string
-		record     map[string]interface{}
+		record     map[string]any
 		wantPass   bool
 	}{
 		{
 			name:       "greater than - pass",
 			expression: "amount > 100",
-			record:     map[string]interface{}{"amount": 150},
+			record:     map[string]any{"amount": 150},
 			wantPass:   true,
 		},
 		{
 			name:       "greater than - fail",
 			expression: "amount > 100",
-			record:     map[string]interface{}{"amount": 50},
+			record:     map[string]any{"amount": 50},
 			wantPass:   false,
 		},
 		{
 			name:       "greater than - equal fails",
 			expression: "amount > 100",
-			record:     map[string]interface{}{"amount": 100},
+			record:     map[string]any{"amount": 100},
 			wantPass:   false,
 		},
 		{
 			name:       "less than - pass",
 			expression: "amount < 100",
-			record:     map[string]interface{}{"amount": 50},
+			record:     map[string]any{"amount": 50},
 			wantPass:   true,
 		},
 		{
 			name:       "less than - fail",
 			expression: "amount < 100",
-			record:     map[string]interface{}{"amount": 150},
+			record:     map[string]any{"amount": 150},
 			wantPass:   false,
 		},
 		{
 			name:       "greater than or equal - pass on greater",
 			expression: "amount >= 100",
-			record:     map[string]interface{}{"amount": 150},
+			record:     map[string]any{"amount": 150},
 			wantPass:   true,
 		},
 		{
 			name:       "greater than or equal - pass on equal",
 			expression: "amount >= 100",
-			record:     map[string]interface{}{"amount": 100},
+			record:     map[string]any{"amount": 100},
 			wantPass:   true,
 		},
 		{
 			name:       "greater than or equal - fail",
 			expression: "amount >= 100",
-			record:     map[string]interface{}{"amount": 50},
+			record:     map[string]any{"amount": 50},
 			wantPass:   false,
 		},
 		{
 			name:       "less than or equal - pass on less",
 			expression: "amount <= 100",
-			record:     map[string]interface{}{"amount": 50},
+			record:     map[string]any{"amount": 50},
 			wantPass:   true,
 		},
 		{
 			name:       "less than or equal - pass on equal",
 			expression: "amount <= 100",
-			record:     map[string]interface{}{"amount": 100},
+			record:     map[string]any{"amount": 100},
 			wantPass:   true,
 		},
 		{
 			name:       "less than or equal - fail",
 			expression: "amount <= 100",
-			record:     map[string]interface{}{"amount": 150},
+			record:     map[string]any{"amount": 150},
 			wantPass:   false,
 		},
 		{
 			name:       "float comparison",
 			expression: "price > 19.99",
-			record:     map[string]interface{}{"price": 29.99},
+			record:     map[string]any{"price": 29.99},
 			wantPass:   true,
 		},
 	}
@@ -206,7 +206,7 @@ func TestConditionNumericComparisons(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			records := []map[string]interface{}{tt.record}
+			records := []map[string]any{tt.record}
 			result, err := cond.Process(context.Background(), records)
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
@@ -227,67 +227,67 @@ func TestConditionLogicalOperators(t *testing.T) {
 	tests := []struct {
 		name       string
 		expression string
-		record     map[string]interface{}
+		record     map[string]any
 		wantPass   bool
 	}{
 		{
 			name:       "AND - both true",
 			expression: "status == 'active' && qty > 0",
-			record:     map[string]interface{}{"status": "active", "qty": 5},
+			record:     map[string]any{"status": "active", "qty": 5},
 			wantPass:   true,
 		},
 		{
 			name:       "AND - first true, second false",
 			expression: "status == 'active' && qty > 0",
-			record:     map[string]interface{}{"status": "active", "qty": 0},
+			record:     map[string]any{"status": "active", "qty": 0},
 			wantPass:   false,
 		},
 		{
 			name:       "AND - first false, second true",
 			expression: "status == 'active' && qty > 0",
-			record:     map[string]interface{}{"status": "inactive", "qty": 5},
+			record:     map[string]any{"status": "inactive", "qty": 5},
 			wantPass:   false,
 		},
 		{
 			name:       "AND - both false",
 			expression: "status == 'active' && qty > 0",
-			record:     map[string]interface{}{"status": "inactive", "qty": 0},
+			record:     map[string]any{"status": "inactive", "qty": 0},
 			wantPass:   false,
 		},
 		{
 			name:       "OR - both true",
 			expression: "status == 'active' || status == 'pending'",
-			record:     map[string]interface{}{"status": "active"},
+			record:     map[string]any{"status": "active"},
 			wantPass:   true,
 		},
 		{
 			name:       "OR - first true",
 			expression: "status == 'active' || status == 'pending'",
-			record:     map[string]interface{}{"status": "active"},
+			record:     map[string]any{"status": "active"},
 			wantPass:   true,
 		},
 		{
 			name:       "OR - second true",
 			expression: "status == 'active' || status == 'pending'",
-			record:     map[string]interface{}{"status": "pending"},
+			record:     map[string]any{"status": "pending"},
 			wantPass:   true,
 		},
 		{
 			name:       "OR - both false",
 			expression: "status == 'active' || status == 'pending'",
-			record:     map[string]interface{}{"status": "deleted"},
+			record:     map[string]any{"status": "deleted"},
 			wantPass:   false,
 		},
 		{
 			name:       "NOT - negate true",
 			expression: "!isDeleted",
-			record:     map[string]interface{}{"isDeleted": false},
+			record:     map[string]any{"isDeleted": false},
 			wantPass:   true,
 		},
 		{
 			name:       "NOT - negate false",
 			expression: "!isDeleted",
-			record:     map[string]interface{}{"isDeleted": true},
+			record:     map[string]any{"isDeleted": true},
 			wantPass:   false,
 		},
 	}
@@ -304,7 +304,7 @@ func TestConditionLogicalOperators(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			records := []map[string]interface{}{tt.record}
+			records := []map[string]any{tt.record}
 			result, err := cond.Process(context.Background(), records)
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
@@ -325,23 +325,23 @@ func TestConditionNestedFieldAccess(t *testing.T) {
 	tests := []struct {
 		name       string
 		expression string
-		record     map[string]interface{}
+		record     map[string]any
 		wantPass   bool
 	}{
 		{
 			name:       "single level nesting",
 			expression: "user.status == 'active'",
-			record: map[string]interface{}{
-				"user": map[string]interface{}{"status": "active"},
+			record: map[string]any{
+				"user": map[string]any{"status": "active"},
 			},
 			wantPass: true,
 		},
 		{
 			name:       "two level nesting",
 			expression: "user.profile.verified == true",
-			record: map[string]interface{}{
-				"user": map[string]interface{}{
-					"profile": map[string]interface{}{"verified": true},
+			record: map[string]any{
+				"user": map[string]any{
+					"profile": map[string]any{"verified": true},
 				},
 			},
 			wantPass: true,
@@ -349,15 +349,15 @@ func TestConditionNestedFieldAccess(t *testing.T) {
 		{
 			name:       "nested numeric comparison",
 			expression: "order.total > 100",
-			record: map[string]interface{}{
-				"order": map[string]interface{}{"total": 150},
+			record: map[string]any{
+				"order": map[string]any{"total": 150},
 			},
 			wantPass: true,
 		},
 		{
 			name:       "missing nested field - fails",
 			expression: "user.status == 'active'",
-			record:     map[string]interface{}{"user": map[string]interface{}{}},
+			record:     map[string]any{"user": map[string]any{}},
 			wantPass:   false,
 		},
 	}
@@ -374,7 +374,7 @@ func TestConditionNestedFieldAccess(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			records := []map[string]interface{}{tt.record}
+			records := []map[string]any{tt.record}
 			result, err := cond.Process(context.Background(), records)
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
@@ -395,15 +395,15 @@ func TestConditionArrayAccess(t *testing.T) {
 	tests := []struct {
 		name       string
 		expression string
-		record     map[string]interface{}
+		record     map[string]any
 		wantPass   bool
 	}{
 		{
 			name:       "array first element",
 			expression: "items[0].price > 10",
-			record: map[string]interface{}{
-				"items": []interface{}{
-					map[string]interface{}{"price": 15},
+			record: map[string]any{
+				"items": []any{
+					map[string]any{"price": 15},
 				},
 			},
 			wantPass: true,
@@ -411,10 +411,10 @@ func TestConditionArrayAccess(t *testing.T) {
 		{
 			name:       "array second element",
 			expression: "items[1].name == 'test'",
-			record: map[string]interface{}{
-				"items": []interface{}{
-					map[string]interface{}{"name": "first"},
-					map[string]interface{}{"name": "test"},
+			record: map[string]any{
+				"items": []any{
+					map[string]any{"name": "first"},
+					map[string]any{"name": "test"},
 				},
 			},
 			wantPass: true,
@@ -422,9 +422,9 @@ func TestConditionArrayAccess(t *testing.T) {
 		{
 			name:       "array valid index",
 			expression: "items[0].price > 5",
-			record: map[string]interface{}{
-				"items": []interface{}{
-					map[string]interface{}{"price": 15},
+			record: map[string]any{
+				"items": []any{
+					map[string]any{"price": 15},
 				},
 			},
 			wantPass: true,
@@ -443,7 +443,7 @@ func TestConditionArrayAccess(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			records := []map[string]interface{}{tt.record}
+			records := []map[string]any{tt.record}
 			result, err := cond.Process(context.Background(), records)
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
@@ -471,7 +471,7 @@ func TestConditionMultipleRecords(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "status": "active"},
 		{"id": 2, "status": "inactive"},
 		{"id": 3, "status": "active"},
@@ -519,7 +519,7 @@ func TestConditionEmptyInput(t *testing.T) {
 	}
 
 	// Test with empty slice
-	result, err = cond.Process(context.Background(), []map[string]interface{}{})
+	result, err = cond.Process(context.Background(), []map[string]any{})
 	if err != nil {
 		t.Fatalf("Process([]) error = %v", err)
 	}
@@ -550,7 +550,7 @@ func TestConditionDefaultLang(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{{"status": "active"}}
+	records := []map[string]any{{"status": "active"}}
 	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
@@ -576,7 +576,7 @@ func TestConditionOnTrueContinue(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "status": "active"},
 	}
 
@@ -601,7 +601,7 @@ func TestConditionOnTrueSkip(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "status": "active"},
 		{"id": 2, "status": "inactive"},
 	}
@@ -632,7 +632,7 @@ func TestConditionOnFalseContinue(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "status": "active"},
 		{"id": 2, "status": "inactive"},
 	}
@@ -659,7 +659,7 @@ func TestConditionOnFalseSkip(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "status": "active"},
 		{"id": 2, "status": "inactive"},
 	}
@@ -689,7 +689,7 @@ func TestConditionDefaultRouting(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "qty": 5},   // false -> skip
 		{"id": 2, "qty": 15},  // true -> continue
 		{"id": 3, "qty": 10},  // false (not >) -> skip
@@ -718,31 +718,31 @@ func TestConditionNullValueHandling(t *testing.T) {
 	tests := []struct {
 		name       string
 		expression string
-		record     map[string]interface{}
+		record     map[string]any
 		wantPass   bool
 	}{
 		{
 			name:       "null field equals null",
 			expression: "value == null",
-			record:     map[string]interface{}{"value": nil},
+			record:     map[string]any{"value": nil},
 			wantPass:   true,
 		},
 		{
 			name:       "missing field treated as null",
 			expression: "missing == null",
-			record:     map[string]interface{}{"other": "value"},
+			record:     map[string]any{"other": "value"},
 			wantPass:   true,
 		},
 		{
 			name:       "null field not equal to value",
 			expression: "value != null",
-			record:     map[string]interface{}{"value": nil},
+			record:     map[string]any{"value": nil},
 			wantPass:   false,
 		},
 		{
 			name:       "non-null field not equal to null",
 			expression: "value != null",
-			record:     map[string]interface{}{"value": "something"},
+			record:     map[string]any{"value": "something"},
 			wantPass:   true,
 		},
 	}
@@ -758,7 +758,7 @@ func TestConditionNullValueHandling(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			result, err := cond.Process(context.Background(), []map[string]interface{}{tt.record})
+			result, err := cond.Process(context.Background(), []map[string]any{tt.record})
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -778,25 +778,25 @@ func TestConditionTypeMismatchHandling(t *testing.T) {
 	tests := []struct {
 		name       string
 		expression string
-		record     map[string]interface{}
+		record     map[string]any
 		wantPass   bool
 	}{
 		{
 			name:       "string compared to number - not equal",
 			expression: "value == 100",
-			record:     map[string]interface{}{"value": "100"},
+			record:     map[string]any{"value": "100"},
 			wantPass:   false, // string "100" != number 100
 		},
 		{
 			name:       "int compared to float - equal",
 			expression: "value == 100.0",
-			record:     map[string]interface{}{"value": 100},
+			record:     map[string]any{"value": 100},
 			wantPass:   true, // int 100 == float 100.0
 		},
 		{
 			name:       "boolean compared to number - not equal",
 			expression: "active == 1",
-			record:     map[string]interface{}{"active": true},
+			record:     map[string]any{"active": true},
 			wantPass:   false, // boolean true != number 1
 		},
 	}
@@ -812,7 +812,7 @@ func TestConditionTypeMismatchHandling(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			result, err := cond.Process(context.Background(), []map[string]interface{}{tt.record})
+			result, err := cond.Process(context.Background(), []map[string]any{tt.record})
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -848,7 +848,7 @@ func TestConditionNestedThenMapping(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "name": "Alice", "status": "active"},
 	}
 
@@ -895,7 +895,7 @@ func TestConditionNestedElseMapping(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "status": "active"},
 		{"id": 2, "status": "inactive"},
 	}
@@ -941,7 +941,7 @@ func TestConditionNestedBothThenElse(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "name": "Alice", "tier": "premium"},
 		{"id": 2, "name": "Bob", "tier": "standard"},
 	}
@@ -988,7 +988,7 @@ func TestConditionNestedRecursiveCondition(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "level": 0},  // level > 0: false -> skip
 		{"id": 2, "level": 3},  // level > 0: true -> then (level > 5: false -> skip)
 		{"id": 3, "level": 10}, // level > 0: true -> then (level > 5: true -> continue)
@@ -1026,7 +1026,7 @@ func TestConditionNestedPriorityOverOnTrue(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "status": "active"},
 	}
 
@@ -1062,7 +1062,7 @@ func TestConditionNestedPriorityOverOnFalse(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "status": "inactive"},
 	}
 
@@ -1098,7 +1098,7 @@ func TestConditionNestedModuleReturnsEmpty(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "level": 10}, // level > 0: true -> then (level > 100: false -> skip)
 	}
 
@@ -1122,49 +1122,49 @@ func TestConditionParenthesesGrouping(t *testing.T) {
 	tests := []struct {
 		name       string
 		expression string
-		record     map[string]interface{}
+		record     map[string]any
 		wantPass   bool
 	}{
 		{
 			name:       "simple grouping - (a || b) && c - all true",
 			expression: "(status == 'active' || status == 'pending') && qty > 0",
-			record:     map[string]interface{}{"status": "active", "qty": 5},
+			record:     map[string]any{"status": "active", "qty": 5},
 			wantPass:   true,
 		},
 		{
 			name:       "simple grouping - (a || b) && c - first OR true, AND true",
 			expression: "(status == 'active' || status == 'pending') && qty > 0",
-			record:     map[string]interface{}{"status": "pending", "qty": 5},
+			record:     map[string]any{"status": "pending", "qty": 5},
 			wantPass:   true,
 		},
 		{
 			name:       "simple grouping - (a || b) && c - first OR false, fails",
 			expression: "(status == 'active' || status == 'pending') && qty > 0",
-			record:     map[string]interface{}{"status": "deleted", "qty": 5},
+			record:     map[string]any{"status": "deleted", "qty": 5},
 			wantPass:   false,
 		},
 		{
 			name:       "simple grouping - (a || b) && c - AND false, fails",
 			expression: "(status == 'active' || status == 'pending') && qty > 0",
-			record:     map[string]interface{}{"status": "active", "qty": 0},
+			record:     map[string]any{"status": "active", "qty": 0},
 			wantPass:   false,
 		},
 		{
 			name:       "precedence without parens - a || b && c",
 			expression: "a == true || b == true && c == true",
-			record:     map[string]interface{}{"a": true, "b": false, "c": false},
+			record:     map[string]any{"a": true, "b": false, "c": false},
 			wantPass:   true, // a || (b && c) => true || false => true
 		},
 		{
 			name:       "nested parentheses - ((a && b) || c)",
 			expression: "((x == 1 && y == 2) || z == 3)",
-			record:     map[string]interface{}{"x": 1, "y": 2, "z": 0},
+			record:     map[string]any{"x": 1, "y": 2, "z": 0},
 			wantPass:   true, // (1 && 2) || 0 => true || false => true
 		},
 		{
 			name:       "nested parentheses - z matches",
 			expression: "((x == 1 && y == 2) || z == 3)",
-			record:     map[string]interface{}{"x": 0, "y": 0, "z": 3},
+			record:     map[string]any{"x": 0, "y": 0, "z": 3},
 			wantPass:   true, // (false && false) || true => true
 		},
 	}
@@ -1180,7 +1180,7 @@ func TestConditionParenthesesGrouping(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			result, err := cond.Process(context.Background(), []map[string]interface{}{tt.record})
+			result, err := cond.Process(context.Background(), []map[string]any{tt.record})
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -1201,50 +1201,50 @@ func TestConditionStringOperations(t *testing.T) {
 	tests := []struct {
 		name       string
 		expression string
-		record     map[string]interface{}
+		record     map[string]any
 		wantPass   bool
 	}{
 		{
 			name:       "contains - match",
 			expression: `name contains "test"`,
-			record:     map[string]interface{}{"name": "this is a test string"},
+			record:     map[string]any{"name": "this is a test string"},
 			wantPass:   true,
 		},
 		{
 			name:       "contains - no match",
 			expression: `name contains "xyz"`,
-			record:     map[string]interface{}{"name": "this is a test string"},
+			record:     map[string]any{"name": "this is a test string"},
 			wantPass:   false,
 		},
 		{
 			name:       "startsWith - match",
 			expression: `email startsWith "admin"`,
-			record:     map[string]interface{}{"email": "admin@example.com"},
+			record:     map[string]any{"email": "admin@example.com"},
 			wantPass:   true,
 		},
 		{
 			name:       "startsWith - no match",
 			expression: `email startsWith "user"`,
-			record:     map[string]interface{}{"email": "admin@example.com"},
+			record:     map[string]any{"email": "admin@example.com"},
 			wantPass:   false,
 		},
 		{
 			name:       "endsWith - match",
 			expression: `path endsWith ".json"`,
-			record:     map[string]interface{}{"path": "/data/config.json"},
+			record:     map[string]any{"path": "/data/config.json"},
 			wantPass:   true,
 		},
 		{
 			name:       "endsWith - no match",
 			expression: `path endsWith ".xml"`,
-			record:     map[string]interface{}{"path": "/data/config.json"},
+			record:     map[string]any{"path": "/data/config.json"},
 			wantPass:   false,
 		},
 		{
 			name:       "nested field with string operation",
 			expression: `user.email endsWith "@example.com"`,
-			record: map[string]interface{}{
-				"user": map[string]interface{}{"email": "test@example.com"},
+			record: map[string]any{
+				"user": map[string]any{"email": "test@example.com"},
 			},
 			wantPass: true,
 		},
@@ -1261,7 +1261,7 @@ func TestConditionStringOperations(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			result, err := cond.Process(context.Background(), []map[string]interface{}{tt.record})
+			result, err := cond.Process(context.Background(), []map[string]any{tt.record})
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -1281,16 +1281,16 @@ func TestConditionDeepNestedFieldAccess(t *testing.T) {
 	tests := []struct {
 		name       string
 		expression string
-		record     map[string]interface{}
+		record     map[string]any
 		wantPass   bool
 	}{
 		{
 			name:       "three level nesting",
 			expression: "user.profile.settings.darkMode == true",
-			record: map[string]interface{}{
-				"user": map[string]interface{}{
-					"profile": map[string]interface{}{
-						"settings": map[string]interface{}{
+			record: map[string]any{
+				"user": map[string]any{
+					"profile": map[string]any{
+						"settings": map[string]any{
 							"darkMode": true,
 						},
 					},
@@ -1301,12 +1301,12 @@ func TestConditionDeepNestedFieldAccess(t *testing.T) {
 		{
 			name:       "array with nested object",
 			expression: "orders[0].items[0].product.name == 'Widget'",
-			record: map[string]interface{}{
-				"orders": []interface{}{
-					map[string]interface{}{
-						"items": []interface{}{
-							map[string]interface{}{
-								"product": map[string]interface{}{
+			record: map[string]any{
+				"orders": []any{
+					map[string]any{
+						"items": []any{
+							map[string]any{
+								"product": map[string]any{
 									"name": "Widget",
 								},
 							},
@@ -1329,7 +1329,7 @@ func TestConditionDeepNestedFieldAccess(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			result, err := cond.Process(context.Background(), []map[string]interface{}{tt.record})
+			result, err := cond.Process(context.Background(), []map[string]any{tt.record})
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -1358,7 +1358,7 @@ func TestConditionLangSimple(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{{"status": "active"}}
+	records := []map[string]any{{"status": "active"}}
 	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
@@ -1435,7 +1435,7 @@ func TestConditionLangDefaultIsSimple(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{{"value": 15}}
+	records := []map[string]any{{"value": 15}}
 	result, err := cond.Process(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
@@ -1536,7 +1536,7 @@ func TestConditionOnErrorFail(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"data": "test"},
 	}
 
@@ -1558,10 +1558,10 @@ func TestConditionOnErrorSkip(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
-		{"value": 10}, // Will cause error (can't call method on int), should be skipped
-		{"value": 5},  // Will cause error (can't call method on int), should be skipped
-		{"value": map[string]interface{}{"nested": 1}}, // Will cause error, should be skipped
+	records := []map[string]any{
+		{"value": 10},                          // Will cause error (can't call method on int), should be skipped
+		{"value": 5},                           // Will cause error (can't call method on int), should be skipped
+		{"value": map[string]any{"nested": 1}}, // Will cause error, should be skipped
 	}
 
 	result, err := cond.Process(context.Background(), records)
@@ -1586,10 +1586,10 @@ func TestConditionOnErrorLog(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
-		{"value": 10}, // Will cause error (can't call method on int), should be logged and skipped
-		{"value": 5},  // Will cause error (can't call method on int), should be logged and skipped
-		{"value": map[string]interface{}{"nested": 1}}, // Will cause error, should be logged and skipped
+	records := []map[string]any{
+		{"value": 10},                          // Will cause error (can't call method on int), should be logged and skipped
+		{"value": 5},                           // Will cause error (can't call method on int), should be logged and skipped
+		{"value": map[string]any{"nested": 1}}, // Will cause error, should be logged and skipped
 	}
 
 	result, err := cond.Process(context.Background(), records)
@@ -1613,7 +1613,7 @@ func TestConditionInvalidOnErrorDefaultsToFail(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"data": "test"},
 	}
 
@@ -1663,7 +1663,7 @@ func TestConditionErrorDetails(t *testing.T) {
 	}
 
 	// Create a record that will cause an evaluation error
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"value": 1}, // int doesn't have methods, will cause error
 	}
 
@@ -1704,26 +1704,26 @@ func TestConditionToBoolConversion(t *testing.T) {
 	tests := []struct {
 		name     string
 		expr     string
-		record   map[string]interface{}
+		record   map[string]any
 		expected bool
 	}{
-		{"bool true", "true", map[string]interface{}{}, true},
-		{"bool false", "false", map[string]interface{}{}, false},
-		{"int zero", "0", map[string]interface{}{}, false},
-		{"int non-zero", "5", map[string]interface{}{}, true},
-		{"float zero", "0.0", map[string]interface{}{}, false},
-		{"float non-zero", "3.14", map[string]interface{}{}, true},
-		{"empty string", `""`, map[string]interface{}{}, false},
-		{"non-empty string", `"hello"`, map[string]interface{}{}, true},
-		{"nil value", "nil", map[string]interface{}{}, false},
-		{"empty array", "[]", map[string]interface{}{}, false},
-		{"non-empty array", "[1, 2, 3]", map[string]interface{}{}, true},
-		{"empty map", "{}", map[string]interface{}{}, false},
-		{"non-empty map", `{"key": "value"}`, map[string]interface{}{}, true},
-		{"field with empty array", "arr", map[string]interface{}{"arr": []interface{}{}}, false},
-		{"field with non-empty array", "arr", map[string]interface{}{"arr": []interface{}{1, 2}}, true},
-		{"field with empty map", "m", map[string]interface{}{"m": map[string]interface{}{}}, false},
-		{"field with non-empty map", "m", map[string]interface{}{"m": map[string]interface{}{"k": "v"}}, true},
+		{"bool true", "true", map[string]any{}, true},
+		{"bool false", "false", map[string]any{}, false},
+		{"int zero", "0", map[string]any{}, false},
+		{"int non-zero", "5", map[string]any{}, true},
+		{"float zero", "0.0", map[string]any{}, false},
+		{"float non-zero", "3.14", map[string]any{}, true},
+		{"empty string", `""`, map[string]any{}, false},
+		{"non-empty string", `"hello"`, map[string]any{}, true},
+		{"nil value", "nil", map[string]any{}, false},
+		{"empty array", "[]", map[string]any{}, false},
+		{"non-empty array", "[1, 2, 3]", map[string]any{}, true},
+		{"empty map", "{}", map[string]any{}, false},
+		{"non-empty map", `{"key": "value"}`, map[string]any{}, true},
+		{"field with empty array", "arr", map[string]any{"arr": []any{}}, false},
+		{"field with non-empty array", "arr", map[string]any{"arr": []any{1, 2}}, true},
+		{"field with empty map", "m", map[string]any{"m": map[string]any{}}, false},
+		{"field with non-empty map", "m", map[string]any{"m": map[string]any{"k": "v"}}, true},
 	}
 
 	for _, tt := range tests {
@@ -1737,7 +1737,7 @@ func TestConditionToBoolConversion(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			result, err := cond.Process(context.Background(), []map[string]interface{}{tt.record})
+			result, err := cond.Process(context.Background(), []map[string]any{tt.record})
 			if err != nil {
 				t.Fatalf("Process() error = %v", err)
 			}
@@ -1777,7 +1777,7 @@ func TestConditionInvalidOnTrueOnFalse(t *testing.T) {
 			}
 
 			// Test that it works despite invalid values (should default to valid ones)
-			records := []map[string]interface{}{
+			records := []map[string]any{
 				{"value": 10}, // true condition
 				{"value": -5}, // false condition
 			}
@@ -1821,7 +1821,7 @@ func TestConditionDefaultOnErrorIsFail(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"other": "value"},
 	}
 
@@ -1855,7 +1855,7 @@ func TestConditionImplementsModule(t *testing.T) {
 	var _ Module = cond
 }
 
-// TestConditionOutputFormat verifies output format is []map[string]interface{}
+// TestConditionOutputFormat verifies output format is []map[string]any
 func TestConditionOutputFormat(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
@@ -1864,8 +1864,8 @@ func TestConditionOutputFormat(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
-		{"id": 1, "status": "active", "data": map[string]interface{}{"nested": "value"}},
+	records := []map[string]any{
+		{"id": 1, "status": "active", "data": map[string]any{"nested": "value"}},
 	}
 
 	result, err := cond.Process(context.Background(), records)
@@ -1892,7 +1892,7 @@ func TestConditionOutputFormat(t *testing.T) {
 	}
 
 	// Verify nested data is preserved
-	if data, ok := result[0]["data"].(map[string]interface{}); !ok || data["nested"] != "value" {
+	if data, ok := result[0]["data"].(map[string]any); !ok || data["nested"] != "value" {
 		t.Errorf("expected nested data to be preserved, got %v", result[0]["data"])
 	}
 }
@@ -1916,7 +1916,7 @@ func TestConditionChainWithMapping(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"status": "active", "amount": 150},
 		{"status": "inactive", "amount": 50},
 	}
@@ -1952,7 +1952,7 @@ func TestConditionEmptyConditionBehavior(t *testing.T) {
 	}
 
 	// Empty input should return empty output
-	result, err := cond.Process(context.Background(), []map[string]interface{}{})
+	result, err := cond.Process(context.Background(), []map[string]any{})
 	if err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}
@@ -1971,7 +1971,7 @@ func TestConditionPreservesRecordOrder(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "keep": true},
 		{"id": 2, "keep": false},
 		{"id": 3, "keep": true},
@@ -2010,7 +2010,7 @@ func TestConditionDeterministicSameInputSameOutput(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "status": "active", "amount": 100},
 		{"id": 2, "status": "inactive", "amount": 100},
 		{"id": 3, "status": "active", "amount": 25},
@@ -2057,7 +2057,7 @@ func TestConditionDeterministicEvaluationConsistency(t *testing.T) {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
 			}
 
-			record := map[string]interface{}{
+			record := map[string]any{
 				"a":      1,
 				"b":      0,
 				"status": "active",
@@ -2069,9 +2069,9 @@ func TestConditionDeterministicEvaluationConsistency(t *testing.T) {
 			}
 
 			// Evaluate the same record 100 times
-			var firstResult []map[string]interface{}
+			var firstResult []map[string]any
 			for i := 0; i < 100; i++ {
-				result, err := cond.Process(context.Background(), []map[string]interface{}{record})
+				result, err := cond.Process(context.Background(), []map[string]any{record})
 				if err != nil {
 					t.Fatalf("Process() error on iteration %d = %v", i, err)
 				}
@@ -2096,35 +2096,35 @@ func TestConditionDeterministicRoutingConsistency(t *testing.T) {
 		name      string
 		onTrue    string
 		onFalse   string
-		record    map[string]interface{}
+		record    map[string]any
 		wantCount int
 	}{
 		{
 			name:      "onTrue=continue passes true condition",
 			onTrue:    "continue",
 			onFalse:   "skip",
-			record:    map[string]interface{}{"value": true},
+			record:    map[string]any{"value": true},
 			wantCount: 1,
 		},
 		{
 			name:      "onTrue=skip filters true condition",
 			onTrue:    "skip",
 			onFalse:   "continue",
-			record:    map[string]interface{}{"value": true},
+			record:    map[string]any{"value": true},
 			wantCount: 0,
 		},
 		{
 			name:      "onFalse=continue passes false condition",
 			onTrue:    "skip",
 			onFalse:   "continue",
-			record:    map[string]interface{}{"value": false},
+			record:    map[string]any{"value": false},
 			wantCount: 1,
 		},
 		{
 			name:      "onFalse=skip filters false condition",
 			onTrue:    "continue",
 			onFalse:   "skip",
-			record:    map[string]interface{}{"value": false},
+			record:    map[string]any{"value": false},
 			wantCount: 0,
 		},
 	}
@@ -2142,7 +2142,7 @@ func TestConditionDeterministicRoutingConsistency(t *testing.T) {
 
 			// Run 50 times to verify consistency
 			for i := 0; i < 50; i++ {
-				result, err := cond.Process(context.Background(), []map[string]interface{}{tt.record})
+				result, err := cond.Process(context.Background(), []map[string]any{tt.record})
 				if err != nil {
 					t.Fatalf("Process() error on iteration %d = %v", i, err)
 				}
@@ -2167,13 +2167,13 @@ func TestConditionNoTimeDependent(t *testing.T) {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
 	}
 
-	record := map[string]interface{}{"status": "active"}
+	record := map[string]any{"status": "active"}
 
 	// Run many iterations quickly - if there was time-dependent behavior,
 	// results might vary
 	results := make([]int, 1000)
 	for i := 0; i < 1000; i++ {
-		result, err := cond.Process(context.Background(), []map[string]interface{}{record})
+		result, err := cond.Process(context.Background(), []map[string]any{record})
 		if err != nil {
 			t.Fatalf("Process() error = %v", err)
 		}

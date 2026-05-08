@@ -30,7 +30,7 @@ func (h *HTTPRequestModule) executeRequestAndLog(
 		logger.Error("request failed for record",
 			slog.String("module_type", "httpRequest"),
 			slog.Int("record_index", recordIndex),
-			slog.String("endpoint", endpoint),
+			slog.String("endpoint", httpclient.SanitizeURL(endpoint)),
 			slog.Duration("duration", duration),
 			slog.String("error", err.Error()),
 			slog.String("error_category", string(errorCategory)),
@@ -43,7 +43,7 @@ func (h *HTTPRequestModule) executeRequestAndLog(
 	logger.Debug("record sent successfully",
 		slog.String("module_type", "httpRequest"),
 		slog.Int("record_index", recordIndex),
-		slog.String("endpoint", endpoint),
+		slog.String("endpoint", httpclient.SanitizeURL(endpoint)),
 		slog.Duration("duration", duration),
 	)
 	return true, nil
@@ -67,7 +67,7 @@ func (h *HTTPRequestModule) handleOAuth2Unauthorized(resp *http.Response, retryC
 	}
 	if *retryCount >= auth.MaxOAuth2Retries {
 		logger.Warn("401 Unauthorized persists after OAuth2 token refresh, likely invalid credentials",
-			slog.String("endpoint", h.endpoint),
+			slog.String("endpoint", httpclient.SanitizeURL(h.endpoint)),
 			slog.String("method", h.method),
 			slog.Int("oauth2_retry_count", *retryCount),
 		)
@@ -75,7 +75,7 @@ func (h *HTTPRequestModule) handleOAuth2Unauthorized(resp *http.Response, retryC
 	}
 
 	logger.Debug("401 Unauthorized with OAuth2, invalidating token and retrying",
-		slog.String("endpoint", h.endpoint),
+		slog.String("endpoint", httpclient.SanitizeURL(h.endpoint)),
 		slog.String("method", h.method),
 		slog.Int("oauth2_retry_count", *retryCount),
 	)
@@ -109,7 +109,7 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 			}
 			logger.Info("retrying request",
 				slog.String("module_type", "httpRequest"),
-				slog.String("endpoint", endpoint),
+				slog.String("endpoint", httpclient.SanitizeURL(endpoint)),
 				slog.String("method", h.method),
 				slog.Int("attempt", attempt+1),
 				slog.Int("max_attempts", h.retry.MaxAttempts),
@@ -131,7 +131,7 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 		defer func() {
 			if closeErr := resp.Body.Close(); closeErr != nil {
 				logger.Warn("failed to close response body",
-					slog.String("endpoint", endpoint),
+					slog.String("endpoint", httpclient.SanitizeURL(endpoint)),
 					slog.String("error", closeErr.Error()),
 				)
 			}
@@ -154,7 +154,7 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 		}
 		logger.Error("http error response",
 			slog.String("module_type", "httpRequest"),
-			slog.String("endpoint", endpoint),
+			slog.String("endpoint", httpclient.SanitizeURL(endpoint)),
 			slog.String("method", h.method),
 			slog.Int("status_code", resp.StatusCode),
 			slog.String("status", resp.Status),
@@ -193,7 +193,7 @@ func (h *HTTPRequestModule) buildHTTPRequest(ctx context.Context, endpoint strin
 	if err != nil {
 		logger.Error("failed to create http request",
 			slog.String("module_type", "httpRequest"),
-			slog.String("endpoint", endpoint),
+			slog.String("endpoint", httpclient.SanitizeURL(endpoint)),
 			slog.String("method", h.method),
 			slog.String("error", err.Error()),
 		)
@@ -207,7 +207,7 @@ func (h *HTTPRequestModule) buildHTTPRequest(ctx context.Context, endpoint strin
 	if err := h.applyAuthentication(ctx, req); err != nil {
 		logger.Error("failed to apply authentication",
 			slog.String("module_type", "httpRequest"),
-			slog.String("endpoint", endpoint),
+			slog.String("endpoint", httpclient.SanitizeURL(endpoint)),
 			slog.String("error", err.Error()),
 		)
 		return nil, fmt.Errorf("applying authentication: %w", err)
@@ -215,7 +215,7 @@ func (h *HTTPRequestModule) buildHTTPRequest(ctx context.Context, endpoint strin
 
 	logger.Debug("sending http request",
 		slog.String("module_type", "httpRequest"),
-		slog.String("endpoint", endpoint),
+		slog.String("endpoint", httpclient.SanitizeURL(endpoint)),
 		slog.String("method", h.method),
 		slog.Int("body_size", len(body)),
 	)
@@ -227,7 +227,7 @@ func (h *HTTPRequestModule) recordRetrySuccess(retryCount int, delaysMs []int64,
 	if retryCount > 0 {
 		logger.Info("retry succeeded",
 			slog.String("module_type", "httpRequest"),
-			slog.String("endpoint", endpoint),
+			slog.String("endpoint", httpclient.SanitizeURL(endpoint)),
 			slog.Int("attempts", retryCount+1),
 			slog.Duration("total_duration", time.Since(startTime)),
 		)
@@ -256,7 +256,7 @@ func (h *HTTPRequestModule) recordRetryFailure(lastErr error, delaysMs []int64, 
 
 	logger.Error("all retry attempts exhausted",
 		slog.String("module_type", "httpRequest"),
-		slog.String("endpoint", endpoint),
+		slog.String("endpoint", httpclient.SanitizeURL(endpoint)),
 		slog.Int("attempts", h.retry.MaxAttempts+1),
 		slog.Duration("total_duration", time.Since(startTime)),
 		slog.String("error", safeErr.Error()),

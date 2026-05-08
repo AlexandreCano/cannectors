@@ -77,7 +77,7 @@ func (ts *testServer) getRequests() []*capturedRequest {
 }
 
 // Helper to create ModuleConfig from map
-func newModuleConfig(configMap map[string]interface{}) *connector.ModuleConfig {
+func newModuleConfig(configMap map[string]any) *connector.ModuleConfig {
 	raw, err := json.Marshal(configMap)
 	if err != nil {
 		panic(err)
@@ -93,7 +93,7 @@ func newModuleConfig(configMap map[string]interface{}) *connector.ModuleConfig {
 // =============================================================================
 
 func TestNewHTTPRequestFromConfig_ValidConfig(t *testing.T) {
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": "https://api.example.com/data",
 		"method":   "POST",
 	})
@@ -115,7 +115,7 @@ func TestNewHTTPRequestFromConfig_NilConfig(t *testing.T) {
 }
 
 func TestNewHTTPRequestFromConfig_MissingEndpoint(t *testing.T) {
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"method": "POST",
 	})
 
@@ -126,7 +126,7 @@ func TestNewHTTPRequestFromConfig_MissingEndpoint(t *testing.T) {
 }
 
 func TestNewHTTPRequestFromConfig_MissingMethod(t *testing.T) {
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": "https://api.example.com/data",
 	})
 
@@ -137,7 +137,7 @@ func TestNewHTTPRequestFromConfig_MissingMethod(t *testing.T) {
 }
 
 func TestNewHTTPRequestFromConfig_InvalidMethod(t *testing.T) {
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": "https://api.example.com/data",
 		"method":   "INVALID",
 	})
@@ -155,10 +155,10 @@ func TestNewHTTPRequestFromConfig_RetryHintFromBody_TooLong(t *testing.T) {
 		t.Fatalf("test expression too short: %d (need > %d)", len(longExpression), httpclient.MaxRetryHintExpressionLength)
 	}
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": "https://api.example.com/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"retryHintFromBody": longExpression,
 		},
 	})
@@ -177,7 +177,7 @@ func TestNewHTTPRequestFromConfig_SupportedMethods(t *testing.T) {
 
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {
-			config := newModuleConfig(map[string]interface{}{
+			config := newModuleConfig(map[string]any{
 				"endpoint": "https://api.example.com/data",
 				"method":   method,
 			})
@@ -197,7 +197,7 @@ func TestHTTPRequest_Send_SingleRecord(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -207,7 +207,7 @@ func TestHTTPRequest_Send_SingleRecord(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"name": "test", "value": 123},
 	}
 
@@ -229,7 +229,7 @@ func TestHTTPRequest_Send_SingleRecord(t *testing.T) {
 	}
 
 	// Verify body contains records as JSON array
-	var body []map[string]interface{}
+	var body []map[string]any
 	if err := json.Unmarshal(reqs[0].Body, &body); err != nil {
 		t.Fatalf("failed to parse request body: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestHTTPRequest_Send_MultipleRecords(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -255,7 +255,7 @@ func TestHTTPRequest_Send_MultipleRecords(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "name": "first"},
 		{"id": 2, "name": "second"},
 		{"id": 3, "name": "third"},
@@ -275,7 +275,7 @@ func TestHTTPRequest_Send_MultipleRecords(t *testing.T) {
 		t.Fatalf("expected 1 request (batch mode), got %d", len(reqs))
 	}
 
-	var body []map[string]interface{}
+	var body []map[string]any
 	if err := json.Unmarshal(reqs[0].Body, &body); err != nil {
 		t.Fatalf("failed to parse request body: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestHTTPRequest_Send_EmptyRecords(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -298,7 +298,7 @@ func TestHTTPRequest_Send_EmptyRecords(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	sent, err := module.Send(context.Background(), []map[string]interface{}{})
+	sent, err := module.Send(context.Background(), []map[string]any{})
 	if err != nil {
 		t.Fatalf("expected no error for empty records, got %v", err)
 	}
@@ -317,7 +317,7 @@ func TestHTTPRequest_Send_NilRecords(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -340,7 +340,7 @@ func TestHTTPRequest_Send_SingleRecordMode(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint":    ts.URL + "/api/data",
 		"method":      "POST",
 		"requestMode": "single", // Single record per request
@@ -351,7 +351,7 @@ func TestHTTPRequest_Send_SingleRecordMode(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "name": "first"},
 		{"id": 2, "name": "second"},
 	}
@@ -372,7 +372,7 @@ func TestHTTPRequest_Send_SingleRecordMode(t *testing.T) {
 
 	// Verify each request contains a single record (not array)
 	for i, req := range reqs {
-		var body map[string]interface{}
+		var body map[string]any
 		if err := json.Unmarshal(req.Body, &body); err != nil {
 			t.Fatalf("request %d: failed to parse body as single object: %v", i, err)
 		}
@@ -387,10 +387,10 @@ func TestHTTPRequest_Send_CustomHeaders(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"headers": map[string]interface{}{
+		"headers": map[string]any{
 			"X-Custom-Header": "custom-value",
 			"Accept":          "application/json",
 		},
@@ -401,7 +401,7 @@ func TestHTTPRequest_Send_CustomHeaders(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -432,7 +432,7 @@ func TestHTTPRequest_Send_DifferentMethods(t *testing.T) {
 			ts := newTestServer()
 			defer ts.Close()
 
-			config := newModuleConfig(map[string]interface{}{
+			config := newModuleConfig(map[string]any{
 				"endpoint": ts.URL + "/api/data",
 				"method":   method,
 			})
@@ -442,7 +442,7 @@ func TestHTTPRequest_Send_DifferentMethods(t *testing.T) {
 				t.Fatalf("failed to create module: %v", err)
 			}
 
-			records := []map[string]interface{}{{"test": "data"}}
+			records := []map[string]any{{"test": "data"}}
 			_, err = module.Send(context.Background(), records)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
@@ -463,7 +463,7 @@ func TestHTTPRequest_Send_NestedObjects(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -473,17 +473,17 @@ func TestHTTPRequest_Send_NestedObjects(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{
-			"user": map[string]interface{}{
+			"user": map[string]any{
 				"name":  "John",
 				"email": "john@example.com",
-				"address": map[string]interface{}{
+				"address": map[string]any{
 					"city":    "Paris",
 					"country": "France",
 				},
 			},
-			"tags": []interface{}{"tag1", "tag2"},
+			"tags": []any{"tag1", "tag2"},
 		},
 	}
 
@@ -496,13 +496,13 @@ func TestHTTPRequest_Send_NestedObjects(t *testing.T) {
 	}
 
 	reqs := ts.getRequests()
-	var body []map[string]interface{}
+	var body []map[string]any
 	if err := json.Unmarshal(reqs[0].Body, &body); err != nil {
 		t.Fatalf("failed to parse request body: %v", err)
 	}
 
 	// Verify nested structure is preserved
-	user, ok := body[0]["user"].(map[string]interface{})
+	user, ok := body[0]["user"].(map[string]any)
 	if !ok {
 		t.Fatal("expected user to be a map")
 	}
@@ -510,7 +510,7 @@ func TestHTTPRequest_Send_NestedObjects(t *testing.T) {
 		t.Errorf("expected user.name=John, got %v", user["name"])
 	}
 
-	address, ok := user["address"].(map[string]interface{})
+	address, ok := user["address"].(map[string]any)
 	if !ok {
 		t.Fatal("expected address to be a map")
 	}
@@ -520,7 +520,7 @@ func TestHTTPRequest_Send_NestedObjects(t *testing.T) {
 }
 
 func TestHTTPRequest_Close(t *testing.T) {
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": "https://api.example.com/data",
 		"method":   "POST",
 	})
@@ -537,7 +537,7 @@ func TestHTTPRequest_Close(t *testing.T) {
 }
 
 func TestHTTPRequest_ImplementsModule(t *testing.T) {
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": "https://api.example.com/data",
 		"method":   "POST",
 	})
@@ -555,7 +555,7 @@ func TestHTTPRequest_Send_ContentTypeJSON(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -565,7 +565,7 @@ func TestHTTPRequest_Send_ContentTypeJSON(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -578,7 +578,7 @@ func TestHTTPRequest_Send_ContentTypeJSON(t *testing.T) {
 }
 
 func TestNewHTTPRequestFromConfig_CustomTimeout(t *testing.T) {
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint":  "https://api.example.com/data",
 		"method":    "POST",
 		"timeoutMs": float64(5000),
@@ -599,8 +599,8 @@ func TestNewHTTPRequestFromConfig_CustomTimeout(t *testing.T) {
 // =============================================================================
 
 // Helper to create ModuleConfig with authentication
-func newModuleConfigWithAuth(configMap map[string]interface{}, authType string, creds json.RawMessage) *connector.ModuleConfig {
-	configMap["authentication"] = map[string]interface{}{
+func newModuleConfigWithAuth(configMap map[string]any, authType string, creds json.RawMessage) *connector.ModuleConfig {
+	configMap["authentication"] = map[string]any{
 		"type":        authType,
 		"credentials": creds,
 	}
@@ -619,7 +619,7 @@ func TestHTTPRequest_Send_APIKeyAuth_Header(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": ts.URL + "/api/data",
 			"method":   "POST",
 		},
@@ -636,7 +636,7 @@ func TestHTTPRequest_Send_APIKeyAuth_Header(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -658,7 +658,7 @@ func TestHTTPRequest_Send_APIKeyAuth_Query(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": ts.URL + "/api/data",
 			"method":   "POST",
 		},
@@ -675,7 +675,7 @@ func TestHTTPRequest_Send_APIKeyAuth_Query(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -697,7 +697,7 @@ func TestHTTPRequest_Send_BearerAuth(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": ts.URL + "/api/data",
 			"method":   "POST",
 		},
@@ -712,7 +712,7 @@ func TestHTTPRequest_Send_BearerAuth(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -735,7 +735,7 @@ func TestHTTPRequest_Send_BasicAuth(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": ts.URL + "/api/data",
 			"method":   "POST",
 		},
@@ -751,7 +751,7 @@ func TestHTTPRequest_Send_BasicAuth(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -789,7 +789,7 @@ func TestHTTPRequest_Send_OAuth2Auth(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": ts.URL + "/api/data",
 			"method":   "POST",
 		},
@@ -806,7 +806,7 @@ func TestHTTPRequest_Send_OAuth2Auth(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -838,7 +838,7 @@ func TestHTTPRequest_Send_OAuth2Auth_TokenCaching(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": ts.URL + "/api/data",
 			"method":   "POST",
 		},
@@ -857,7 +857,7 @@ func TestHTTPRequest_Send_OAuth2Auth_TokenCaching(t *testing.T) {
 
 	// Send multiple requests
 	for i := 0; i < 3; i++ {
-		records := []map[string]interface{}{{"test": "data"}}
+		records := []map[string]any{{"test": "data"}}
 		_, err = module.Send(context.Background(), records)
 		if err != nil {
 			t.Fatalf("request %d: expected no error, got %v", i, err)
@@ -875,7 +875,7 @@ func TestHTTPRequest_Send_APIKeyAuth_MissingKey(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": ts.URL + "/api/data",
 			"method":   "POST",
 		},
@@ -898,7 +898,7 @@ func TestHTTPRequest_Send_BearerAuth_MissingToken(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": ts.URL + "/api/data",
 			"method":   "POST",
 		},
@@ -920,7 +920,7 @@ func TestHTTPRequest_Send_BasicAuth_MissingCredentials(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": ts.URL + "/api/data",
 			"method":   "POST",
 		},
@@ -943,7 +943,7 @@ func TestHTTPRequest_Send_OAuth2Auth_MissingCredentials(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": ts.URL + "/api/data",
 			"method":   "POST",
 		},
@@ -967,7 +967,7 @@ func TestHTTPRequest_Send_NoAuth(t *testing.T) {
 	defer ts.Close()
 
 	// No authentication configured
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -977,7 +977,7 @@ func TestHTTPRequest_Send_NoAuth(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error without auth, got %v", err)
@@ -995,7 +995,7 @@ func TestHTTPRequest_Send_UnknownAuthType(t *testing.T) {
 	defer ts.Close()
 
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": ts.URL + "/api/data",
 			"method":   "POST",
 		},
@@ -1020,13 +1020,13 @@ func TestHTTPRequest_Send_PathParameterSubstitution(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint":    ts.URL + "/api/users/{userId}/orders/{orderId}",
 		"method":      "POST",
 		"requestMode": "single",
-		"keys": []interface{}{
-			map[string]interface{}{"field": "user.id", "paramType": "path", "paramName": "userId"},
-			map[string]interface{}{"field": "order_id", "paramType": "path", "paramName": "orderId"},
+		"keys": []any{
+			map[string]any{"field": "user.id", "paramType": "path", "paramName": "userId"},
+			map[string]any{"field": "order_id", "paramType": "path", "paramName": "orderId"},
 		},
 	})
 
@@ -1035,9 +1035,9 @@ func TestHTTPRequest_Send_PathParameterSubstitution(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{
-			"user":     map[string]interface{}{"id": "user123"},
+			"user":     map[string]any{"id": "user123"},
 			"order_id": "order456",
 			"amount":   99.99,
 		},
@@ -1064,12 +1064,12 @@ func TestHTTPRequest_Send_PathParameterWithNilMap(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint":    ts.URL + "/api/users/{userId}",
 		"method":      "POST",
 		"requestMode": "single",
-		"keys": []interface{}{
-			map[string]interface{}{"field": "user.id", "paramType": "path", "paramName": "userId"},
+		"keys": []any{
+			map[string]any{"field": "user.id", "paramType": "path", "paramName": "userId"},
 		},
 	})
 
@@ -1079,7 +1079,7 @@ func TestHTTPRequest_Send_PathParameterWithNilMap(t *testing.T) {
 	}
 
 	// Record with nil map in path - should not panic
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{
 			"user": nil, // nil map should be handled gracefully
 			"name": "test",
@@ -1107,10 +1107,10 @@ func TestHTTPRequest_Send_QueryParameters(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"queryParams": map[string]interface{}{
+		"queryParams": map[string]any{
 			"status": "active",
 			"limit":  "100",
 		},
@@ -1121,7 +1121,7 @@ func TestHTTPRequest_Send_QueryParameters(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -1145,13 +1145,13 @@ func TestHTTPRequest_Send_QueryParametersFromRecordData(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint":    ts.URL + "/api/data",
 		"method":      "POST",
 		"requestMode": "single",
-		"keys": []interface{}{
-			map[string]interface{}{"field": "status", "paramType": "query", "paramName": "filter_status"},
-			map[string]interface{}{"field": "type", "paramType": "query", "paramName": "user_type"},
+		"keys": []any{
+			map[string]any{"field": "status", "paramType": "query", "paramName": "filter_status"},
+			map[string]any{"field": "type", "paramType": "query", "paramName": "user_type"},
 		},
 	})
 
@@ -1160,7 +1160,7 @@ func TestHTTPRequest_Send_QueryParametersFromRecordData(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"status": "pending", "type": "admin", "name": "John"},
 	}
 
@@ -1187,13 +1187,13 @@ func TestHTTPRequest_Send_HeadersFromRecordData(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint":    ts.URL + "/api/data",
 		"method":      "POST",
 		"requestMode": "single",
-		"keys": []interface{}{
-			map[string]interface{}{"field": "correlation_id", "paramType": "header", "paramName": "X-Correlation-ID"},
-			map[string]interface{}{"field": "source", "paramType": "header", "paramName": "X-Request-Source"},
+		"keys": []any{
+			map[string]any{"field": "correlation_id", "paramType": "header", "paramName": "X-Correlation-ID"},
+			map[string]any{"field": "source", "paramType": "header", "paramName": "X-Request-Source"},
 		},
 	})
 
@@ -1202,7 +1202,7 @@ func TestHTTPRequest_Send_HeadersFromRecordData(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{
 			"correlation_id": "corr-12345",
 			"source":         "batch-processor",
@@ -1233,7 +1233,7 @@ func TestHTTPRequest_Send_JSONArrayFormat(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 		// Default: requestMode = "batch" (batch mode)
@@ -1244,7 +1244,7 @@ func TestHTTPRequest_Send_JSONArrayFormat(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "name": "first"},
 		{"id": 2, "name": "second"},
 	}
@@ -1260,7 +1260,7 @@ func TestHTTPRequest_Send_JSONArrayFormat(t *testing.T) {
 	}
 
 	// Body should be JSON array
-	var body []map[string]interface{}
+	var body []map[string]any
 	if err := json.Unmarshal(reqs[0].Body, &body); err != nil {
 		t.Fatalf("expected JSON array body, got error: %v", err)
 	}
@@ -1273,7 +1273,7 @@ func TestHTTPRequest_Send_JSONObjectFormat(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint":    ts.URL + "/api/data",
 		"method":      "POST",
 		"requestMode": "single", // Single record mode
@@ -1284,7 +1284,7 @@ func TestHTTPRequest_Send_JSONObjectFormat(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "name": "test"},
 	}
 
@@ -1299,7 +1299,7 @@ func TestHTTPRequest_Send_JSONObjectFormat(t *testing.T) {
 	}
 
 	// Body should be JSON object (not array)
-	var body map[string]interface{}
+	var body map[string]any
 	if err := json.Unmarshal(reqs[0].Body, &body); err != nil {
 		t.Fatalf("expected JSON object body, got error: %v", err)
 	}
@@ -1312,7 +1312,7 @@ func TestHTTPRequest_Send_ComplexNestedData(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -1323,24 +1323,24 @@ func TestHTTPRequest_Send_ComplexNestedData(t *testing.T) {
 	}
 
 	// Complex nested structure
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{
-			"user": map[string]interface{}{
-				"profile": map[string]interface{}{
+			"user": map[string]any{
+				"profile": map[string]any{
 					"name": "John Doe",
-					"settings": map[string]interface{}{
+					"settings": map[string]any{
 						"theme":         "dark",
 						"notifications": true,
 					},
 				},
-				"addresses": []interface{}{
-					map[string]interface{}{"type": "home", "city": "Paris"},
-					map[string]interface{}{"type": "work", "city": "Lyon"},
+				"addresses": []any{
+					map[string]any{"type": "home", "city": "Paris"},
+					map[string]any{"type": "work", "city": "Lyon"},
 				},
 			},
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"created": "2026-01-20",
-				"tags":    []interface{}{"premium", "active"},
+				"tags":    []any{"premium", "active"},
 			},
 		},
 	}
@@ -1354,17 +1354,17 @@ func TestHTTPRequest_Send_ComplexNestedData(t *testing.T) {
 	}
 
 	reqs := ts.getRequests()
-	var body []map[string]interface{}
+	var body []map[string]any
 	if err := json.Unmarshal(reqs[0].Body, &body); err != nil {
 		t.Fatalf("failed to parse body: %v", err)
 	}
 
 	// Verify nested structure is preserved
-	user, ok := body[0]["user"].(map[string]interface{})
+	user, ok := body[0]["user"].(map[string]any)
 	if !ok {
 		t.Fatal("expected user to be a map")
 	}
-	profile, ok := user["profile"].(map[string]interface{})
+	profile, ok := user["profile"].(map[string]any)
 	if !ok {
 		t.Fatal("expected profile to be a map")
 	}
@@ -1372,7 +1372,7 @@ func TestHTTPRequest_Send_ComplexNestedData(t *testing.T) {
 		t.Errorf("expected nested name=John Doe, got %v", profile["name"])
 	}
 
-	addresses, ok := user["addresses"].([]interface{})
+	addresses, ok := user["addresses"].([]any)
 	if !ok {
 		t.Fatal("expected addresses to be an array")
 	}
@@ -1385,7 +1385,7 @@ func TestHTTPRequest_Send_SpecialCharactersInData(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -1396,7 +1396,7 @@ func TestHTTPRequest_Send_SpecialCharactersInData(t *testing.T) {
 	}
 
 	// Data with special characters
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{
 			"name":        "Test <User> & \"Special\"",
 			"description": "Line1\nLine2\tTabbed",
@@ -1414,7 +1414,7 @@ func TestHTTPRequest_Send_SpecialCharactersInData(t *testing.T) {
 	}
 
 	reqs := ts.getRequests()
-	var body []map[string]interface{}
+	var body []map[string]any
 	if err := json.Unmarshal(reqs[0].Body, &body); err != nil {
 		t.Fatalf("failed to parse body with special chars: %v", err)
 	}
@@ -1429,10 +1429,10 @@ func TestHTTPRequest_Send_SpecialCharactersInQueryParams(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"queryParams": map[string]interface{}{
+		"queryParams": map[string]any{
 			"filter": "value with spaces & special=chars",
 			"email":  "user@example.com",
 		},
@@ -1443,7 +1443,7 @@ func TestHTTPRequest_Send_SpecialCharactersInQueryParams(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -1472,13 +1472,13 @@ func TestHTTPRequest_Send_SpecialCharactersInPathParams(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint":    ts.URL + "/api/users/{userId}/posts/{postId}",
 		"method":      "POST",
 		"requestMode": "single",
-		"keys": []interface{}{
-			map[string]interface{}{"field": "id", "paramType": "path", "paramName": "userId"},
-			map[string]interface{}{"field": "post.id", "paramType": "path", "paramName": "postId"},
+		"keys": []any{
+			map[string]any{"field": "id", "paramType": "path", "paramName": "userId"},
+			map[string]any{"field": "post.id", "paramType": "path", "paramName": "postId"},
 		},
 	})
 
@@ -1488,10 +1488,10 @@ func TestHTTPRequest_Send_SpecialCharactersInPathParams(t *testing.T) {
 	}
 
 	// Record with special characters in path parameter values
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{
 			"id": "user/123", // Contains slash - should be encoded
-			"post": map[string]interface{}{
+			"post": map[string]any{
 				"id": "post with spaces", // Contains spaces - should be encoded
 			},
 			"name": "test",
@@ -1557,7 +1557,7 @@ func TestHTTPRequest_Send_Success200(t *testing.T) {
 	ts := newTestServerWithStatus(200, `{"success": true}`)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -1567,7 +1567,7 @@ func TestHTTPRequest_Send_Success200(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error for 200, got %v", err)
@@ -1581,7 +1581,7 @@ func TestHTTPRequest_Send_Success201(t *testing.T) {
 	ts := newTestServerWithStatus(201, `{"id": 123, "created": true}`)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -1591,7 +1591,7 @@ func TestHTTPRequest_Send_Success201(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error for 201, got %v", err)
@@ -1605,7 +1605,7 @@ func TestHTTPRequest_Send_Success204(t *testing.T) {
 	ts := newTestServerWithStatus(204, "")
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -1615,7 +1615,7 @@ func TestHTTPRequest_Send_Success204(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error for 204, got %v", err)
@@ -1629,7 +1629,7 @@ func TestHTTPRequest_Send_ClientError400(t *testing.T) {
 	ts := newTestServerWithStatus(400, `{"error": "Bad Request", "details": "Invalid JSON"}`)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -1639,7 +1639,7 @@ func TestHTTPRequest_Send_ClientError400(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 400 status")
@@ -1659,7 +1659,7 @@ func TestHTTPRequest_Send_ClientError401(t *testing.T) {
 	ts := newTestServerWithStatus(401, `{"error": "Unauthorized"}`)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -1669,7 +1669,7 @@ func TestHTTPRequest_Send_ClientError401(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 401 status")
@@ -1688,7 +1688,7 @@ func TestHTTPRequest_Send_ClientError404(t *testing.T) {
 	ts := newTestServerWithStatus(404, `{"error": "Not Found"}`)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -1698,7 +1698,7 @@ func TestHTTPRequest_Send_ClientError404(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 404 status")
@@ -1717,7 +1717,7 @@ func TestHTTPRequest_Send_ClientError422(t *testing.T) {
 	ts := newTestServerWithStatus(422, `{"error": "Unprocessable Entity", "validation": {"field": "required"}}`)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -1727,7 +1727,7 @@ func TestHTTPRequest_Send_ClientError422(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 422 status")
@@ -1750,10 +1750,10 @@ func TestHTTPRequest_Send_ServerError500(t *testing.T) {
 	ts := newTestServerWithStatus(500, `{"error": "Internal Server Error"}`)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"delayMs": float64(1), // Minimal backoff for fast tests
 		},
 	})
@@ -1763,7 +1763,7 @@ func TestHTTPRequest_Send_ServerError500(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 500 status")
@@ -1782,10 +1782,10 @@ func TestHTTPRequest_Send_ServerError503(t *testing.T) {
 	ts := newTestServerWithStatus(503, `{"error": "Service Unavailable"}`)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"delayMs": float64(1), // Minimal backoff for fast tests
 		},
 	})
@@ -1795,7 +1795,7 @@ func TestHTTPRequest_Send_ServerError503(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 503 status")
@@ -1815,11 +1815,11 @@ func TestHTTPRequest_Send_CustomSuccessCodes(t *testing.T) {
 	ts := newTestServerWithStatus(202, `{"status": "accepted", "jobId": "abc123"}`)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"success": map[string]interface{}{
-			"statusCodes": []interface{}{float64(200), float64(201), float64(202), float64(204)},
+		"success": map[string]any{
+			"statusCodes": []any{float64(200), float64(201), float64(202), float64(204)},
 		},
 	})
 
@@ -1828,7 +1828,7 @@ func TestHTTPRequest_Send_CustomSuccessCodes(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error for custom success code 202, got %v", err)
@@ -1843,11 +1843,11 @@ func TestHTTPRequest_Send_CustomSuccessCodes_Reject(t *testing.T) {
 	ts := newTestServerWithStatus(200, `{"success": true}`)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"success": map[string]interface{}{
-			"statusCodes": []interface{}{float64(201)}, // Only 201 is success
+		"success": map[string]any{
+			"statusCodes": []any{float64(201)}, // Only 201 is success
 		},
 	})
 
@@ -1856,7 +1856,7 @@ func TestHTTPRequest_Send_CustomSuccessCodes_Reject(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 200 when only 201 is configured as success")
@@ -1867,7 +1867,7 @@ func TestHTTPRequest_Send_HTTPErrorDetails(t *testing.T) {
 	ts := newTestServerWithStatus(400, `{"error": "validation_failed", "message": "Field 'email' is invalid", "code": "E001"}`)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -1877,7 +1877,7 @@ func TestHTTPRequest_Send_HTTPErrorDetails(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 400 status")
@@ -1956,10 +1956,10 @@ func TestHTTPRequest_Send_RetryOn5xx(t *testing.T) {
 	ts := newTestServerWithRetry(2)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":       float64(3),
 			"delayMs":           float64(10), // Small for tests
 			"backoffMultiplier": float64(1.0),
@@ -1971,7 +1971,7 @@ func TestHTTPRequest_Send_RetryOn5xx(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error after retries, got %v", err)
@@ -1991,10 +1991,10 @@ func TestHTTPRequest_Send_RetryExhausted(t *testing.T) {
 	ts := newTestServerWithStatus(503, `{"error": "service unavailable"}`)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":       float64(2),
 			"delayMs":           float64(10),
 			"backoffMultiplier": float64(1.0),
@@ -2006,7 +2006,7 @@ func TestHTTPRequest_Send_RetryExhausted(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error after exhausting retries")
@@ -2030,10 +2030,10 @@ func TestHTTPRequest_Send_NoRetryOn4xx(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":       float64(3),
 			"delayMs":           float64(10),
 			"backoffMultiplier": float64(1.0),
@@ -2045,7 +2045,7 @@ func TestHTTPRequest_Send_NoRetryOn4xx(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 400 status")
@@ -2062,7 +2062,7 @@ func TestHTTPRequest_Send_OnErrorFail(t *testing.T) {
 	ts := newTestServerWithStatus(400, `{"error": "bad request"}`)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 		"onError":  "fail",
@@ -2073,7 +2073,7 @@ func TestHTTPRequest_Send_OnErrorFail(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error with onError=fail")
@@ -2095,7 +2095,7 @@ func TestHTTPRequest_Send_OnErrorSkip_SingleRecordMode(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint":    ts.URL + "/api/data",
 		"method":      "POST",
 		"onError":     "skip",
@@ -2107,7 +2107,7 @@ func TestHTTPRequest_Send_OnErrorSkip_SingleRecordMode(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "name": "first"},  // Will fail (4xx - no retry)
 		{"id": 2, "name": "second"}, // Will succeed
 		{"id": 3, "name": "third"},  // Will succeed
@@ -2138,7 +2138,7 @@ func TestHTTPRequest_Send_OnErrorLog_SingleRecordMode(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint":    ts.URL + "/api/data",
 		"method":      "POST",
 		"onError":     "log",
@@ -2150,7 +2150,7 @@ func TestHTTPRequest_Send_OnErrorLog_SingleRecordMode(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "name": "first"},
 		{"id": 2, "name": "second"}, // Will fail (4xx - no retry)
 		{"id": 3, "name": "third"},
@@ -2172,10 +2172,10 @@ func TestHTTPRequest_Send_DefaultRetryConfig(t *testing.T) {
 	defer ts.Close()
 
 	// Use minimal backoff for fast tests while testing retry logic
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts": float64(3),
 			"delayMs":     float64(1), // Minimal backoff for fast tests
 		},
@@ -2186,7 +2186,7 @@ func TestHTTPRequest_Send_DefaultRetryConfig(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error with default retry, got %v", err)
@@ -2235,7 +2235,7 @@ func TestHTTPRequest_Send_ReturnsCorrectCount_AllSuccess(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -2245,7 +2245,7 @@ func TestHTTPRequest_Send_ReturnsCorrectCount_AllSuccess(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}, {"id": 5},
 	}
 
@@ -2273,7 +2273,7 @@ func TestHTTPRequest_Send_ReturnsCorrectCount_PartialFailure(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint":    ts.URL + "/api/data",
 		"method":      "POST",
 		"onError":     "skip", // Skip failed records
@@ -2285,7 +2285,7 @@ func TestHTTPRequest_Send_ReturnsCorrectCount_PartialFailure(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}, {"id": 5},
 	}
 
@@ -2300,7 +2300,7 @@ func TestHTTPRequest_Send_ReturnsCorrectCount_PartialFailure(t *testing.T) {
 }
 
 func TestHTTPRequest_Send_ReturnsZeroOnEmpty(t *testing.T) {
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": "https://api.example.com/data",
 		"method":   "POST",
 	})
@@ -2311,7 +2311,7 @@ func TestHTTPRequest_Send_ReturnsZeroOnEmpty(t *testing.T) {
 	}
 
 	// Empty records
-	sent, err := module.Send(context.Background(), []map[string]interface{}{})
+	sent, err := module.Send(context.Background(), []map[string]any{})
 	if err != nil {
 		t.Fatalf("expected no error for empty, got %v", err)
 	}
@@ -2334,7 +2334,7 @@ func TestHTTPRequest_Send_ErrorContainsResponseDetails(t *testing.T) {
 	ts := newTestServerWithStatus(422, errorBody)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -2344,7 +2344,7 @@ func TestHTTPRequest_Send_ErrorContainsResponseDetails(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"email": "invalid"}}
+	records := []map[string]any{{"email": "invalid"}}
 	sent, err := module.Send(context.Background(), records)
 
 	// Verify count
@@ -2377,7 +2377,7 @@ func TestHTTPRequest_Send_BatchMode_CorrectCount(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 		// Default batch mode
@@ -2388,7 +2388,7 @@ func TestHTTPRequest_Send_BatchMode_CorrectCount(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1}, {"id": 2}, {"id": 3},
 	}
 
@@ -2413,7 +2413,7 @@ func TestHTTPRequest_Send_SingleRecordMode_CorrectCount(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint":    ts.URL + "/api/data",
 		"method":      "POST",
 		"requestMode": "single",
@@ -2424,7 +2424,7 @@ func TestHTTPRequest_Send_SingleRecordMode_CorrectCount(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1}, {"id": 2}, {"id": 3},
 	}
 
@@ -2455,7 +2455,7 @@ func TestHTTPRequest_Deterministic_SameInputSameOutput(t *testing.T) {
 	for run := 0; run < 3; run++ {
 		ts := newTestServer()
 
-		config := newModuleConfig(map[string]interface{}{
+		config := newModuleConfig(map[string]any{
 			"endpoint": ts.URL + "/api/data",
 			"method":   "POST",
 		})
@@ -2465,7 +2465,7 @@ func TestHTTPRequest_Deterministic_SameInputSameOutput(t *testing.T) {
 			t.Fatalf("run %d: failed to create module: %v", run, err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": 1, "name": "Alice", "active": true},
 			{"id": 2, "name": "Bob", "active": false},
 		}
@@ -2497,7 +2497,7 @@ func TestHTTPRequest_Deterministic_JSONSerialization(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -2508,13 +2508,13 @@ func TestHTTPRequest_Deterministic_JSONSerialization(t *testing.T) {
 	}
 
 	// Complex nested structure
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{
-			"user": map[string]interface{}{
+			"user": map[string]any{
 				"name":    "Alice",
-				"profile": map[string]interface{}{"age": 30, "city": "Paris"},
+				"profile": map[string]any{"age": 30, "city": "Paris"},
 			},
-			"tags":   []interface{}{"admin", "active"},
+			"tags":   []any{"admin", "active"},
 			"active": true,
 		},
 	}
@@ -2549,7 +2549,7 @@ func TestHTTPRequest_Deterministic_AuthHeaders(t *testing.T) {
 		ts := newTestServer()
 
 		config := newModuleConfigWithAuth(
-			map[string]interface{}{
+			map[string]any{
 				"endpoint": ts.URL + "/api/data",
 				"method":   "POST",
 			},
@@ -2566,7 +2566,7 @@ func TestHTTPRequest_Deterministic_AuthHeaders(t *testing.T) {
 			t.Fatalf("run %d: failed to create module: %v", run, err)
 		}
 
-		records := []map[string]interface{}{{"test": "data"}}
+		records := []map[string]any{{"test": "data"}}
 		_, err = module.Send(context.Background(), records)
 		if err != nil {
 			t.Fatalf("run %d: Send failed: %v", run, err)
@@ -2591,12 +2591,12 @@ func TestHTTPRequest_Deterministic_PathParams(t *testing.T) {
 	for run := 0; run < 3; run++ {
 		ts := newTestServer()
 
-		config := newModuleConfig(map[string]interface{}{
+		config := newModuleConfig(map[string]any{
 			"endpoint":    ts.URL + "/api/users/{userId}",
 			"method":      "POST",
 			"requestMode": "single",
-			"keys": []interface{}{
-				map[string]interface{}{"field": "id", "paramType": "path", "paramName": "userId"},
+			"keys": []any{
+				map[string]any{"field": "id", "paramType": "path", "paramName": "userId"},
 			},
 		})
 
@@ -2605,7 +2605,7 @@ func TestHTTPRequest_Deterministic_PathParams(t *testing.T) {
 			t.Fatalf("run %d: failed to create module: %v", run, err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "user-123", "name": "Alice"},
 		}
 
@@ -2635,7 +2635,7 @@ func TestHTTPRequest_Deterministic_ErrorHandling(t *testing.T) {
 	for run := 0; run < 3; run++ {
 		ts := newTestServerWithStatus(400, `{"error": "bad request"}`)
 
-		config := newModuleConfig(map[string]interface{}{
+		config := newModuleConfig(map[string]any{
 			"endpoint": ts.URL + "/api/data",
 			"method":   "POST",
 		})
@@ -2645,7 +2645,7 @@ func TestHTTPRequest_Deterministic_ErrorHandling(t *testing.T) {
 			t.Fatalf("run %d: failed to create module: %v", run, err)
 		}
 
-		records := []map[string]interface{}{{"test": "data"}}
+		records := []map[string]any{{"test": "data"}}
 		_, err = module.Send(context.Background(), records)
 		if err == nil {
 			t.Fatalf("run %d: expected error", run)
@@ -2669,7 +2669,7 @@ func TestHTTPRequest_NoRandomBehavior(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -2680,7 +2680,7 @@ func TestHTTPRequest_NoRandomBehavior(t *testing.T) {
 	}
 
 	// Input with no random values
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "value": "test"},
 	}
 
@@ -2690,7 +2690,7 @@ func TestHTTPRequest_NoRandomBehavior(t *testing.T) {
 	}
 
 	reqs := ts.getRequests()
-	var body []map[string]interface{}
+	var body []map[string]any
 	if err := json.Unmarshal(reqs[0].Body, &body); err != nil {
 		t.Fatalf("failed to parse body: %v", err)
 	}
@@ -2716,10 +2716,10 @@ func TestHTTPRequest_NoRandomBehavior(t *testing.T) {
 // =============================================================================
 
 func TestHTTPRequest_PreviewRequest_BatchMode(t *testing.T) {
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": "https://api.example.com/data",
 		"method":   "POST",
-		"headers": map[string]interface{}{
+		"headers": map[string]any{
 			"X-Custom-Header": "custom-value",
 		},
 	})
@@ -2729,7 +2729,7 @@ func TestHTTPRequest_PreviewRequest_BatchMode(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "name": "first"},
 		{"id": 2, "name": "second"},
 	}
@@ -2772,7 +2772,7 @@ func TestHTTPRequest_PreviewRequest_BatchMode(t *testing.T) {
 	}
 
 	// Verify body preview is valid JSON array
-	var body []map[string]interface{}
+	var body []map[string]any
 	if err := json.Unmarshal([]byte(preview.BodyPreview), &body); err != nil {
 		t.Fatalf("body preview should be valid JSON: %v", err)
 	}
@@ -2782,7 +2782,7 @@ func TestHTTPRequest_PreviewRequest_BatchMode(t *testing.T) {
 }
 
 func TestHTTPRequest_PreviewRequest_SingleRecordMode(t *testing.T) {
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint":    "https://api.example.com/data",
 		"method":      "POST",
 		"requestMode": "single",
@@ -2793,7 +2793,7 @@ func TestHTTPRequest_PreviewRequest_SingleRecordMode(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "name": "first"},
 		{"id": 2, "name": "second"},
 		{"id": 3, "name": "third"},
@@ -2822,7 +2822,7 @@ func TestHTTPRequest_PreviewRequest_SingleRecordMode(t *testing.T) {
 		}
 
 		// Verify body is a single object (not array)
-		var body map[string]interface{}
+		var body map[string]any
 		if err := json.Unmarshal([]byte(preview.BodyPreview), &body); err != nil {
 			t.Errorf("preview %d: body preview should be valid JSON object: %v", i, err)
 		}
@@ -2835,13 +2835,13 @@ func TestHTTPRequest_PreviewRequest_SingleRecordMode(t *testing.T) {
 }
 
 func TestHTTPRequest_PreviewRequest_PathParameters(t *testing.T) {
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint":    "https://api.example.com/users/{userId}/orders/{orderId}",
 		"method":      "PUT",
 		"requestMode": "single",
-		"keys": []interface{}{
-			map[string]interface{}{"field": "user.id", "paramType": "path", "paramName": "userId"},
-			map[string]interface{}{"field": "order_id", "paramType": "path", "paramName": "orderId"},
+		"keys": []any{
+			map[string]any{"field": "user.id", "paramType": "path", "paramName": "userId"},
+			map[string]any{"field": "order_id", "paramType": "path", "paramName": "orderId"},
 		},
 	})
 
@@ -2850,9 +2850,9 @@ func TestHTTPRequest_PreviewRequest_PathParameters(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{
-			"user":     map[string]interface{}{"id": "user123"},
+			"user":     map[string]any{"id": "user123"},
 			"order_id": "order456",
 			"amount":   99.99,
 		},
@@ -2875,10 +2875,10 @@ func TestHTTPRequest_PreviewRequest_PathParameters(t *testing.T) {
 }
 
 func TestHTTPRequest_PreviewRequest_QueryParameters(t *testing.T) {
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": "https://api.example.com/data",
 		"method":   "POST",
-		"queryParams": map[string]interface{}{
+		"queryParams": map[string]any{
 			"status": "active",
 			"limit":  "100",
 		},
@@ -2889,7 +2889,7 @@ func TestHTTPRequest_PreviewRequest_QueryParameters(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 
 	previews, err := module.PreviewRequest(records, PreviewOptions{})
 	if err != nil {
@@ -2911,13 +2911,13 @@ func TestHTTPRequest_PreviewRequest_QueryParameters(t *testing.T) {
 }
 
 func TestHTTPRequest_PreviewRequest_QueryParametersFromRecord(t *testing.T) {
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint":    "https://api.example.com/data",
 		"method":      "POST",
 		"requestMode": "single",
-		"keys": []interface{}{
-			map[string]interface{}{"field": "status", "paramType": "query", "paramName": "filter_status"},
-			map[string]interface{}{"field": "type", "paramType": "query", "paramName": "user_type"},
+		"keys": []any{
+			map[string]any{"field": "status", "paramType": "query", "paramName": "filter_status"},
+			map[string]any{"field": "type", "paramType": "query", "paramName": "user_type"},
 		},
 	})
 
@@ -2926,7 +2926,7 @@ func TestHTTPRequest_PreviewRequest_QueryParametersFromRecord(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"status": "pending", "type": "admin", "name": "John"},
 	}
 
@@ -2951,7 +2951,7 @@ func TestHTTPRequest_PreviewRequest_QueryParametersFromRecord(t *testing.T) {
 
 func TestHTTPRequest_PreviewRequest_AuthHeadersMasked_APIKey(t *testing.T) {
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": "https://api.example.com/data",
 			"method":   "POST",
 		},
@@ -2968,7 +2968,7 @@ func TestHTTPRequest_PreviewRequest_AuthHeadersMasked_APIKey(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 
 	previews, err := module.PreviewRequest(records, PreviewOptions{})
 	if err != nil {
@@ -3011,7 +3011,7 @@ func findHeaderCaseInsensitive(headers map[string]string, key string) string {
 
 func TestHTTPRequest_PreviewRequest_AuthHeadersMasked_Bearer(t *testing.T) {
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": "https://api.example.com/data",
 			"method":   "POST",
 		},
@@ -3026,7 +3026,7 @@ func TestHTTPRequest_PreviewRequest_AuthHeadersMasked_Bearer(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 
 	previews, err := module.PreviewRequest(records, PreviewOptions{})
 	if err != nil {
@@ -3053,7 +3053,7 @@ func TestHTTPRequest_PreviewRequest_AuthHeadersMasked_Bearer(t *testing.T) {
 
 func TestHTTPRequest_PreviewRequest_AuthHeadersMasked_Basic(t *testing.T) {
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": "https://api.example.com/data",
 			"method":   "POST",
 		},
@@ -3069,7 +3069,7 @@ func TestHTTPRequest_PreviewRequest_AuthHeadersMasked_Basic(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 
 	previews, err := module.PreviewRequest(records, PreviewOptions{})
 	if err != nil {
@@ -3098,7 +3098,7 @@ func TestHTTPRequest_PreviewRequest_AuthHeadersMasked_Basic(t *testing.T) {
 func TestHTTPRequest_PreviewRequest_ShowCredentials_Bearer(t *testing.T) {
 	// Test that credentials are shown when ShowCredentials is true
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": "https://api.example.com/data",
 			"method":   "POST",
 		},
@@ -3113,7 +3113,7 @@ func TestHTTPRequest_PreviewRequest_ShowCredentials_Bearer(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 
 	// With ShowCredentials = true
 	previews, err := module.PreviewRequest(records, PreviewOptions{ShowCredentials: true})
@@ -3143,7 +3143,7 @@ func TestHTTPRequest_PreviewRequest_ShowCredentials_Bearer(t *testing.T) {
 func TestHTTPRequest_PreviewRequest_ShowCredentials_APIKey(t *testing.T) {
 	// Test that API key is shown when ShowCredentials is true
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": "https://api.example.com/data",
 			"method":   "POST",
 		},
@@ -3160,7 +3160,7 @@ func TestHTTPRequest_PreviewRequest_ShowCredentials_APIKey(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 
 	// With ShowCredentials = true
 	previews, err := module.PreviewRequest(records, PreviewOptions{ShowCredentials: true})
@@ -3207,7 +3207,7 @@ func TestHTTPRequest_PreviewRequest_ShowCredentials_OAuth2_NoNetworkWhenNoCached
 	defer tokenServer.Close()
 
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": "https://api.example.com/data",
 			"method":   "POST",
 		},
@@ -3224,7 +3224,7 @@ func TestHTTPRequest_PreviewRequest_ShowCredentials_OAuth2_NoNetworkWhenNoCached
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 
 	previews, err := module.PreviewRequest(records, PreviewOptions{ShowCredentials: true})
 	if err != nil {
@@ -3264,7 +3264,7 @@ func TestHTTPRequest_PreviewRequest_ShowCredentials_OAuth2_UsesCachedToken(t *te
 	defer apiServer.Close()
 
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": apiServer.URL + "/api/data",
 			"method":   "POST",
 		},
@@ -3282,7 +3282,7 @@ func TestHTTPRequest_PreviewRequest_ShowCredentials_OAuth2_UsesCachedToken(t *te
 	}
 
 	// Prime the OAuth2 cache with a real Send.
-	if _, sendErr := module.Send(context.Background(), []map[string]interface{}{{"test": "data"}}); sendErr != nil {
+	if _, sendErr := module.Send(context.Background(), []map[string]any{{"test": "data"}}); sendErr != nil {
 		t.Fatalf("priming Send() failed: %v", sendErr)
 	}
 	if tokenRequestCount != 1 {
@@ -3290,7 +3290,7 @@ func TestHTTPRequest_PreviewRequest_ShowCredentials_OAuth2_UsesCachedToken(t *te
 	}
 
 	// Preview must now use the cached token without re-fetching.
-	previews, err := module.PreviewRequest([]map[string]interface{}{{"test": "data"}}, PreviewOptions{ShowCredentials: true})
+	previews, err := module.PreviewRequest([]map[string]any{{"test": "data"}}, PreviewOptions{ShowCredentials: true})
 	if err != nil {
 		t.Fatalf("preview failed: %v", err)
 	}
@@ -3306,7 +3306,7 @@ func TestHTTPRequest_PreviewRequest_ShowCredentials_OAuth2_UsesCachedToken(t *te
 }
 
 func TestHTTPRequest_PreviewRequest_EmptyRecords(t *testing.T) {
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": "https://api.example.com/data",
 		"method":   "POST",
 	})
@@ -3317,7 +3317,7 @@ func TestHTTPRequest_PreviewRequest_EmptyRecords(t *testing.T) {
 	}
 
 	// Empty records
-	previews, err := module.PreviewRequest([]map[string]interface{}{}, PreviewOptions{})
+	previews, err := module.PreviewRequest([]map[string]any{}, PreviewOptions{})
 	if err != nil {
 		t.Fatalf("expected no error for empty records, got %v", err)
 	}
@@ -3336,7 +3336,7 @@ func TestHTTPRequest_PreviewRequest_EmptyRecords(t *testing.T) {
 }
 
 func TestHTTPRequest_PreviewRequest_BodyPreviewFormatted(t *testing.T) {
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": "https://api.example.com/data",
 		"method":   "POST",
 	})
@@ -3346,9 +3346,9 @@ func TestHTTPRequest_PreviewRequest_BodyPreviewFormatted(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{
-			"user": map[string]interface{}{
+			"user": map[string]any{
 				"name":  "John",
 				"email": "john@example.com",
 			},
@@ -3375,13 +3375,13 @@ func TestHTTPRequest_PreviewRequest_BodyPreviewFormatted(t *testing.T) {
 }
 
 func TestHTTPRequest_PreviewRequest_HeadersFromRecord(t *testing.T) {
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint":    "https://api.example.com/data",
 		"method":      "POST",
 		"requestMode": "single",
-		"keys": []interface{}{
-			map[string]interface{}{"field": "correlation_id", "paramType": "header", "paramName": "X-Correlation-ID"},
-			map[string]interface{}{"field": "source", "paramType": "header", "paramName": "X-Request-Source"},
+		"keys": []any{
+			map[string]any{"field": "correlation_id", "paramType": "header", "paramName": "X-Correlation-ID"},
+			map[string]any{"field": "source", "paramType": "header", "paramName": "X-Request-Source"},
 		},
 	})
 
@@ -3390,7 +3390,7 @@ func TestHTTPRequest_PreviewRequest_HeadersFromRecord(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{
 			"correlation_id": "corr-12345",
 			"source":         "batch-processor",
@@ -3425,7 +3425,7 @@ func TestHTTPRequest_PreviewRequest_NoSideEffects(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
 	})
@@ -3435,7 +3435,7 @@ func TestHTTPRequest_PreviewRequest_NoSideEffects(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 
 	// Call preview
 	_, err = module.PreviewRequest(records, PreviewOptions{})
@@ -3450,7 +3450,7 @@ func TestHTTPRequest_PreviewRequest_NoSideEffects(t *testing.T) {
 }
 
 func TestHTTPRequest_ImplementsPreviewableModule(t *testing.T) {
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": "https://api.example.com/data",
 		"method":   "POST",
 	})
@@ -3518,14 +3518,14 @@ func TestHTTPRequest_CustomRetryableStatusCodes_RetryOn408(t *testing.T) {
 	ts := newTestServerWithStatusSequence([]int{408, 408, 200}, 200)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(1),
 			"backoffMultiplier":    float64(1.0),
-			"retryableStatusCodes": []interface{}{float64(408), float64(503)}, // Custom: 408 is retryable
+			"retryableStatusCodes": []any{float64(408), float64(503)}, // Custom: 408 is retryable
 		},
 	})
 
@@ -3534,7 +3534,7 @@ func TestHTTPRequest_CustomRetryableStatusCodes_RetryOn408(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error after retries, got %v", err)
@@ -3554,14 +3554,14 @@ func TestHTTPRequest_CustomRetryableStatusCodes_NoRetryOn500WhenExcluded(t *test
 	ts := newTestServerWithStatusSequence([]int{500}, 200)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(1),
 			"backoffMultiplier":    float64(1.0),
-			"retryableStatusCodes": []interface{}{float64(429), float64(503)}, // 500 NOT in list
+			"retryableStatusCodes": []any{float64(429), float64(503)}, // 500 NOT in list
 		},
 	})
 
@@ -3570,7 +3570,7 @@ func TestHTTPRequest_CustomRetryableStatusCodes_NoRetryOn500WhenExcluded(t *test
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 500 when not retryable")
@@ -3587,10 +3587,10 @@ func TestHTTPRequest_CustomRetryableStatusCodes_DefaultFallback(t *testing.T) {
 	ts := newTestServerWithStatusSequence([]int{503, 503, 200}, 200)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":       float64(3),
 			"delayMs":           float64(1),
 			"backoffMultiplier": float64(1.0),
@@ -3603,7 +3603,7 @@ func TestHTTPRequest_CustomRetryableStatusCodes_DefaultFallback(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error after retries (503 is default retryable), got %v", err)
@@ -3638,10 +3638,10 @@ func TestHTTPRequest_OAuth2_401InfiniteLoopProtection(t *testing.T) {
 	defer apiServer.Close()
 
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": apiServer.URL + "/api/data",
 			"method":   "POST",
-			"retry": map[string]interface{}{
+			"retry": map[string]any{
 				"maxAttempts": float64(5),
 				"delayMs":     float64(1),
 			},
@@ -3659,7 +3659,7 @@ func TestHTTPRequest_OAuth2_401InfiniteLoopProtection(t *testing.T) {
 		t.Fatalf("NewHTTPRequestFromConfig: %v", err)
 	}
 
-	records := []map[string]interface{}{{"x": 1}}
+	records := []map[string]any{{"x": 1}}
 	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error after exhausting OAuth2 retries")
@@ -3698,10 +3698,10 @@ func TestHTTPRequest_OAuth2_401ThenSuccess(t *testing.T) {
 	defer apiServer.Close()
 
 	config := newModuleConfigWithAuth(
-		map[string]interface{}{
+		map[string]any{
 			"endpoint": apiServer.URL + "/api/data",
 			"method":   "POST",
-			"retry": map[string]interface{}{
+			"retry": map[string]any{
 				"maxAttempts": float64(3),
 				"delayMs":     float64(1),
 			},
@@ -3719,7 +3719,7 @@ func TestHTTPRequest_OAuth2_401ThenSuccess(t *testing.T) {
 		t.Fatalf("NewHTTPRequestFromConfig: %v", err)
 	}
 
-	if _, err := module.Send(context.Background(), []map[string]interface{}{{"x": 1}}); err != nil {
+	if _, err := module.Send(context.Background(), []map[string]any{{"x": 1}}); err != nil {
 		t.Fatalf("Send: unexpected error %v", err)
 	}
 	if got := atomic.LoadInt32(&apiCalls); got != 2 {
@@ -3745,13 +3745,13 @@ func TestHTTPRequest_CustomRetryableStatusCodes_OAuth2_401StillHandled(t *testin
 	}))
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(1),
-			"retryableStatusCodes": []interface{}{float64(503)}, // 401 not in list
+			"retryableStatusCodes": []any{float64(503)}, // 401 not in list
 		},
 	})
 
@@ -3760,7 +3760,7 @@ func TestHTTPRequest_CustomRetryableStatusCodes_OAuth2_401StillHandled(t *testin
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error for 401")
@@ -3847,15 +3847,15 @@ func TestHTTPRequest_RetryAfter_SecondsFormat(t *testing.T) {
 	ts := newTestServerWithRetryAfter([]int{503, 200}, "1")
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(5000), // High default delay
 			"backoffMultiplier":    float64(1.0),
 			"useRetryAfterHeader":  true, // Enable Retry-After support
-			"retryableStatusCodes": []interface{}{float64(503)},
+			"retryableStatusCodes": []any{float64(503)},
 		},
 	})
 
@@ -3864,7 +3864,7 @@ func TestHTTPRequest_RetryAfter_SecondsFormat(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	startTime := time.Now()
 	sent, err := module.Send(context.Background(), records)
 	elapsed := time.Since(startTime)
@@ -3890,16 +3890,16 @@ func TestHTTPRequest_RetryAfter_CappedByMaxDelayMs(t *testing.T) {
 	ts := newTestServerWithRetryAfter([]int{503, 200}, "10")
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(100),
 			"backoffMultiplier":    float64(1.0),
 			"maxDelayMs":           float64(2000), // Cap at 2s
 			"useRetryAfterHeader":  true,
-			"retryableStatusCodes": []interface{}{float64(503)},
+			"retryableStatusCodes": []any{float64(503)},
 		},
 	})
 
@@ -3908,7 +3908,7 @@ func TestHTTPRequest_RetryAfter_CappedByMaxDelayMs(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	startTime := time.Now()
 	sent, err := module.Send(context.Background(), records)
 	elapsed := time.Since(startTime)
@@ -3934,15 +3934,15 @@ func TestHTTPRequest_RetryAfter_InvalidValue_FallbackToBackoff(t *testing.T) {
 	ts := newTestServerWithRetryAfter([]int{503, 200}, "invalid")
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(100),
 			"backoffMultiplier":    float64(1.0),
 			"useRetryAfterHeader":  true,
-			"retryableStatusCodes": []interface{}{float64(503)},
+			"retryableStatusCodes": []any{float64(503)},
 		},
 	})
 
@@ -3951,7 +3951,7 @@ func TestHTTPRequest_RetryAfter_InvalidValue_FallbackToBackoff(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	sent, err := module.Send(context.Background(), records)
 
 	if err != nil {
@@ -3967,15 +3967,15 @@ func TestHTTPRequest_RetryAfter_Disabled_UsesBackoff(t *testing.T) {
 	ts := newTestServerWithRetryAfter([]int{503, 200}, "5")
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(100),
 			"backoffMultiplier":    float64(1.0),
 			"useRetryAfterHeader":  false, // Disabled
-			"retryableStatusCodes": []interface{}{float64(503)},
+			"retryableStatusCodes": []any{float64(503)},
 		},
 	})
 
@@ -3984,7 +3984,7 @@ func TestHTTPRequest_RetryAfter_Disabled_UsesBackoff(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	startTime := time.Now()
 	sent, err := module.Send(context.Background(), records)
 	elapsed := time.Since(startTime)
@@ -4007,15 +4007,15 @@ func TestHTTPRequest_RetryAfter_AbsentHeader_UsesBackoff(t *testing.T) {
 	ts := newTestServerWithRetryAfter([]int{503, 200}, "") // Empty = no header
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(100),
 			"backoffMultiplier":    float64(1.0),
 			"useRetryAfterHeader":  true,
-			"retryableStatusCodes": []interface{}{float64(503)},
+			"retryableStatusCodes": []any{float64(503)},
 		},
 	})
 
@@ -4024,7 +4024,7 @@ func TestHTTPRequest_RetryAfter_AbsentHeader_UsesBackoff(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	sent, err := module.Send(context.Background(), records)
 
 	if err != nil {
@@ -4040,15 +4040,15 @@ func TestHTTPRequest_RetryAfter_ZeroSeconds_ImmediateRetry(t *testing.T) {
 	ts := newTestServerWithRetryAfter([]int{503, 200}, "0")
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(5000), // High default delay
 			"backoffMultiplier":    float64(1.0),
 			"useRetryAfterHeader":  true,
-			"retryableStatusCodes": []interface{}{float64(503)},
+			"retryableStatusCodes": []any{float64(503)},
 		},
 	})
 
@@ -4057,7 +4057,7 @@ func TestHTTPRequest_RetryAfter_ZeroSeconds_ImmediateRetry(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	startTime := time.Now()
 	sent, err := module.Send(context.Background(), records)
 	elapsed := time.Since(startTime)
@@ -4083,15 +4083,15 @@ func TestHTTPRequest_RetryAfter_HTTPDate_RFC1123(t *testing.T) {
 	ts := newTestServerWithRetryAfter([]int{503, 200}, retryAfterDate)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(5000), // High default delay
 			"backoffMultiplier":    float64(1.0),
 			"useRetryAfterHeader":  true,
-			"retryableStatusCodes": []interface{}{float64(503)},
+			"retryableStatusCodes": []any{float64(503)},
 		},
 	})
 
@@ -4100,7 +4100,7 @@ func TestHTTPRequest_RetryAfter_HTTPDate_RFC1123(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	startTime := time.Now()
 	sent, err := module.Send(context.Background(), records)
 	elapsed := time.Since(startTime)
@@ -4129,15 +4129,15 @@ func TestHTTPRequest_RetryAfter_HTTPDate_RFC850(t *testing.T) {
 	ts := newTestServerWithRetryAfter([]int{503, 200}, retryAfterDate)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(5000), // High default delay
 			"backoffMultiplier":    float64(1.0),
 			"useRetryAfterHeader":  true,
-			"retryableStatusCodes": []interface{}{float64(503)},
+			"retryableStatusCodes": []any{float64(503)},
 		},
 	})
 
@@ -4146,7 +4146,7 @@ func TestHTTPRequest_RetryAfter_HTTPDate_RFC850(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	startTime := time.Now()
 	sent, err := module.Send(context.Background(), records)
 	elapsed := time.Since(startTime)
@@ -4175,15 +4175,15 @@ func TestHTTPRequest_RetryAfter_HTTPDate_Past_ImmediateRetry(t *testing.T) {
 	ts := newTestServerWithRetryAfter([]int{503, 200}, retryAfterDate)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(5000), // High default delay
 			"backoffMultiplier":    float64(1.0),
 			"useRetryAfterHeader":  true,
-			"retryableStatusCodes": []interface{}{float64(503)},
+			"retryableStatusCodes": []any{float64(503)},
 		},
 	})
 
@@ -4192,7 +4192,7 @@ func TestHTTPRequest_RetryAfter_HTTPDate_Past_ImmediateRetry(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	startTime := time.Now()
 	sent, err := module.Send(context.Background(), records)
 	elapsed := time.Since(startTime)
@@ -4273,14 +4273,14 @@ func TestHTTPRequest_RetryHintFromBody_ExpressionTrue(t *testing.T) {
 	)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(1),
 			"backoffMultiplier":    float64(1.0),
-			"retryableStatusCodes": []interface{}{float64(500)},
+			"retryableStatusCodes": []any{float64(500)},
 			"retryHintFromBody":    "body.retryable == true", // expr expression
 		},
 	})
@@ -4290,7 +4290,7 @@ func TestHTTPRequest_RetryHintFromBody_ExpressionTrue(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error after retries, got %v", err)
@@ -4313,15 +4313,15 @@ func TestHTTPRequest_RetryHintFromBody_ExpressionFalsePreventsRetry(t *testing.T
 	)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(1),
 			"backoffMultiplier":    float64(1.0),
-			"retryableStatusCodes": []interface{}{float64(500)}, // 500 normally retryable
-			"retryHintFromBody":    "body.retryable == true",    // expr expression returns false
+			"retryableStatusCodes": []any{float64(500)},      // 500 normally retryable
+			"retryHintFromBody":    "body.retryable == true", // expr expression returns false
 		},
 	})
 
@@ -4330,7 +4330,7 @@ func TestHTTPRequest_RetryHintFromBody_ExpressionFalsePreventsRetry(t *testing.T
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err == nil {
 		t.Fatal("expected error (body hint falsy prevents retry)")
@@ -4352,14 +4352,14 @@ func TestHTTPRequest_RetryHintFromBody_NestedExpression(t *testing.T) {
 	)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(1),
 			"backoffMultiplier":    float64(1.0),
-			"retryableStatusCodes": []interface{}{float64(500)},
+			"retryableStatusCodes": []any{float64(500)},
 			"retryHintFromBody":    `body.error.code == "TEMPORARY"`, // expr with nested access
 		},
 	})
@@ -4369,7 +4369,7 @@ func TestHTTPRequest_RetryHintFromBody_NestedExpression(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error after retry, got %v", err)
@@ -4394,14 +4394,14 @@ func TestHTTPRequest_RetryHintFromBody_NonJSONBody_FallbackToStatusCode(t *testi
 	)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(1),
 			"backoffMultiplier":    float64(1.0),
-			"retryableStatusCodes": []interface{}{float64(500)},
+			"retryableStatusCodes": []any{float64(500)},
 			"retryHintFromBody":    "body.retryable == true",
 		},
 	})
@@ -4411,7 +4411,7 @@ func TestHTTPRequest_RetryHintFromBody_NonJSONBody_FallbackToStatusCode(t *testi
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error (fallback to status code), got %v", err)
@@ -4437,14 +4437,14 @@ func TestHTTPRequest_RetryHintFromBody_FieldAbsent_ExpressionsEvaluatesToFalse(t
 	)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(1),
 			"backoffMultiplier":    float64(1.0),
-			"retryableStatusCodes": []interface{}{float64(500)},
+			"retryableStatusCodes": []any{float64(500)},
 			"retryHintFromBody":    "body.retryable == true", // Field doesn't exist, expression is false
 		},
 	})
@@ -4454,7 +4454,7 @@ func TestHTTPRequest_RetryHintFromBody_FieldAbsent_ExpressionsEvaluatesToFalse(t
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	_, err = module.Send(context.Background(), records)
 	// Expression evaluates to false (nil == true is false), so retry is prevented
 	if err == nil {
@@ -4477,14 +4477,14 @@ func TestHTTPRequest_RetryHintFromBody_NotConfigured_UsesStatusCode(t *testing.T
 	)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(1),
 			"backoffMultiplier":    float64(1.0),
-			"retryableStatusCodes": []interface{}{float64(500)},
+			"retryableStatusCodes": []any{float64(500)},
 			// No retryHintFromBody
 		},
 	})
@@ -4494,7 +4494,7 @@ func TestHTTPRequest_RetryHintFromBody_NotConfigured_UsesStatusCode(t *testing.T
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error (status code only), got %v", err)
@@ -4519,14 +4519,14 @@ func TestHTTPRequest_RetryHintFromBody_ComplexExpression(t *testing.T) {
 	)
 	defer ts.Close()
 
-	config := newModuleConfig(map[string]interface{}{
+	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
-		"retry": map[string]interface{}{
+		"retry": map[string]any{
 			"maxAttempts":          float64(3),
 			"delayMs":              float64(1),
 			"backoffMultiplier":    float64(1.0),
-			"retryableStatusCodes": []interface{}{float64(500)},
+			"retryableStatusCodes": []any{float64(500)},
 			"retryHintFromBody":    `body.error.type == "RATE_LIMIT" || body.error.type == "TEMPORARY"`,
 		},
 	})
@@ -4536,7 +4536,7 @@ func TestHTTPRequest_RetryHintFromBody_ComplexExpression(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	sent, err := module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -4561,7 +4561,7 @@ func TestHTTPRequest_MetadataExclusion(t *testing.T) {
 		}))
 		defer ts.Close()
 
-		config := newModuleConfig(map[string]interface{}{
+		config := newModuleConfig(map[string]any{
 			"endpoint": ts.URL + "/api/data",
 			"method":   "POST",
 		})
@@ -4571,10 +4571,10 @@ func TestHTTPRequest_MetadataExclusion(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{
 				"name":      "test",
-				"_metadata": map[string]interface{}{"processed": true, "timestamp": "2024-01-01"},
+				"_metadata": map[string]any{"processed": true, "timestamp": "2024-01-01"},
 			},
 		}
 
@@ -4601,7 +4601,7 @@ func TestHTTPRequest_MetadataExclusion(t *testing.T) {
 		}))
 		defer ts.Close()
 
-		config := newModuleConfig(map[string]interface{}{
+		config := newModuleConfig(map[string]any{
 			"endpoint": ts.URL + "/api/data",
 			"method":   "POST",
 		})
@@ -4611,10 +4611,10 @@ func TestHTTPRequest_MetadataExclusion(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{
 				"name":      "test",
-				"_metadata": map[string]interface{}{"processed": true},
+				"_metadata": map[string]any{"processed": true},
 				"_internal": "should be included",
 				"_custom":   123,
 			},
@@ -4646,7 +4646,7 @@ func TestHTTPRequest_MetadataExclusion(t *testing.T) {
 		}))
 		defer ts.Close()
 
-		config := newModuleConfig(map[string]interface{}{
+		config := newModuleConfig(map[string]any{
 			"endpoint":    ts.URL + "/api/data",
 			"method":      "POST",
 			"requestMode": "single",
@@ -4657,10 +4657,10 @@ func TestHTTPRequest_MetadataExclusion(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{
 				"name":      "test",
-				"_metadata": map[string]interface{}{"processed": true},
+				"_metadata": map[string]any{"processed": true},
 			},
 		}
 
@@ -4676,7 +4676,7 @@ func TestHTTPRequest_MetadataExclusion(t *testing.T) {
 	})
 }
 
-func toJSON(t *testing.T, v interface{}) json.RawMessage {
+func toJSON(t *testing.T, v any) json.RawMessage {
 	t.Helper()
 	b, err := json.Marshal(v)
 	if err != nil {

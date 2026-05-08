@@ -1,6 +1,6 @@
 # Story 19.1: Add trace/correlation ID to execution logs
 
-Status: backlog
+Status: review
 
 ## Story
 
@@ -85,4 +85,13 @@ Plan.md §7.1 et audit §5 P3.5. En production, un log "filter module execution 
 
 ## File List
 
-(à compléter)
+- `internal/logger/trace.go` (new) — `WithTraceID`, `TraceIDFrom`, `EnsureTraceID`, `NewTraceID`, `TraceIDFromHTTPHeader`, `FromContext`.
+- `internal/logger/trace_test.go` (new) — unit tests for trace helpers.
+- `internal/logger/execution.go` — `ExecutionContext.TraceID` field; `buildContextAttrs` emits `trace_id` when set.
+- `internal/runtime/pipeline.go` — `ExecuteWithContext` / `ExecuteWithRecordsContext` mint or reuse trace IDs and thread `traceID` through every internal log site.
+- `internal/runtime/trace_test.go` (new) — verifies single trace ID per execution, distinct IDs across parallel executions, caller-supplied trace IDs are honored.
+- `internal/scheduler/scheduler.go` — added `ContextExecutor` interface; per-tick / per-queued trace ID generation; `doExecutePipeline` propagates `ctx` and prefers `ExecuteWithContext`.
+- `internal/modules/input/webhook.go` — `WebhookHandler` now takes `context.Context`; HTTP handler extracts `X-Request-Id` / W3C `traceparent` (or generates one) and propagates via context, including for queued requests.
+- `internal/modules/input/webhook_trace_test.go` (new) — verifies trace extraction from headers and fallback.
+- `internal/modules/input/webhook_test.go`, `internal/runtime/webhook_integration_test.go` — handler signature updated to `(ctx, data) error`.
+- `go.mod` — `github.com/google/uuid` promoted to direct dependency.

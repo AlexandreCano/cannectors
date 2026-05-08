@@ -4,7 +4,7 @@ package filter
 //
 // To add a new op:
 //  1. Add a case in MappingModule.applyTransformOp (in mapping.go) that calls the new helper.
-//  2. Implement the helper here, returning (interface{}, error).
+//  2. Implement the helper here, returning (any, error).
 //  3. If the op performs type conversion, also add it to typeConversionOps in mapping.go
 //     for proper error code classification.
 //  4. Add a unit test in mapping_test.go.
@@ -19,28 +19,28 @@ import (
 	"time"
 )
 
-func applyTrim(value interface{}) (interface{}, error) {
+func applyTrim(value any) (any, error) {
 	if s, ok := value.(string); ok {
 		return strings.TrimSpace(s), nil
 	}
 	return value, nil
 }
 
-func applyLowercase(value interface{}) (interface{}, error) {
+func applyLowercase(value any) (any, error) {
 	if s, ok := value.(string); ok {
 		return strings.ToLower(s), nil
 	}
 	return value, nil
 }
 
-func applyUppercase(value interface{}) (interface{}, error) {
+func applyUppercase(value any) (any, error) {
 	if s, ok := value.(string); ok {
 		return strings.ToUpper(s), nil
 	}
 	return value, nil
 }
 
-func applyDateFormat(value interface{}, format string) (interface{}, error) {
+func applyDateFormat(value any, format string) (any, error) {
 	if format == "" {
 		format = "2006-01-02T15:04:05" // Default: YYYY-MM-DDTHH:mm:ss
 	}
@@ -105,7 +105,7 @@ func convertDateFormat(format string) string {
 	return result
 }
 
-func applyReplace(value interface{}, compiledPattern *regexp.Regexp, replacement string) (interface{}, error) {
+func applyReplace(value any, compiledPattern *regexp.Regexp, replacement string) (any, error) {
 	if s, ok := value.(string); ok {
 		if compiledPattern == nil {
 			return s, nil
@@ -115,13 +115,13 @@ func applyReplace(value interface{}, compiledPattern *regexp.Regexp, replacement
 	return value, nil
 }
 
-func applySplit(value interface{}, separator string) (interface{}, error) {
+func applySplit(value any, separator string) (any, error) {
 	if s, ok := value.(string); ok {
 		if separator == "" {
 			separator = ","
 		}
 		parts := strings.Split(s, separator)
-		result := make([]interface{}, len(parts))
+		result := make([]any, len(parts))
 		for i, p := range parts {
 			// Note: each split part is trimmed of surrounding whitespace.
 			result[i] = strings.TrimSpace(p)
@@ -131,13 +131,13 @@ func applySplit(value interface{}, separator string) (interface{}, error) {
 	return value, nil
 }
 
-func applyJoin(value interface{}, separator string) (interface{}, error) {
+func applyJoin(value any, separator string) (any, error) {
 	if separator == "" {
 		separator = ","
 	}
 
 	switch v := value.(type) {
-	case []interface{}:
+	case []any:
 		parts := make([]string, len(v))
 		for i, item := range v {
 			parts[i] = fmt.Sprintf("%v", item)
@@ -149,7 +149,7 @@ func applyJoin(value interface{}, separator string) (interface{}, error) {
 	return value, nil
 }
 
-func applyToString(value interface{}) (interface{}, error) {
+func applyToString(value any) (any, error) {
 	switch v := value.(type) {
 	case string:
 		return v, nil
@@ -162,7 +162,7 @@ func applyToString(value interface{}) (interface{}, error) {
 	}
 }
 
-func applyToInt(value interface{}) (interface{}, error) {
+func applyToInt(value any) (any, error) {
 	switch v := value.(type) {
 	case int:
 		return v, nil
@@ -208,7 +208,7 @@ func applyToInt(value interface{}) (interface{}, error) {
 	}
 }
 
-func applyToFloat(value interface{}) (interface{}, error) {
+func applyToFloat(value any) (any, error) {
 	switch v := value.(type) {
 	case float64:
 		return v, nil
@@ -248,7 +248,7 @@ func applyToFloat(value interface{}) (interface{}, error) {
 	}
 }
 
-func applyToBool(value interface{}) (interface{}, error) {
+func applyToBool(value any) (any, error) {
 	switch v := value.(type) {
 	case bool:
 		return v, nil
@@ -279,27 +279,27 @@ func applyToBool(value interface{}) (interface{}, error) {
 	}
 }
 
-func applyToArray(value interface{}) (interface{}, error) {
+func applyToArray(value any) (any, error) {
 	switch v := value.(type) {
-	case []interface{}:
+	case []any:
 		return v, nil
 	case []string:
-		result := make([]interface{}, len(v))
+		result := make([]any, len(v))
 		for i, item := range v {
 			result[i] = item
 		}
 		return result, nil
 	default:
-		return []interface{}{value}, nil
+		return []any{value}, nil
 	}
 }
 
-func applyToObject(value interface{}) (interface{}, error) {
+func applyToObject(value any) (any, error) {
 	switch v := value.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		return v, nil
 	case map[string]string:
-		result := make(map[string]interface{}, len(v))
+		result := make(map[string]any, len(v))
 		for key, item := range v {
 			result[key] = item
 		}

@@ -13,14 +13,14 @@ func TestParseStatePersistenceConfig_Nil(t *testing.T) {
 }
 
 func TestParseStatePersistenceConfig_Empty(t *testing.T) {
-	result := ParseStatePersistenceConfig(map[string]interface{}{})
+	result := ParseStatePersistenceConfig(map[string]any{})
 	if result != nil {
 		t.Errorf("ParseStatePersistenceConfig({}) = %v, want nil", result)
 	}
 }
 
 func TestParseStatePersistenceConfig_NoStatePersistence(t *testing.T) {
-	config := map[string]interface{}{
+	config := map[string]any{
 		"endpoint": "https://api.example.com",
 	}
 	result := ParseStatePersistenceConfig(config)
@@ -30,9 +30,9 @@ func TestParseStatePersistenceConfig_NoStatePersistence(t *testing.T) {
 }
 
 func TestParseStatePersistenceConfig_TimestampOnly(t *testing.T) {
-	config := map[string]interface{}{
-		"statePersistence": map[string]interface{}{
-			"timestamp": map[string]interface{}{
+	config := map[string]any{
+		"statePersistence": map[string]any{
+			"timestamp": map[string]any{
 				"enabled":    true,
 				"queryParam": "since",
 			},
@@ -56,9 +56,9 @@ func TestParseStatePersistenceConfig_TimestampOnly(t *testing.T) {
 }
 
 func TestParseStatePersistenceConfig_IDOnly(t *testing.T) {
-	config := map[string]interface{}{
-		"statePersistence": map[string]interface{}{
-			"id": map[string]interface{}{
+	config := map[string]any{
+		"statePersistence": map[string]any{
+			"id": map[string]any{
 				"enabled":    true,
 				"field":      "data.id",
 				"queryParam": "after_id",
@@ -86,13 +86,13 @@ func TestParseStatePersistenceConfig_IDOnly(t *testing.T) {
 }
 
 func TestParseStatePersistenceConfig_Both(t *testing.T) {
-	config := map[string]interface{}{
-		"statePersistence": map[string]interface{}{
-			"timestamp": map[string]interface{}{
+	config := map[string]any{
+		"statePersistence": map[string]any{
+			"timestamp": map[string]any{
 				"enabled":    true,
 				"queryParam": "modified_since",
 			},
-			"id": map[string]interface{}{
+			"id": map[string]any{
 				"enabled":    true,
 				"field":      "cursor",
 				"queryParam": "cursor",

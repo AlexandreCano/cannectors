@@ -36,7 +36,7 @@ func TestAccessor_GetSet(t *testing.T) {
 	accessor := NewAccessor("")
 
 	t.Run("set and get simple value", func(t *testing.T) {
-		record := make(map[string]interface{})
+		record := make(map[string]any)
 		accessor.Set(record, "processed", true)
 
 		val, found := accessor.Get(record, "processed")
@@ -49,7 +49,7 @@ func TestAccessor_GetSet(t *testing.T) {
 	})
 
 	t.Run("set and get nested value", func(t *testing.T) {
-		record := make(map[string]interface{})
+		record := make(map[string]any)
 		accessor.Set(record, "timing.start", "2024-01-01T00:00:00Z")
 		accessor.Set(record, "timing.end", "2024-01-01T00:01:00Z")
 
@@ -71,7 +71,7 @@ func TestAccessor_GetSet(t *testing.T) {
 	})
 
 	t.Run("get non-existent key", func(t *testing.T) {
-		record := make(map[string]interface{})
+		record := make(map[string]any)
 		_, found := accessor.Get(record, "nonexistent")
 		if found {
 			t.Error("expected not to find 'nonexistent' key")
@@ -95,7 +95,7 @@ func TestAccessor_GetSet(t *testing.T) {
 	})
 
 	t.Run("set with empty key does nothing", func(t *testing.T) {
-		record := make(map[string]interface{})
+		record := make(map[string]any)
 		accessor.Set(record, "", "value")
 		if accessor.HasMetadata(record) {
 			t.Error("expected no metadata after setting empty key")
@@ -107,7 +107,7 @@ func TestAccessor_Delete(t *testing.T) {
 	accessor := NewAccessor("")
 
 	t.Run("delete existing key", func(t *testing.T) {
-		record := make(map[string]interface{})
+		record := make(map[string]any)
 		accessor.Set(record, "toDelete", "value")
 		accessor.Delete(record, "toDelete")
 
@@ -118,7 +118,7 @@ func TestAccessor_Delete(t *testing.T) {
 	})
 
 	t.Run("delete nested key", func(t *testing.T) {
-		record := make(map[string]interface{})
+		record := make(map[string]any)
 		accessor.Set(record, "parent.child", "value")
 		accessor.Delete(record, "parent.child")
 
@@ -134,7 +134,7 @@ func TestAccessor_Delete(t *testing.T) {
 	})
 
 	t.Run("delete non-existent key does not panic", func(t *testing.T) {
-		record := make(map[string]interface{})
+		record := make(map[string]any)
 		defer func() {
 			if r := recover(); r != nil {
 				t.Errorf("Delete panicked: %v", r)
@@ -148,7 +148,7 @@ func TestAccessor_GetAllSetAll(t *testing.T) {
 	accessor := NewAccessor("")
 
 	t.Run("get all metadata", func(t *testing.T) {
-		record := make(map[string]interface{})
+		record := make(map[string]any)
 		accessor.Set(record, "key1", "value1")
 		accessor.Set(record, "key2", "value2")
 
@@ -162,7 +162,7 @@ func TestAccessor_GetAllSetAll(t *testing.T) {
 	})
 
 	t.Run("get all from empty record", func(t *testing.T) {
-		record := make(map[string]interface{})
+		record := make(map[string]any)
 		all := accessor.GetAll(record)
 		if all != nil {
 			t.Errorf("GetAll() = %v, want nil", all)
@@ -170,8 +170,8 @@ func TestAccessor_GetAllSetAll(t *testing.T) {
 	})
 
 	t.Run("set all metadata", func(t *testing.T) {
-		record := make(map[string]interface{})
-		metadata := map[string]interface{}{
+		record := make(map[string]any)
+		metadata := map[string]any{
 			"processed": true,
 			"timestamp": "2024-01-01",
 		}
@@ -184,7 +184,7 @@ func TestAccessor_GetAllSetAll(t *testing.T) {
 	})
 
 	t.Run("set all with nil removes metadata", func(t *testing.T) {
-		record := make(map[string]interface{})
+		record := make(map[string]any)
 		accessor.Set(record, "key", "value")
 		accessor.SetAll(record, nil)
 
@@ -198,9 +198,9 @@ func TestAccessor_Merge(t *testing.T) {
 	accessor := NewAccessor("")
 
 	t.Run("merge into existing metadata", func(t *testing.T) {
-		record := make(map[string]interface{})
+		record := make(map[string]any)
 		accessor.Set(record, "existing", "value")
-		accessor.Merge(record, map[string]interface{}{
+		accessor.Merge(record, map[string]any{
 			"new":      "value",
 			"existing": "overwritten",
 		})
@@ -217,8 +217,8 @@ func TestAccessor_Merge(t *testing.T) {
 	})
 
 	t.Run("merge into empty record", func(t *testing.T) {
-		record := make(map[string]interface{})
-		accessor.Merge(record, map[string]interface{}{"key": "value"})
+		record := make(map[string]any)
+		accessor.Merge(record, map[string]any{"key": "value"})
 
 		val, found := accessor.Get(record, "key")
 		if !found || val != "value" {
@@ -231,11 +231,11 @@ func TestAccessor_Copy(t *testing.T) {
 	accessor := NewAccessor("")
 
 	t.Run("copy metadata between records", func(t *testing.T) {
-		src := make(map[string]interface{})
+		src := make(map[string]any)
 		accessor.Set(src, "key", "value")
 		accessor.Set(src, "nested.key", "nestedValue")
 
-		dst := make(map[string]interface{})
+		dst := make(map[string]any)
 		accessor.Copy(src, dst)
 
 		val, found := accessor.Get(dst, "key")
@@ -250,10 +250,10 @@ func TestAccessor_Copy(t *testing.T) {
 	})
 
 	t.Run("copy is deep copy", func(t *testing.T) {
-		src := make(map[string]interface{})
+		src := make(map[string]any)
 		accessor.Set(src, "nested.value", "original")
 
-		dst := make(map[string]interface{})
+		dst := make(map[string]any)
 		accessor.Copy(src, dst)
 
 		accessor.Set(src, "nested.value", "modified")
@@ -265,7 +265,7 @@ func TestAccessor_Copy(t *testing.T) {
 	})
 
 	t.Run("copy from nil source does nothing", func(t *testing.T) {
-		dst := make(map[string]interface{})
+		dst := make(map[string]any)
 		accessor.Copy(nil, dst)
 		if accessor.HasMetadata(dst) {
 			t.Error("expected no metadata after copying from nil")
@@ -277,7 +277,7 @@ func TestAccessor_Strip(t *testing.T) {
 	accessor := NewAccessor("")
 
 	t.Run("strip metadata from record", func(t *testing.T) {
-		record := map[string]interface{}{
+		record := map[string]any{
 			"data": "value",
 		}
 		accessor.Set(record, "key", "metaValue")
@@ -296,7 +296,7 @@ func TestAccessor_Strip(t *testing.T) {
 	})
 
 	t.Run("strip from record without metadata", func(t *testing.T) {
-		record := map[string]interface{}{"data": "value"}
+		record := map[string]any{"data": "value"}
 		metadata := accessor.Strip(record)
 		if metadata != nil {
 			t.Errorf("Strip() = %v, want nil", metadata)
@@ -308,7 +308,7 @@ func TestAccessor_StripCopy(t *testing.T) {
 	accessor := NewAccessor("")
 
 	t.Run("strip copy preserves original", func(t *testing.T) {
-		record := map[string]interface{}{
+		record := map[string]any{
 			"data": "value",
 		}
 		accessor.Set(record, "key", "metaValue")
@@ -333,7 +333,7 @@ func TestAccessor_HasMetadata(t *testing.T) {
 	accessor := NewAccessor("")
 
 	t.Run("has metadata", func(t *testing.T) {
-		record := make(map[string]interface{})
+		record := make(map[string]any)
 		accessor.Set(record, "key", "value")
 		if !accessor.HasMetadata(record) {
 			t.Error("expected HasMetadata() = true")
@@ -341,7 +341,7 @@ func TestAccessor_HasMetadata(t *testing.T) {
 	})
 
 	t.Run("no metadata", func(t *testing.T) {
-		record := make(map[string]interface{})
+		record := make(map[string]any)
 		if accessor.HasMetadata(record) {
 			t.Error("expected HasMetadata() = false")
 		}
@@ -356,33 +356,33 @@ func TestAccessor_HasMetadata(t *testing.T) {
 
 func TestDeepCopyMap(t *testing.T) {
 	t.Run("deep copy nested structures", func(t *testing.T) {
-		src := map[string]interface{}{
+		src := map[string]any{
 			"simple": "value",
-			"nested": map[string]interface{}{
+			"nested": map[string]any{
 				"inner": "innerValue",
 			},
-			"array": []interface{}{
+			"array": []any{
 				"item1",
-				map[string]interface{}{"arrayNested": "value"},
+				map[string]any{"arrayNested": "value"},
 			},
 		}
 
 		dst := deepCopyMap(src)
 
 		src["simple"] = "modified"
-		nested, _ := src["nested"].(map[string]interface{})
+		nested, _ := src["nested"].(map[string]any)
 		nested["inner"] = "modified"
-		arr, _ := src["array"].([]interface{})
+		arr, _ := src["array"].([]any)
 		arr[0] = "modified"
 
 		if dst["simple"] != "value" {
 			t.Error("simple value was not deep copied")
 		}
-		dstNested, _ := dst["nested"].(map[string]interface{})
+		dstNested, _ := dst["nested"].(map[string]any)
 		if dstNested["inner"] != "innerValue" {
 			t.Error("nested value was not deep copied")
 		}
-		dstArr, _ := dst["array"].([]interface{})
+		dstArr, _ := dst["array"].([]any)
 		if dstArr[0] != "item1" {
 			t.Error("array value was not deep copied")
 		}
@@ -398,7 +398,7 @@ func TestDeepCopyMap(t *testing.T) {
 func TestCustomFieldName(t *testing.T) {
 	accessor := NewAccessor("_custom")
 
-	record := make(map[string]interface{})
+	record := make(map[string]any)
 	accessor.Set(record, "key", "value")
 
 	if _, exists := record["_custom"]; !exists {
@@ -417,9 +417,9 @@ func TestCustomFieldName(t *testing.T) {
 
 func TestStripFromRecord(t *testing.T) {
 	t.Run("strips metadata field from copy", func(t *testing.T) {
-		record := map[string]interface{}{
+		record := map[string]any{
 			"data":      "value",
-			"_metadata": map[string]interface{}{"key": "meta"},
+			"_metadata": map[string]any{"key": "meta"},
 		}
 		stripped := StripFromRecord(record, "")
 
@@ -435,7 +435,7 @@ func TestStripFromRecord(t *testing.T) {
 	})
 
 	t.Run("returns original when metadata field is absent", func(t *testing.T) {
-		record := map[string]interface{}{"data": "value"}
+		record := map[string]any{"data": "value"}
 		got := StripFromRecord(record, "")
 		// Identity check: nothing to copy when there's no metadata.
 		if &got == &record {
@@ -447,9 +447,9 @@ func TestStripFromRecord(t *testing.T) {
 	})
 
 	t.Run("custom field name", func(t *testing.T) {
-		record := map[string]interface{}{
+		record := map[string]any{
 			"data":    "value",
-			"_custom": map[string]interface{}{"x": 1},
+			"_custom": map[string]any{"x": 1},
 		}
 		stripped := StripFromRecord(record, "_custom")
 		if _, exists := stripped["_custom"]; exists {
@@ -465,8 +465,8 @@ func TestStripFromRecord(t *testing.T) {
 }
 
 func TestStripFromRecords(t *testing.T) {
-	records := []map[string]interface{}{
-		{"data": "a", "_metadata": map[string]interface{}{"i": 1}},
+	records := []map[string]any{
+		{"data": "a", "_metadata": map[string]any{"i": 1}},
 		{"data": "b"},
 	}
 	stripped := StripFromRecords(records, "")

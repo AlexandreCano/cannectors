@@ -24,7 +24,7 @@ func NewStub(moduleType string, index int) *StubModule {
 }
 
 // Process passes through records unchanged (stub behavior).
-func (m *StubModule) Process(_ context.Context, records []map[string]interface{}) ([]map[string]interface{}, error) {
+func (m *StubModule) Process(_ context.Context, records []map[string]any) ([]map[string]any, error) {
 	logger.Info("Filter module processing data",
 		slog.String("type", m.ModuleType),
 		slog.Int("index", m.Index),

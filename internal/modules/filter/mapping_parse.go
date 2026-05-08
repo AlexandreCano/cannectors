@@ -62,8 +62,8 @@ func parseMappingConfig(m FieldMapping, index int) (MappingConfig, error) {
 }
 
 // ParseFieldMappings parses raw mapping configuration into FieldMapping structs.
-// Accepts []FieldMapping, []map[string]interface{}, or []interface{} decoded from JSON/YAML.
-func ParseFieldMappings(raw interface{}) ([]FieldMapping, error) {
+// Accepts []FieldMapping, []map[string]any, or []any decoded from JSON/YAML.
+func ParseFieldMappings(raw any) ([]FieldMapping, error) {
 	if raw == nil {
 		return []FieldMapping{}, nil
 	}
@@ -71,16 +71,16 @@ func ParseFieldMappings(raw interface{}) ([]FieldMapping, error) {
 	switch v := raw.(type) {
 	case []FieldMapping:
 		return v, nil
-	case []map[string]interface{}:
+	case []map[string]any:
 		return parseFieldMappingList(v)
-	case []interface{}:
-		mappings := make([]map[string]interface{}, 0, len(v))
+	case []any:
+		mappings := make([]map[string]any, 0, len(v))
 		for i, item := range v {
 			switch m := item.(type) {
-			case map[string]interface{}:
+			case map[string]any:
 				mappings = append(mappings, m)
 			case FieldMapping:
-				mappings = append(mappings, map[string]interface{}{
+				mappings = append(mappings, map[string]any{
 					"source":       m.Source,
 					"target":       m.Target,
 					"defaultValue": m.DefaultValue,
@@ -97,7 +97,7 @@ func ParseFieldMappings(raw interface{}) ([]FieldMapping, error) {
 	}
 }
 
-func parseFieldMappingList(raw []map[string]interface{}) ([]FieldMapping, error) {
+func parseFieldMappingList(raw []map[string]any) ([]FieldMapping, error) {
 	mappings := make([]FieldMapping, 0, len(raw))
 	for i, item := range raw {
 		mapping, err := parseFieldMappingMap(item, i)
@@ -109,7 +109,7 @@ func parseFieldMappingList(raw []map[string]interface{}) ([]FieldMapping, error)
 	return mappings, nil
 }
 
-func parseFieldMappingMap(data map[string]interface{}, index int) (FieldMapping, error) {
+func parseFieldMappingMap(data map[string]any, index int) (FieldMapping, error) {
 	mapping := FieldMapping{}
 
 	// Source is a pointer: nil means "not declared" (delete), non-nil is the value
@@ -136,12 +136,12 @@ func parseFieldMappingMap(data map[string]interface{}, index int) (FieldMapping,
 	return mapping, nil
 }
 
-func parseTransformOps(raw interface{}, mappingIndex int) ([]TransformOp, error) {
+func parseTransformOps(raw any, mappingIndex int) ([]TransformOp, error) {
 	if raw == nil {
 		return nil, nil
 	}
 
-	list, ok := raw.([]interface{})
+	list, ok := raw.([]any)
 	if !ok {
 		if typed, okTyped := raw.([]TransformOp); okTyped {
 			return typed, nil
@@ -154,7 +154,7 @@ func parseTransformOps(raw interface{}, mappingIndex int) ([]TransformOp, error)
 		switch v := item.(type) {
 		case string:
 			ops = append(ops, TransformOp{Op: v})
-		case map[string]interface{}:
+		case map[string]any:
 			op, _ := v["op"].(string)
 			if op == "" {
 				return nil, fmt.Errorf("transform op missing at mapping %d index %d", mappingIndex, i)
@@ -174,7 +174,7 @@ func parseTransformOps(raw interface{}, mappingIndex int) ([]TransformOp, error)
 	return ops, nil
 }
 
-func stringValue(value interface{}) string {
+func stringValue(value any) string {
 	if value == nil {
 		return ""
 	}

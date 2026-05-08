@@ -21,7 +21,7 @@ import (
 
 func TestHTTPPolling_Fetch_SuccessfulGET(t *testing.T) {
 	// Setup: Create test server returning JSON array
-	expected := []map[string]interface{}{
+	expected := []map[string]any{
 		{"id": float64(1), "name": "item1"},
 		{"id": float64(2), "name": "item2"},
 	}
@@ -38,7 +38,7 @@ func TestHTTPPolling_Fetch_SuccessfulGET(t *testing.T) {
 	// Create module configuration
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
 		}),
 	}
@@ -65,7 +65,7 @@ func TestHTTPPolling_Fetch_SuccessfulGET(t *testing.T) {
 
 // TestHTTPPolling_Fetch_JSONArrayResponse tests parsing JSON array response.
 func TestHTTPPolling_Fetch_JSONArrayResponse(t *testing.T) {
-	expected := []map[string]interface{}{
+	expected := []map[string]any{
 		{"field": "value1"},
 		{"field": "value2"},
 		{"field": "value3"},
@@ -79,7 +79,7 @@ func TestHTTPPolling_Fetch_JSONArrayResponse(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
 		}),
 	}
@@ -101,12 +101,12 @@ func TestHTTPPolling_Fetch_JSONArrayResponse(t *testing.T) {
 
 // TestHTTPPolling_Fetch_JSONObjectWithArrayField tests parsing JSON object containing array.
 func TestHTTPPolling_Fetch_JSONObjectWithArrayField(t *testing.T) {
-	responseBody := map[string]interface{}{
-		"data": []map[string]interface{}{
+	responseBody := map[string]any{
+		"data": []map[string]any{
 			{"id": float64(1)},
 			{"id": float64(2)},
 		},
-		"meta": map[string]interface{}{
+		"meta": map[string]any{
 			"total": float64(2),
 		},
 	}
@@ -119,7 +119,7 @@ func TestHTTPPolling_Fetch_JSONObjectWithArrayField(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint":  server.URL,
 			"dataField": "data",
 		}),
@@ -144,13 +144,13 @@ func TestHTTPPolling_Fetch_JSONObjectWithArrayField(t *testing.T) {
 func TestHTTPPolling_Fetch_EmptyResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+		_ = json.NewEncoder(w).Encode([]map[string]any{})
 	}))
 	defer server.Close()
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
 		}),
 	}
@@ -178,15 +178,15 @@ func TestHTTPPolling_Fetch_CustomHeaders(t *testing.T) {
 		receivedHeaders["X-Custom-Header"] = r.Header.Get("X-Custom-Header")
 		receivedHeaders["Accept"] = r.Header.Get("Accept")
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+		_ = json.NewEncoder(w).Encode([]map[string]any{})
 	}))
 	defer server.Close()
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
-			"headers": map[string]interface{}{
+			"headers": map[string]any{
 				"X-Custom-Header": "custom-value",
 				"Accept":          "application/json",
 			},
@@ -214,13 +214,13 @@ func TestHTTPPolling_Fetch_ConfigurableTimeout(t *testing.T) {
 		// Delay response longer than timeout
 		time.Sleep(200 * time.Millisecond)
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+		_ = json.NewEncoder(w).Encode([]map[string]any{})
 	}))
 	defer server.Close()
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint":  server.URL,
 			"timeoutMs": float64(100), // 100ms timeout
 		}),
@@ -242,7 +242,7 @@ func TestHTTPPolling_Fetch_ConfigurableTimeout(t *testing.T) {
 func TestHTTPPolling_NewHTTPPollingFromConfig_MissingEndpoint(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw:  mustJSON(map[string]interface{}{}),
+		Raw:  mustJSON(map[string]any{}),
 	}
 
 	_, err := NewHTTPPollingFromConfig(config)
@@ -272,15 +272,15 @@ func TestHTTPPolling_Fetch_APIKeyHeader(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedAPIKey = r.Header.Get("X-API-Key")
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"status": "ok"}})
+		_ = json.NewEncoder(w).Encode([]map[string]any{{"status": "ok"}})
 	}))
 	defer server.Close()
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
-			"authentication": map[string]interface{}{
+			"authentication": map[string]any{
 				"type": "api-key",
 				"credentials": map[string]string{
 					"key":      "my-secret-key",
@@ -313,15 +313,15 @@ func TestHTTPPolling_Fetch_APIKeyQuery(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedAPIKey = r.URL.Query().Get("api_key")
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"status": "ok"}})
+		_ = json.NewEncoder(w).Encode([]map[string]any{{"status": "ok"}})
 	}))
 	defer server.Close()
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
-			"authentication": map[string]interface{}{
+			"authentication": map[string]any{
 				"type": "api-key",
 				"credentials": map[string]string{
 					"key":       "my-secret-key",
@@ -361,7 +361,7 @@ func TestHTTPPolling_Fetch_OAuth2ClientCredentials(t *testing.T) {
 			t.Errorf("token endpoint: expected grant_type 'client_credentials', got '%s'", r.FormValue("grant_type"))
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token": "test-access-token",
 			"token_type":   "Bearer",
 			"expires_in":   3600,
@@ -374,15 +374,15 @@ func TestHTTPPolling_Fetch_OAuth2ClientCredentials(t *testing.T) {
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"data": "value"}})
+		_ = json.NewEncoder(w).Encode([]map[string]any{{"data": "value"}})
 	}))
 	defer apiServer.Close()
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": apiServer.URL,
-			"authentication": map[string]interface{}{
+			"authentication": map[string]any{
 				"type": "oauth2",
 				"credentials": map[string]string{
 					"clientId":     "test-client-id",
@@ -416,15 +416,15 @@ func TestHTTPPolling_Fetch_BearerToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"status": "ok"}})
+		_ = json.NewEncoder(w).Encode([]map[string]any{{"status": "ok"}})
 	}))
 	defer server.Close()
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
-			"authentication": map[string]interface{}{
+			"authentication": map[string]any{
 				"type": "bearer",
 				"credentials": map[string]string{
 					"token": "my-bearer-token",
@@ -457,15 +457,15 @@ func TestHTTPPolling_Fetch_BasicAuth(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedUser, receivedPass, authOK = r.BasicAuth()
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{{"status": "ok"}})
+		_ = json.NewEncoder(w).Encode([]map[string]any{{"status": "ok"}})
 	}))
 	defer server.Close()
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
-			"authentication": map[string]interface{}{
+			"authentication": map[string]any{
 				"type": "basic",
 				"credentials": map[string]string{
 					"username": "testuser",
@@ -501,7 +501,7 @@ func TestHTTPPolling_Fetch_AuthenticationError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"error": "unauthorized",
 		})
 	}))
@@ -509,9 +509,9 @@ func TestHTTPPolling_Fetch_AuthenticationError(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
-			"authentication": map[string]interface{}{
+			"authentication": map[string]any{
 				"type": "api-key",
 				"credentials": map[string]string{
 					"key":      "invalid-key",
@@ -548,23 +548,23 @@ func TestHTTPPolling_Fetch_PageBasedPagination(t *testing.T) {
 
 		switch page {
 		case "", "1":
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"data":        []map[string]interface{}{{"id": float64(1)}, {"id": float64(2)}},
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data":        []map[string]any{{"id": float64(1)}, {"id": float64(2)}},
 				"total_pages": float64(3),
 			})
 		case "2":
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"data":        []map[string]interface{}{{"id": float64(3)}, {"id": float64(4)}},
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data":        []map[string]any{{"id": float64(3)}, {"id": float64(4)}},
 				"total_pages": float64(3),
 			})
 		case "3":
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"data":        []map[string]interface{}{{"id": float64(5)}},
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data":        []map[string]any{{"id": float64(5)}},
 				"total_pages": float64(3),
 			})
 		default:
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"data":        []map[string]interface{}{},
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data":        []map[string]any{},
 				"total_pages": float64(3),
 			})
 		}
@@ -573,10 +573,10 @@ func TestHTTPPolling_Fetch_PageBasedPagination(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint":  server.URL,
 			"dataField": "data",
-			"pagination": map[string]interface{}{
+			"pagination": map[string]any{
 				"type":            "page",
 				"pageParam":       "page",
 				"totalPagesField": "total_pages",
@@ -613,23 +613,23 @@ func TestHTTPPolling_Fetch_OffsetBasedPagination(t *testing.T) {
 
 		switch offset {
 		case "", "0":
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"items": []map[string]interface{}{{"id": float64(1)}, {"id": float64(2)}},
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"items": []map[string]any{{"id": float64(1)}, {"id": float64(2)}},
 				"total": float64(5),
 			})
 		case "2":
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"items": []map[string]interface{}{{"id": float64(3)}, {"id": float64(4)}},
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"items": []map[string]any{{"id": float64(3)}, {"id": float64(4)}},
 				"total": float64(5),
 			})
 		case "4":
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"items": []map[string]interface{}{{"id": float64(5)}},
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"items": []map[string]any{{"id": float64(5)}},
 				"total": float64(5),
 			})
 		default:
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"items": []map[string]interface{}{},
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"items": []map[string]any{},
 				"total": float64(5),
 			})
 		}
@@ -638,10 +638,10 @@ func TestHTTPPolling_Fetch_OffsetBasedPagination(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint":  server.URL,
 			"dataField": "items",
-			"pagination": map[string]interface{}{
+			"pagination": map[string]any{
 				"type":        "offset",
 				"offsetParam": "offset",
 				"limitParam":  "limit",
@@ -677,18 +677,18 @@ func TestHTTPPolling_Fetch_CursorBasedPagination(t *testing.T) {
 
 		switch cursor {
 		case "":
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"results":     []map[string]interface{}{{"id": float64(1)}, {"id": float64(2)}},
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"results":     []map[string]any{{"id": float64(1)}, {"id": float64(2)}},
 				"next_cursor": "cursor_page2",
 			})
 		case "cursor_page2":
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"results":     []map[string]interface{}{{"id": float64(3)}},
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"results":     []map[string]any{{"id": float64(3)}},
 				"next_cursor": "",
 			})
 		default:
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"results":     []map[string]interface{}{},
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"results":     []map[string]any{},
 				"next_cursor": "",
 			})
 		}
@@ -697,10 +697,10 @@ func TestHTTPPolling_Fetch_CursorBasedPagination(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint":  server.URL,
 			"dataField": "results",
-			"pagination": map[string]interface{}{
+			"pagination": map[string]any{
 				"type":            "cursor",
 				"cursorParam":     "cursor",
 				"nextCursorField": "next_cursor",
@@ -735,13 +735,13 @@ func TestHTTPPolling_Fetch_HTTPError400(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "bad request"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "bad request"})
 	}))
 	defer server.Close()
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
 		}),
 	}
@@ -767,7 +767,7 @@ func TestHTTPPolling_Fetch_HTTPError401(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
 		}),
 	}
@@ -793,7 +793,7 @@ func TestHTTPPolling_Fetch_HTTPError403(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
 		}),
 	}
@@ -819,7 +819,7 @@ func TestHTTPPolling_Fetch_HTTPError404(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
 		}),
 	}
@@ -845,7 +845,7 @@ func TestHTTPPolling_Fetch_HTTPError500(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
 		}),
 	}
@@ -866,7 +866,7 @@ func TestHTTPPolling_Fetch_HTTPError500(t *testing.T) {
 func TestHTTPPolling_Fetch_NetworkError(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint":  "http://localhost:99999/nonexistent",
 			"timeoutMs": float64(1000),
 		}),
@@ -894,7 +894,7 @@ func TestHTTPPolling_Fetch_JSONParseError(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
 		}),
 	}
@@ -917,7 +917,7 @@ func TestHTTPPolling_Fetch_JSONParseError(t *testing.T) {
 
 // TestHTTPPolling_Fetch_DeterministicOutput tests same input = same output.
 func TestHTTPPolling_Fetch_DeterministicOutput(t *testing.T) {
-	data := []map[string]interface{}{
+	data := []map[string]any{
 		{"id": float64(1), "name": "a"},
 		{"id": float64(2), "name": "b"},
 		{"id": float64(3), "name": "c"},
@@ -931,13 +931,13 @@ func TestHTTPPolling_Fetch_DeterministicOutput(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
 		}),
 	}
 
 	// Execute multiple times
-	results := make([][]map[string]interface{}, 3)
+	results := make([][]map[string]any, 3)
 	for i := 0; i < 3; i++ {
 		polling, err := NewHTTPPollingFromConfig(config)
 		if err != nil {
@@ -971,13 +971,13 @@ func TestHTTPPolling_Fetch_DeterministicPaginationOrder(t *testing.T) {
 
 		switch page {
 		case "", "1":
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"data":        []map[string]interface{}{{"order": float64(1)}, {"order": float64(2)}},
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data":        []map[string]any{{"order": float64(1)}, {"order": float64(2)}},
 				"total_pages": float64(2),
 			})
 		case "2":
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"data":        []map[string]interface{}{{"order": float64(3)}, {"order": float64(4)}},
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data":        []map[string]any{{"order": float64(3)}, {"order": float64(4)}},
 				"total_pages": float64(2),
 			})
 		}
@@ -986,10 +986,10 @@ func TestHTTPPolling_Fetch_DeterministicPaginationOrder(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint":  server.URL,
 			"dataField": "data",
-			"pagination": map[string]interface{}{
+			"pagination": map[string]any{
 				"type":            "page",
 				"pageParam":       "page",
 				"totalPagesField": "total_pages",
@@ -1026,7 +1026,7 @@ func TestHTTPPolling_Fetch_DeterministicPaginationOrder(t *testing.T) {
 func TestHTTPPolling_ImplementsModule(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": "http://example.com",
 		}),
 	}
@@ -1043,9 +1043,9 @@ func TestHTTPPolling_ImplementsModule(t *testing.T) {
 // TestHTTPPolling_Fetch_LargeDataset tests performance with large datasets.
 func TestHTTPPolling_Fetch_LargeDataset(t *testing.T) {
 	// Generate large dataset (1000 records)
-	largeData := make([]map[string]interface{}, 1000)
+	largeData := make([]map[string]any, 1000)
 	for i := 0; i < 1000; i++ {
-		largeData[i] = map[string]interface{}{
+		largeData[i] = map[string]any{
 			"id":    float64(i),
 			"name":  fmt.Sprintf("item-%d", i),
 			"value": float64(i * 100),
@@ -1060,7 +1060,7 @@ func TestHTTPPolling_Fetch_LargeDataset(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
 		}),
 	}
@@ -1093,7 +1093,7 @@ func TestHTTPPolling_Fetch_LargeDataset(t *testing.T) {
 // TestHTTPPolling_IntegrationWithExecutor tests end-to-end integration with pipeline executor.
 func TestHTTPPolling_IntegrationWithExecutor(t *testing.T) {
 	// Setup: Create test server returning JSON data
-	testData := []map[string]interface{}{
+	testData := []map[string]any{
 		{"id": float64(1), "name": "Alice", "active": true},
 		{"id": float64(2), "name": "Bob", "active": false},
 		{"id": float64(3), "name": "Charlie", "active": true},
@@ -1108,7 +1108,7 @@ func TestHTTPPolling_IntegrationWithExecutor(t *testing.T) {
 	// Create HTTPPolling module from config
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
 		}),
 	}
@@ -1153,8 +1153,8 @@ func TestHTTPPolling_IntegrationWithPaginatedData(t *testing.T) {
 
 		switch page {
 		case "", "1":
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"users": []map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"users": []map[string]any{
 					{"id": float64(1), "email": "user1@example.com"},
 					{"id": float64(2), "email": "user2@example.com"},
 				},
@@ -1162,8 +1162,8 @@ func TestHTTPPolling_IntegrationWithPaginatedData(t *testing.T) {
 				"total_pages": float64(3),
 			})
 		case "2":
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"users": []map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"users": []map[string]any{
 					{"id": float64(3), "email": "user3@example.com"},
 					{"id": float64(4), "email": "user4@example.com"},
 				},
@@ -1171,8 +1171,8 @@ func TestHTTPPolling_IntegrationWithPaginatedData(t *testing.T) {
 				"total_pages": float64(3),
 			})
 		case "3":
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"users": []map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"users": []map[string]any{
 					{"id": float64(5), "email": "user5@example.com"},
 				},
 				"page":        float64(3),
@@ -1180,8 +1180,8 @@ func TestHTTPPolling_IntegrationWithPaginatedData(t *testing.T) {
 			})
 		default:
 			// Handle unexpected pages
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"users":       []map[string]interface{}{},
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"users":       []map[string]any{},
 				"page":        float64(4),
 				"total_pages": float64(3),
 			})
@@ -1191,10 +1191,10 @@ func TestHTTPPolling_IntegrationWithPaginatedData(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint":  server.URL,
 			"dataField": "users",
-			"pagination": map[string]interface{}{
+			"pagination": map[string]any{
 				"type":            "page",
 				"pageParam":       "page",
 				"totalPagesField": "total_pages",
@@ -1236,13 +1236,13 @@ func TestHTTPPolling_IntegrationWithAuthentication(t *testing.T) {
 		auth := r.Header.Get("Authorization")
 		if auth != "Bearer "+expectedToken {
 			w.WriteHeader(http.StatusUnauthorized)
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized"})
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "unauthorized"})
 			return
 		}
 
 		// Return data only if authenticated
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+		_ = json.NewEncoder(w).Encode([]map[string]any{
 			{"secret": "data1"},
 			{"secret": "data2"},
 		})
@@ -1252,9 +1252,9 @@ func TestHTTPPolling_IntegrationWithAuthentication(t *testing.T) {
 	// Test with valid authentication
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
-			"authentication": map[string]interface{}{
+			"authentication": map[string]any{
 				"type": "bearer",
 				"credentials": map[string]string{
 					"token": expectedToken,
@@ -1280,7 +1280,7 @@ func TestHTTPPolling_IntegrationWithAuthentication(t *testing.T) {
 	// Test without authentication (should fail)
 	configNoAuth := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
 		}),
 	}
@@ -1298,7 +1298,7 @@ func TestHTTPPolling_Close_ReleasesConnections(t *testing.T) {
 	// Setup: Create test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+		_ = json.NewEncoder(w).Encode([]map[string]any{
 			{"id": float64(1), "name": "item1"},
 		})
 	}))
@@ -1307,7 +1307,7 @@ func TestHTTPPolling_Close_ReleasesConnections(t *testing.T) {
 	// Create module configuration
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
 		}),
 	}

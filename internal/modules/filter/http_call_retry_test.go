@@ -49,7 +49,7 @@ func TestHTTPCall_RetryTransient(t *testing.T) {
 		t.Fatalf("NewHTTPCallFromConfig: %v", err)
 	}
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": "42"},
 	}
 	out, err := module.Process(context.Background(), records)
@@ -106,7 +106,7 @@ func TestHTTPCall_RetryAfter429(t *testing.T) {
 		t.Fatalf("NewHTTPCallFromConfig: %v", err)
 	}
 
-	records := []map[string]interface{}{{"id": "1"}}
+	records := []map[string]any{{"id": "1"}}
 	start := time.Now()
 	out, err := module.Process(context.Background(), records)
 	elapsed := time.Since(start)
@@ -151,7 +151,7 @@ func TestHTTPCall_NoRetryByDefault(t *testing.T) {
 		t.Fatalf("NewHTTPCallFromConfig: %v", err)
 	}
 
-	records := []map[string]interface{}{{"id": "1"}}
+	records := []map[string]any{{"id": "1"}}
 	if _, err := module.Process(context.Background(), records); err == nil {
 		t.Fatal("expected error (500 from server)")
 	}

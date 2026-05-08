@@ -8,7 +8,7 @@ import (
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
-func mustJSON(v interface{}) json.RawMessage {
+func mustJSON(v any) json.RawMessage {
 	b, err := json.Marshal(v)
 	if err != nil {
 		panic(err)
@@ -24,7 +24,7 @@ func TestPipelineJSONSerialization(t *testing.T) {
 		Version:     "1.0.0",
 		Input: &connector.ModuleConfig{
 			Type: "http-polling",
-			Raw: mustJSON(map[string]interface{}{
+			Raw: mustJSON(map[string]any{
 				"endpoint": "https://api.example.com/data",
 				"schedule": "*/5 * * * *",
 			}),
@@ -32,7 +32,7 @@ func TestPipelineJSONSerialization(t *testing.T) {
 		Filters: []connector.ModuleConfig{
 			{
 				Type: "mapping",
-				Raw: mustJSON(map[string]interface{}{
+				Raw: mustJSON(map[string]any{
 					"mappings": map[string]string{
 						"source": "target",
 					},
@@ -41,7 +41,7 @@ func TestPipelineJSONSerialization(t *testing.T) {
 		},
 		Output: &connector.ModuleConfig{
 			Type: "http-request",
-			Raw: mustJSON(map[string]interface{}{
+			Raw: mustJSON(map[string]any{
 				"endpoint": "https://api.dest.com/import",
 			}),
 		},
@@ -96,9 +96,9 @@ func TestPipelineJSONSerialization(t *testing.T) {
 func TestModuleConfigWithAuthentication(t *testing.T) {
 	module := connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": "https://api.example.com/data",
-			"authentication": map[string]interface{}{
+			"authentication": map[string]any{
 				"type": "bearer",
 				"credentials": map[string]string{
 					"token": "test-token",
@@ -118,11 +118,11 @@ func TestModuleConfigWithAuthentication(t *testing.T) {
 	}
 
 	// Authentication is now inside Raw
-	var raw map[string]interface{}
+	var raw map[string]any
 	if err := json.Unmarshal(decoded.Raw, &raw); err != nil {
 		t.Fatalf("Failed to unmarshal Raw: %v", err)
 	}
-	authRaw, ok := raw["authentication"].(map[string]interface{})
+	authRaw, ok := raw["authentication"].(map[string]any)
 	if !ok {
 		t.Fatal("Expected authentication in Raw")
 	}
@@ -171,7 +171,7 @@ func TestExecutionResultWithError(t *testing.T) {
 			Code:    "CONNECTION_FAILED",
 			Message: "Failed to connect to source API",
 			Module:  "http-polling",
-			Details: map[string]interface{}{
+			Details: map[string]any{
 				"endpoint": "https://api.example.com",
 				"timeout":  30,
 			},

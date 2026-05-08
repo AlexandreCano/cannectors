@@ -174,7 +174,7 @@ func TestHTTPCallModule_Process(t *testing.T) {
 		// Create mock server
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			id := r.URL.Query().Get("id")
-			response := map[string]interface{}{
+			response := map[string]any{
 				"customerId": id,
 				"name":       "Customer " + id,
 				"email":      id + "@example.com",
@@ -204,7 +204,7 @@ func TestHTTPCallModule_Process(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"customerId": "123", "amount": 100},
 			{"customerId": "456", "amount": 200},
 		}
@@ -236,7 +236,7 @@ func TestHTTPCallModule_Process(t *testing.T) {
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&requestCount, 1)
-			response := map[string]interface{}{
+			response := map[string]any{
 				"data": "enriched",
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -263,7 +263,7 @@ func TestHTTPCallModule_Process(t *testing.T) {
 		}
 
 		// Three records with same key
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "same-key"},
 			{"id": "same-key"},
 			{"id": "same-key"},
@@ -298,7 +298,7 @@ func TestHTTPCallModule_Process(t *testing.T) {
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			receivedPath = r.URL.Path
-			response := map[string]interface{}{"status": "ok"}
+			response := map[string]any{"status": "ok"}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -322,7 +322,7 @@ func TestHTTPCallModule_Process(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"customerId": "abc123"},
 		}
 
@@ -341,7 +341,7 @@ func TestHTTPCallModule_Process(t *testing.T) {
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			receivedHeader = r.Header.Get("X-Customer-ID")
-			response := map[string]interface{}{"status": "ok"}
+			response := map[string]any{"status": "ok"}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -365,7 +365,7 @@ func TestHTTPCallModule_Process(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"customerId": "header-value-123"},
 		}
 
@@ -382,7 +382,7 @@ func TestHTTPCallModule_Process(t *testing.T) {
 	t.Run("extracts nested key field", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			id := r.URL.Query().Get("id")
-			response := map[string]interface{}{"enriched": id}
+			response := map[string]any{"enriched": id}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -406,9 +406,9 @@ func TestHTTPCallModule_Process(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{
-				"customer": map[string]interface{}{
+				"customer": map[string]any{
 					"id":   "nested-123",
 					"name": "Test",
 				},
@@ -427,9 +427,9 @@ func TestHTTPCallModule_Process(t *testing.T) {
 
 	t.Run("extracts dataField from response", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			response := map[string]interface{}{
+			response := map[string]any{
 				"status": "success",
-				"data": map[string]interface{}{
+				"data": map[string]any{
 					"name":  "Extracted Data",
 					"value": 42,
 				},
@@ -458,7 +458,7 @@ func TestHTTPCallModule_Process(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "123"},
 		}
 
@@ -478,7 +478,7 @@ func TestHTTPCallModule_Process(t *testing.T) {
 
 	t.Run("merge strategy: replace", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			response := map[string]interface{}{
+			response := map[string]any{
 				"newField": "added",
 				"id":       "overwritten",
 			}
@@ -506,7 +506,7 @@ func TestHTTPCallModule_Process(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "original", "existing": "kept"},
 		}
 
@@ -531,7 +531,7 @@ func TestHTTPCallModule_Process(t *testing.T) {
 
 	t.Run("merge strategy: append", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			response := map[string]interface{}{
+			response := map[string]any{
 				"enrichedData": "value",
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -558,7 +558,7 @@ func TestHTTPCallModule_Process(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "123", "existing": "value"},
 		}
 
@@ -568,7 +568,7 @@ func TestHTTPCallModule_Process(t *testing.T) {
 		}
 
 		// Enrichment data should be under _response key
-		enrichment, ok := result[0]["_response"].(map[string]interface{})
+		enrichment, ok := result[0]["_response"].(map[string]any)
 		if !ok {
 			t.Fatal("expected _response to be a map")
 		}
@@ -633,7 +633,7 @@ func TestHTTPCallModule_Process(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "123"},
 		}
 
@@ -668,7 +668,7 @@ func TestHTTPCallModule_ErrorHandling(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "123"},
 			{"id": "456"},
 		}
@@ -690,7 +690,7 @@ func TestHTTPCallModule_ErrorHandling(t *testing.T) {
 				return
 			}
 			// Subsequent requests succeed
-			response := map[string]interface{}{"status": "ok"}
+			response := map[string]any{"status": "ok"}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -715,7 +715,7 @@ func TestHTTPCallModule_ErrorHandling(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "fail"},
 			{"id": "success"},
 		}
@@ -754,7 +754,7 @@ func TestHTTPCallModule_ErrorHandling(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "123", "original": "data"},
 		}
 
@@ -774,7 +774,7 @@ func TestHTTPCallModule_ErrorHandling(t *testing.T) {
 
 	t.Run("handles missing key field", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			response := map[string]interface{}{"status": "ok"}
+			response := map[string]any{"status": "ok"}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -799,7 +799,7 @@ func TestHTTPCallModule_ErrorHandling(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "123"}, // Missing customerId
 		}
 
@@ -835,7 +835,7 @@ func TestHTTPCallModule_ErrorHandling(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": nil},
 		}
 
@@ -869,7 +869,7 @@ func TestHTTPCallModule_ErrorHandling(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "123"},
 		}
 
@@ -894,7 +894,7 @@ func TestHTTPCallModule_CacheIsolation(t *testing.T) {
 
 		server1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&module1Requests, 1)
-			response := map[string]interface{}{"source": "server1"}
+			response := map[string]any{"source": "server1"}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -904,7 +904,7 @@ func TestHTTPCallModule_CacheIsolation(t *testing.T) {
 
 		server2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&module2Requests, 1)
-			response := map[string]interface{}{"source": "server2"}
+			response := map[string]any{"source": "server2"}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -936,7 +936,7 @@ func TestHTTPCallModule_CacheIsolation(t *testing.T) {
 		module1, _ := NewHTTPCallFromConfig(config1)
 		module2, _ := NewHTTPCallFromConfig(config2)
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "same-key"},
 		}
 
@@ -964,11 +964,11 @@ func TestHTTPCallModule_CacheIsolation(t *testing.T) {
 func TestHTTPCallModule_DeepMerge(t *testing.T) {
 	t.Run("deep merges nested objects", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			response := map[string]interface{}{
-				"profile": map[string]interface{}{
+			response := map[string]any{
+				"profile": map[string]any{
 					"email":   "enriched@example.com",
 					"phone":   "123-456-7890",
-					"address": map[string]interface{}{"city": "New York"},
+					"address": map[string]any{"city": "New York"},
 				},
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -992,10 +992,10 @@ func TestHTTPCallModule_DeepMerge(t *testing.T) {
 
 		module, _ := NewHTTPCallFromConfig(config)
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{
 				"id": "123",
-				"profile": map[string]interface{}{
+				"profile": map[string]any{
 					"name":  "John Doe",
 					"email": "original@example.com",
 				},
@@ -1007,7 +1007,7 @@ func TestHTTPCallModule_DeepMerge(t *testing.T) {
 			t.Fatalf("expected no error, got %v", err)
 		}
 
-		profile, ok := result[0]["profile"].(map[string]interface{})
+		profile, ok := result[0]["profile"].(map[string]any)
 		if !ok {
 			t.Fatal("expected profile to be a map")
 		}
@@ -1025,7 +1025,7 @@ func TestHTTPCallModule_DeepMerge(t *testing.T) {
 			t.Errorf("expected phone '123-456-7890', got %v", profile["phone"])
 		}
 		// Nested object should be added
-		address, ok := profile["address"].(map[string]interface{})
+		address, ok := profile["address"].(map[string]any)
 		if !ok || address["city"] != "New York" {
 			t.Errorf("expected address.city 'New York', got %v", profile["address"])
 		}
@@ -1038,7 +1038,7 @@ func TestHTTPCallModule_NumericKeyValues(t *testing.T) {
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			receivedID = r.URL.Query().Get("id")
-			response := map[string]interface{}{"status": "ok"}
+			response := map[string]any{"status": "ok"}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -1060,7 +1060,7 @@ func TestHTTPCallModule_NumericKeyValues(t *testing.T) {
 		module, _ := NewHTTPCallFromConfig(config)
 
 		// Test with float64 (how JSON numbers are decoded)
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": float64(12345)},
 		}
 
@@ -1082,7 +1082,7 @@ func TestHTTPCallModule_ClearCache(t *testing.T) {
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&requestCount, 1)
-			response := map[string]interface{}{"status": "ok"}
+			response := map[string]any{"status": "ok"}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -1103,7 +1103,7 @@ func TestHTTPCallModule_ClearCache(t *testing.T) {
 
 		module, _ := NewHTTPCallFromConfig(config)
 
-		records := []map[string]interface{}{{"id": "123"}}
+		records := []map[string]any{{"id": "123"}}
 
 		// First call
 		_, _ = module.Process(context.Background(), records)
@@ -1132,7 +1132,7 @@ func TestHTTPCallModule_Authentication(t *testing.T) {
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			receivedAPIKey = r.URL.Query().Get("api_key")
-			response := map[string]interface{}{"enriched": "data"}
+			response := map[string]any{"enriched": "data"}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -1160,7 +1160,7 @@ func TestHTTPCallModule_Authentication(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{{"id": "123"}}
+		records := []map[string]any{{"id": "123"}}
 		_, err = module.Process(context.Background(), records)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
@@ -1176,7 +1176,7 @@ func TestHTTPCallModule_Authentication(t *testing.T) {
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			receivedAuth = r.Header.Get("Authorization")
-			response := map[string]interface{}{"enriched": "data"}
+			response := map[string]any{"enriched": "data"}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -1204,7 +1204,7 @@ func TestHTTPCallModule_Authentication(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{{"id": "123"}}
+		records := []map[string]any{{"id": "123"}}
 		_, err = module.Process(context.Background(), records)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
@@ -1222,7 +1222,7 @@ func TestHTTPCallModule_Authentication(t *testing.T) {
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			receivedUser, receivedPass, authOK = r.BasicAuth()
-			response := map[string]interface{}{"enriched": "data"}
+			response := map[string]any{"enriched": "data"}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -1250,7 +1250,7 @@ func TestHTTPCallModule_Authentication(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{{"id": "123"}}
+		records := []map[string]any{{"id": "123"}}
 		_, err = module.Process(context.Background(), records)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
@@ -1280,7 +1280,7 @@ func TestHTTPCallModule_Authentication(t *testing.T) {
 				t.Errorf("token endpoint: expected grant_type 'client_credentials', got '%s'", r.FormValue("grant_type"))
 			}
 			w.Header().Set("Content-Type", "application/json")
-			if err := json.NewEncoder(w).Encode(map[string]interface{}{
+			if err := json.NewEncoder(w).Encode(map[string]any{
 				"access_token": "test-oauth2-token",
 				"token_type":   "Bearer",
 				"expires_in":   3600,
@@ -1294,7 +1294,7 @@ func TestHTTPCallModule_Authentication(t *testing.T) {
 		// API server
 		apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			receivedAuth = r.Header.Get("Authorization")
-			response := map[string]interface{}{"enriched": "data"}
+			response := map[string]any{"enriched": "data"}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -1322,7 +1322,7 @@ func TestHTTPCallModule_Authentication(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{{"id": "123"}}
+		records := []map[string]any{{"id": "123"}}
 		_, err = module.Process(context.Background(), records)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
@@ -1341,7 +1341,7 @@ func TestHTTPCallModule_CacheTTLExpiration(t *testing.T) {
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&requestCount, 1)
-			response := map[string]interface{}{"enriched": "data"}
+			response := map[string]any{"enriched": "data"}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -1369,7 +1369,7 @@ func TestHTTPCallModule_CacheTTLExpiration(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{{"id": "123"}}
+		records := []map[string]any{{"id": "123"}}
 
 		// First call - should make HTTP request
 		_, err = module.Process(context.Background(), records)
@@ -1413,7 +1413,7 @@ func TestHTTPCallModule_CacheSizeLimitAndLRU(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&requestCount, 1)
 			key := r.URL.Query().Get("id")
-			response := map[string]interface{}{"enriched": key}
+			response := map[string]any{"enriched": key}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -1442,9 +1442,9 @@ func TestHTTPCallModule_CacheSizeLimitAndLRU(t *testing.T) {
 		}
 
 		// Add 3 different keys - all should be cached
-		records1 := []map[string]interface{}{{"id": "key1"}}
-		records2 := []map[string]interface{}{{"id": "key2"}}
-		records3 := []map[string]interface{}{{"id": "key3"}}
+		records1 := []map[string]any{{"id": "key1"}}
+		records2 := []map[string]any{{"id": "key2"}}
+		records3 := []map[string]any{{"id": "key3"}}
 
 		_, _ = module.Process(context.Background(), records1)
 		time.Sleep(5 * time.Millisecond)
@@ -1462,7 +1462,7 @@ func TestHTTPCallModule_CacheSizeLimitAndLRU(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 
 		// Add 4th key - should evict key2 (LRU, not key1)
-		records4 := []map[string]interface{}{{"id": "key4"}}
+		records4 := []map[string]any{{"id": "key4"}}
 		_, _ = module.Process(context.Background(), records4)
 
 		// Should have made 4 requests total
@@ -1497,7 +1497,7 @@ func TestHTTPCallModule_CacheKeyCollision(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&requestCount, 1)
 			key := r.URL.Query().Get("id")
-			response := map[string]interface{}{"enriched": key}
+			response := map[string]any{"enriched": key}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -1527,7 +1527,7 @@ func TestHTTPCallModule_CacheKeyCollision(t *testing.T) {
 		}
 
 		// Test with keyValue that contains ":"
-		records1 := []map[string]interface{}{{"id": "foo:bar"}}
+		records1 := []map[string]any{{"id": "foo:bar"}}
 		result1, err := module1.Process(context.Background(), records1)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
@@ -1551,7 +1551,7 @@ func TestHTTPCallModule_CacheKeyCollision(t *testing.T) {
 		}
 
 		// Test with different keyValue that would collide with old delimiter
-		records2 := []map[string]interface{}{{"id": "different"}}
+		records2 := []map[string]any{{"id": "different"}}
 		_, err = module1.Process(context.Background(), records2)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
@@ -1579,7 +1579,7 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&requestCount, 1)
-			response := map[string]interface{}{"enriched": "data"}
+			response := map[string]any{"enriched": "data"}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -1609,8 +1609,8 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 		}
 
 		// Process records with different IDs - should all use same cache key
-		records1 := []map[string]interface{}{{"id": "123"}}
-		records2 := []map[string]interface{}{{"id": "456"}}
+		records1 := []map[string]any{{"id": "123"}}
+		records2 := []map[string]any{{"id": "456"}}
 
 		_, err = module.Process(context.Background(), records1)
 		if err != nil {
@@ -1637,7 +1637,7 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&requestCount, 1)
-			response := map[string]interface{}{"enriched": "data"}
+			response := map[string]any{"enriched": "data"}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -1666,21 +1666,21 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records1 := []map[string]interface{}{
+		records1 := []map[string]any{
 			{
 				"id": "123",
-				"user": map[string]interface{}{
-					"profile": map[string]interface{}{
+				"user": map[string]any{
+					"profile": map[string]any{
 						"id": "PROFILE-001",
 					},
 				},
 			},
 		}
-		records2 := []map[string]interface{}{
+		records2 := []map[string]any{
 			{
 				"id": "456",
-				"user": map[string]interface{}{
-					"profile": map[string]interface{}{
+				"user": map[string]any{
+					"profile": map[string]any{
 						"id": "PROFILE-001", // Same profile ID
 					},
 				},
@@ -1712,7 +1712,7 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&requestCount, 1)
-			response := map[string]interface{}{"enriched": "data"}
+			response := map[string]any{"enriched": "data"}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				t.Errorf("failed to encode response: %v", err)
@@ -1741,7 +1741,7 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 			t.Fatalf("failed to create module: %v", err)
 		}
 
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "123"}, // Missing "metadata.nonexistent" path
 		}
 

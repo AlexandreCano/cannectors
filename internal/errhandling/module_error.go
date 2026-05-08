@@ -17,7 +17,7 @@ type ModuleError interface {
 	ErrorCode() string
 	ErrorModule() string
 	ErrorRecordIndex() int
-	ErrorDetails() map[string]interface{}
+	ErrorDetails() map[string]any
 }
 
 // AsModuleError reports whether err (or any error in its Unwrap chain)

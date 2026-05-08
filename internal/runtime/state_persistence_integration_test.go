@@ -28,7 +28,7 @@ func TestExecutor_StatePersistence_Timestamp(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		lastQueryParam = r.URL.Query().Get("since")
 		w.Header().Set("Content-Type", "application/json")
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "1", "name": "Record 1"},
 			{"id": "2", "name": "Record 2"},
 		}
@@ -39,10 +39,10 @@ func TestExecutor_StatePersistence_Timestamp(t *testing.T) {
 	// Create HTTP polling input with timestamp persistence
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
-			"statePersistence": map[string]interface{}{
-				"timestamp": map[string]interface{}{
+			"statePersistence": map[string]any{
+				"timestamp": map[string]any{
 					"enabled":    true,
 					"queryParam": "since",
 				},
@@ -138,7 +138,7 @@ func TestExecutor_StatePersistence_ID(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		lastQueryParam = r.URL.Query().Get("after_id")
 		w.Header().Set("Content-Type", "application/json")
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "10", "name": "Record 10"},
 			{"id": "20", "name": "Record 20"},
 		}
@@ -149,10 +149,10 @@ func TestExecutor_StatePersistence_ID(t *testing.T) {
 	// Create HTTP polling input with ID persistence
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
-			"statePersistence": map[string]interface{}{
-				"id": map[string]interface{}{
+			"statePersistence": map[string]any{
+				"id": map[string]any{
 					"enabled":    true,
 					"field":      "id",
 					"queryParam": "after_id",
@@ -246,7 +246,7 @@ func TestExecutor_StatePersistence_AfterRestart(t *testing.T) {
 	// Create test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "1", "name": "Record 1"},
 		}
 		_ = json.NewEncoder(w).Encode(records)
@@ -256,10 +256,10 @@ func TestExecutor_StatePersistence_AfterRestart(t *testing.T) {
 	// Create HTTP polling input with timestamp persistence
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
-			"statePersistence": map[string]interface{}{
-				"timestamp": map[string]interface{}{
+			"statePersistence": map[string]any{
+				"timestamp": map[string]any{
 					"enabled":    true,
 					"queryParam": "since",
 				},
@@ -339,7 +339,7 @@ func TestExecutor_StatePersistence_AfterRestart(t *testing.T) {
 func TestExecutor_StatePersistence_NoStateStore(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "1", "name": "Record 1"},
 		}
 		_ = json.NewEncoder(w).Encode(records)
@@ -348,10 +348,10 @@ func TestExecutor_StatePersistence_NoStateStore(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
-			"statePersistence": map[string]interface{}{
-				"timestamp": map[string]interface{}{
+			"statePersistence": map[string]any{
+				"timestamp": map[string]any{
 					"enabled":    true,
 					"queryParam": "since",
 				},
@@ -394,7 +394,7 @@ func TestExecutor_StatePersistence_FailedExecution(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		records := []map[string]interface{}{
+		records := []map[string]any{
 			{"id": "1", "name": "Record 1"},
 		}
 		_ = json.NewEncoder(w).Encode(records)
@@ -403,10 +403,10 @@ func TestExecutor_StatePersistence_FailedExecution(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "http-polling",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL,
-			"statePersistence": map[string]interface{}{
-				"timestamp": map[string]interface{}{
+			"statePersistence": map[string]any{
+				"timestamp": map[string]any{
 					"enabled":    true,
 					"queryParam": "since",
 				},

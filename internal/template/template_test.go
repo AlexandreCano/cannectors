@@ -11,7 +11,7 @@ func TestEvaluator_BasicTemplates(t *testing.T) {
 
 	t.Run("simple field access", func(t *testing.T) {
 		template := "Hello {{name}}"
-		record := map[string]interface{}{"name": "World"}
+		record := map[string]any{"name": "World"}
 		result := e.Evaluate(template, record)
 		if result != "Hello World" {
 			t.Errorf("Evaluate() = %q, want %q", result, "Hello World")
@@ -20,8 +20,8 @@ func TestEvaluator_BasicTemplates(t *testing.T) {
 
 	t.Run("nested field access", func(t *testing.T) {
 		template := "User: {{user.name}}"
-		record := map[string]interface{}{
-			"user": map[string]interface{}{"name": "John"},
+		record := map[string]any{
+			"user": map[string]any{"name": "John"},
 		}
 		result := e.Evaluate(template, record)
 		if result != "User: John" {
@@ -35,9 +35,9 @@ func TestEvaluator_MetadataAccess(t *testing.T) {
 
 	t.Run("access metadata field directly", func(t *testing.T) {
 		template := "Processed: {{_metadata.processed}}"
-		record := map[string]interface{}{
+		record := map[string]any{
 			"name": "test",
-			"_metadata": map[string]interface{}{
+			"_metadata": map[string]any{
 				"processed": "true",
 			},
 		}
@@ -49,10 +49,10 @@ func TestEvaluator_MetadataAccess(t *testing.T) {
 
 	t.Run("access nested metadata", func(t *testing.T) {
 		template := "Timing: {{_metadata.timing.start}}"
-		record := map[string]interface{}{
+		record := map[string]any{
 			"name": "test",
-			"_metadata": map[string]interface{}{
-				"timing": map[string]interface{}{
+			"_metadata": map[string]any{
+				"timing": map[string]any{
 					"start": "2024-01-01T00:00:00Z",
 				},
 			},
@@ -65,9 +65,9 @@ func TestEvaluator_MetadataAccess(t *testing.T) {
 
 	t.Run("metadata in URL template", func(t *testing.T) {
 		template := "/api/resource/{{_metadata.resource_id}}"
-		record := map[string]interface{}{
+		record := map[string]any{
 			"name": "test",
-			"_metadata": map[string]interface{}{
+			"_metadata": map[string]any{
 				"resource_id": "abc123",
 			},
 		}
@@ -79,11 +79,9 @@ func TestEvaluator_MetadataAccess(t *testing.T) {
 
 	t.Run("metadata with default value", func(t *testing.T) {
 		template := "Status: {{_metadata.status | default: \"unknown\"}}"
-		record := map[string]interface{}{
+		record := map[string]any{
 			"name":      "test",
-			"_metadata": map[string]interface{}{
-				// status not set
-			},
+			"_metadata": map[string]any{},
 		}
 		result := e.Evaluate(template, record)
 		if result != "Status: unknown" {
@@ -96,9 +94,9 @@ func TestEvaluator_MetadataAccess(t *testing.T) {
 			"X-Processed-At": "{{_metadata.processed_at}}",
 			"X-Batch-ID":     "{{_metadata.batch_id}}",
 		}
-		record := map[string]interface{}{
+		record := map[string]any{
 			"name": "test",
-			"_metadata": map[string]interface{}{
+			"_metadata": map[string]any{
 				"processed_at": "2024-01-01T12:00:00Z",
 				"batch_id":     "batch-123",
 			},
@@ -114,9 +112,9 @@ func TestEvaluator_MetadataAccess(t *testing.T) {
 
 	t.Run("custom metadata field name", func(t *testing.T) {
 		template := "Custom: {{_custom.field}}"
-		record := map[string]interface{}{
+		record := map[string]any{
 			"name": "test",
-			"_custom": map[string]interface{}{
+			"_custom": map[string]any{
 				"field": "value",
 			},
 		}
@@ -129,8 +127,8 @@ func TestEvaluator_MetadataAccess(t *testing.T) {
 
 func TestGetNestedValue(t *testing.T) {
 	t.Run("gets metadata from record", func(t *testing.T) {
-		record := map[string]interface{}{
-			"_metadata": map[string]interface{}{
+		record := map[string]any{
+			"_metadata": map[string]any{
 				"processed": true,
 			},
 		}

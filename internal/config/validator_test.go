@@ -22,11 +22,11 @@ func TestValidateConfig_ValidConfig(t *testing.T) {
 
 func TestValidateConfig_ValidConfigWithoutVersion(t *testing.T) {
 	// Config without version field should be valid
-	data := map[string]interface{}{
+	data := map[string]any{
 		"name":    "test-no-version",
-		"input":   map[string]interface{}{"type": "httpPolling", "endpoint": "https://example.com", "schedule": "* * * * *"},
-		"filters": []interface{}{},
-		"output":  map[string]interface{}{"type": "httpRequest", "endpoint": "https://example.com", "method": "POST"},
+		"input":   map[string]any{"type": "httpPolling", "endpoint": "https://example.com", "schedule": "* * * * *"},
+		"filters": []any{},
+		"output":  map[string]any{"type": "httpRequest", "endpoint": "https://example.com", "method": "POST"},
 	}
 
 	result := ValidateConfig(data)
@@ -107,7 +107,7 @@ func TestValidateConfig_NilData(t *testing.T) {
 }
 
 func TestValidateConfig_EmptyData(t *testing.T) {
-	result := ValidateConfig(map[string]interface{}{})
+	result := ValidateConfig(map[string]any{})
 
 	if result.Valid {
 		t.Error("expected validation to fail for empty data")
@@ -150,16 +150,16 @@ func TestGetSchema_ReturnsSchema(t *testing.T) {
 
 func TestValidateConfig_WebhookWithSchedule_Rejected(t *testing.T) {
 	// Webhook input must not have schedule (AC#2, #4). Schema rejects it.
-	data := map[string]interface{}{
+	data := map[string]any{
 		"name":    "webhook-schedule-test",
 		"version": "1.0.0",
-		"input": map[string]interface{}{
+		"input": map[string]any{
 			"type":     "webhook",
 			"path":     "/webhook",
 			"schedule": "0 * * * *",
 		},
-		"filters": []interface{}{},
-		"output": map[string]interface{}{
+		"filters": []any{},
+		"output": map[string]any{
 			"type":     "httpRequest",
 			"endpoint": "https://example.com",
 			"method":   "POST",
@@ -176,17 +176,17 @@ func TestValidateConfig_WebhookWithSchedule_Rejected(t *testing.T) {
 
 func TestValidateConfig_ConnectorLevelSchedule_Rejected(t *testing.T) {
 	// Schedule must not be at root; only in input module (polling types).
-	data := map[string]interface{}{
+	data := map[string]any{
 		"name":     "connector-schedule-test",
 		"version":  "1.0.0",
 		"schedule": "0 * * * *",
-		"input": map[string]interface{}{
+		"input": map[string]any{
 			"type":     "httpPolling",
 			"endpoint": "https://example.com",
 			"schedule": "*/5 * * * *",
 		},
-		"filters": []interface{}{},
-		"output": map[string]interface{}{
+		"filters": []any{},
+		"output": map[string]any{
 			"type":     "httpRequest",
 			"endpoint": "https://example.com",
 			"method":   "POST",
@@ -204,16 +204,16 @@ func TestValidateConfig_ConnectorLevelSchedule_Rejected(t *testing.T) {
 func TestValidateConfig_ActionableMessages(t *testing.T) {
 	tests := []struct {
 		name       string
-		data       map[string]interface{}
+		data       map[string]any
 		wantType   string
 		wantSubstr string
 	}{
 		{
 			name: "missing required field shows property name",
-			data: map[string]interface{}{
+			data: map[string]any{
 				"name":   "test",
-				"input":  map[string]interface{}{"type": "httpPolling", "endpoint": "https://example.com", "schedule": "* * * * *"},
-				"output": map[string]interface{}{"type": "httpRequest", "endpoint": "https://example.com", "method": "POST"},
+				"input":  map[string]any{"type": "httpPolling", "endpoint": "https://example.com", "schedule": "* * * * *"},
+				"output": map[string]any{"type": "httpRequest", "endpoint": "https://example.com", "method": "POST"},
 				// missing "filters"
 			},
 			wantType:   "required",
@@ -221,23 +221,23 @@ func TestValidateConfig_ActionableMessages(t *testing.T) {
 		},
 		{
 			name: "wrong type shows expected and actual",
-			data: map[string]interface{}{
+			data: map[string]any{
 				"name":    123, // should be string
-				"input":   map[string]interface{}{"type": "httpPolling", "endpoint": "https://example.com", "schedule": "* * * * *"},
-				"filters": []interface{}{},
-				"output":  map[string]interface{}{"type": "httpRequest", "endpoint": "https://example.com", "method": "POST"},
+				"input":   map[string]any{"type": "httpPolling", "endpoint": "https://example.com", "schedule": "* * * * *"},
+				"filters": []any{},
+				"output":  map[string]any{"type": "httpRequest", "endpoint": "https://example.com", "method": "POST"},
 			},
 			wantType:   "type",
 			wantSubstr: "string",
 		},
 		{
 			name: "additional property shows property name",
-			data: map[string]interface{}{
+			data: map[string]any{
 				"name":     "test",
 				"schedule": "* * * * *", // not allowed at root
-				"input":    map[string]interface{}{"type": "httpPolling", "endpoint": "https://example.com", "schedule": "* * * * *"},
-				"filters":  []interface{}{},
-				"output":   map[string]interface{}{"type": "httpRequest", "endpoint": "https://example.com", "method": "POST"},
+				"input":    map[string]any{"type": "httpPolling", "endpoint": "https://example.com", "schedule": "* * * * *"},
+				"filters":  []any{},
+				"output":   map[string]any{"type": "httpRequest", "endpoint": "https://example.com", "method": "POST"},
 			},
 			wantType:   "additionalProperties",
 			wantSubstr: "schedule",

@@ -44,7 +44,7 @@ type DatabaseInputConfig struct {
 	moduleconfig.SQLRequestBase
 
 	// Query parameters
-	Parameters map[string]interface{} `json:"parameters"`
+	Parameters map[string]any `json:"parameters"`
 
 	// Pagination configuration
 	Pagination *moduleconfig.DatabasePaginationConfig `json:"pagination"`
@@ -154,7 +154,7 @@ func NewDatabaseInputFromConfig(cfg *connector.ModuleConfig) (*DatabaseInput, er
 }
 
 // Fetch retrieves data from the database.
-func (d *DatabaseInput) Fetch(ctx context.Context) ([]map[string]interface{}, error) {
+func (d *DatabaseInput) Fetch(ctx context.Context) ([]map[string]any, error) {
 	startTime := time.Now()
 
 	// Load state if state store is initialized (for incremental queries)
@@ -181,7 +181,7 @@ func (d *DatabaseInput) Fetch(ctx context.Context) ([]map[string]interface{}, er
 	query, args := d.buildQuery()
 
 	// Execute query based on pagination configuration
-	var records []map[string]interface{}
+	var records []map[string]any
 	var err error
 
 	if d.config.Pagination != nil && d.config.Pagination.Type != "" {
@@ -211,9 +211,9 @@ func (d *DatabaseInput) Fetch(ctx context.Context) ([]map[string]interface{}, er
 }
 
 // buildQuery builds the SQL query with parameters.
-func (d *DatabaseInput) buildQuery() (string, []interface{}) {
+func (d *DatabaseInput) buildQuery() (string, []any) {
 	query := d.config.Query
-	var args []interface{}
+	var args []any
 
 	// Replace {{lastRunTimestamp}} placeholder
 	query, args = d.replaceLastRunTimestamp(query, args)
@@ -228,7 +228,7 @@ func (d *DatabaseInput) buildQuery() (string, []interface{}) {
 }
 
 // replaceLastRunTimestamp replaces {{lastRunTimestamp}} placeholder with parameterized value.
-func (d *DatabaseInput) replaceLastRunTimestamp(query string, args []interface{}) (string, []interface{}) {
+func (d *DatabaseInput) replaceLastRunTimestamp(query string, args []any) (string, []any) {
 	if !strings.Contains(query, LastRunTimestampPlaceholder) {
 		return query, args
 	}
@@ -249,7 +249,7 @@ func (d *DatabaseInput) replaceLastRunTimestamp(query string, args []interface{}
 }
 
 // replaceIncrementalParameters replaces incremental parameter placeholders (legacy support).
-func (d *DatabaseInput) replaceIncrementalParameters(query string, args []interface{}) (string, []interface{}) {
+func (d *DatabaseInput) replaceIncrementalParameters(query string, args []any) (string, []any) {
 	if d.config.Incremental == nil || !d.config.Incremental.Enabled || d.lastState == nil {
 		return query, args
 	}
@@ -276,7 +276,7 @@ func (d *DatabaseInput) replaceIncrementalParameters(query string, args []interf
 // replaceStaticParameters replaces static parameter placeholders from config.Parameters.
 // For Postgres ($n): reuses same placeholder for all occurrences (append arg once).
 // For MySQL/SQLite (?): replaces each occurrence sequentially (append arg each time).
-func (d *DatabaseInput) replaceStaticParameters(query string, args []interface{}) (string, []interface{}) {
+func (d *DatabaseInput) replaceStaticParameters(query string, args []any) (string, []any) {
 	paramOrder := extractParameterOrder(query)
 	for _, paramName := range paramOrder {
 		value, exists := d.config.Parameters[paramName]
@@ -295,7 +295,7 @@ func (d *DatabaseInput) replaceStaticParameters(query string, args []interface{}
 // Handles driver-specific behavior:
 //   - Postgres: replaces all occurrences with same $n placeholder (reuses $1)
 //   - MySQL/SQLite: replaces each occurrence sequentially with separate ? placeholders
-func (d *DatabaseInput) replaceNamedParameter(query string, args []interface{}, namedPlaceholder string, value interface{}) (string, []interface{}) {
+func (d *DatabaseInput) replaceNamedParameter(query string, args []any, namedPlaceholder string, value any) (string, []any) {
 	if !strings.Contains(query, namedPlaceholder) {
 		return query, args
 	}
@@ -358,7 +358,7 @@ func isAlphanumeric(b byte) bool {
 }
 
 // fetchSingle executes a single query without pagination.
-func (d *DatabaseInput) fetchSingle(ctx context.Context, query string, args []interface{}) ([]map[string]interface{}, error) {
+func (d *DatabaseInput) fetchSingle(ctx context.Context, query string, args []any) ([]map[string]any, error) {
 	ctx, cancel := context.WithTimeout(ctx, d.timeout)
 	defer cancel()
 
@@ -375,7 +375,7 @@ func (d *DatabaseInput) fetchSingle(ctx context.Context, query string, args []in
 }
 
 // fetchWithPagination executes queries with pagination.
-func (d *DatabaseInput) fetchWithPagination(ctx context.Context, query string, args []interface{}) ([]map[string]interface{}, error) {
+func (d *DatabaseInput) fetchWithPagination(ctx context.Context, query string, args []any) ([]map[string]any, error) {
 	switch d.config.Pagination.Type {
 	case "limit-offset":
 		return d.fetchLimitOffset(ctx, query, args)
@@ -387,8 +387,8 @@ func (d *DatabaseInput) fetchWithPagination(ctx context.Context, query string, a
 }
 
 // fetchLimitOffset implements LIMIT/OFFSET pagination.
-func (d *DatabaseInput) fetchLimitOffset(ctx context.Context, query string, args []interface{}) ([]map[string]interface{}, error) {
-	var allRecords []map[string]interface{}
+func (d *DatabaseInput) fetchLimitOffset(ctx context.Context, query string, args []any) ([]map[string]any, error) {
+	var allRecords []map[string]any
 	offset := 0
 	limit := d.config.Pagination.Limit
 	if limit <= 0 {
@@ -401,7 +401,7 @@ func (d *DatabaseInput) fetchLimitOffset(ctx context.Context, query string, args
 
 	for {
 		var paginatedQuery string
-		var paginatedArgs []interface{}
+		var paginatedArgs []any
 
 		if usesOffsetParam {
 			// Replace :offsetParam placeholder with parameterized value
@@ -444,9 +444,9 @@ func (d *DatabaseInput) fetchLimitOffset(ctx context.Context, query string, args
 }
 
 // fetchCursor implements cursor-based pagination.
-func (d *DatabaseInput) fetchCursor(ctx context.Context, query string, args []interface{}) ([]map[string]interface{}, error) {
-	var allRecords []map[string]interface{}
-	var cursor interface{}
+func (d *DatabaseInput) fetchCursor(ctx context.Context, query string, args []any) ([]map[string]any, error) {
+	var allRecords []map[string]any
+	var cursor any
 	limit := d.config.Pagination.Limit
 	if limit <= 0 {
 		limit = defaultQueryLimit
@@ -457,7 +457,7 @@ func (d *DatabaseInput) fetchCursor(ctx context.Context, query string, args []in
 
 	for {
 		cursorQuery := query
-		cursorArgs := make([]interface{}, len(args))
+		cursorArgs := make([]any, len(args))
 		copy(cursorArgs, args)
 
 		if cursorParam != "" {
@@ -506,17 +506,17 @@ func (d *DatabaseInput) fetchCursor(ctx context.Context, query string, args []in
 }
 
 // rowsToRecords converts sql.Rows to a slice of map records.
-func (d *DatabaseInput) rowsToRecords(rows *sql.Rows) ([]map[string]interface{}, error) {
+func (d *DatabaseInput) rowsToRecords(rows *sql.Rows) ([]map[string]any, error) {
 	columns, err := rows.Columns()
 	if err != nil {
 		return nil, fmt.Errorf("getting column names: %w", err)
 	}
 
-	var records []map[string]interface{}
+	var records []map[string]any
 
 	for rows.Next() {
-		values := make([]interface{}, len(columns))
-		valuePtrs := make([]interface{}, len(columns))
+		values := make([]any, len(columns))
+		valuePtrs := make([]any, len(columns))
 		for i := range values {
 			valuePtrs[i] = &values[i]
 		}
@@ -525,7 +525,7 @@ func (d *DatabaseInput) rowsToRecords(rows *sql.Rows) ([]map[string]interface{},
 			return nil, fmt.Errorf("scanning row: %w", err)
 		}
 
-		record := make(map[string]interface{}, len(columns))
+		record := make(map[string]any, len(columns))
 		for i, col := range columns {
 			val := values[i]
 			record[col] = convertDatabaseValue(val)
@@ -542,7 +542,7 @@ func (d *DatabaseInput) rowsToRecords(rows *sql.Rows) ([]map[string]interface{},
 }
 
 // convertDatabaseValue converts database values to appropriate Go types.
-func convertDatabaseValue(val interface{}) interface{} {
+func convertDatabaseValue(val any) any {
 	if val == nil {
 		return nil
 	}

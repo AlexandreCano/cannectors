@@ -69,7 +69,7 @@ func (cs *captureServer) getRequests() []capturedRequestData {
 func TestHTTPRequestModule_ImplementsOutputModuleInterface(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": "https://api.example.com/data",
 			"method":   "POST",
 		}),
@@ -92,7 +92,7 @@ func TestHTTPRequestModule_PipelineIntegration_SimpleFlow(t *testing.T) {
 	// Create module (simulating what pipeline executor would do)
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL + "/api/users",
 			"method":   "POST",
 		}),
@@ -104,7 +104,7 @@ func TestHTTPRequestModule_PipelineIntegration_SimpleFlow(t *testing.T) {
 	}
 
 	// Simulate pipeline executor calling Send
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"id": 1, "name": "Alice", "email": "alice@example.com"},
 		{"id": 2, "name": "Bob", "email": "bob@example.com"},
 	}
@@ -128,7 +128,7 @@ func TestHTTPRequestModule_PipelineIntegration_SimpleFlow(t *testing.T) {
 		t.Fatalf("expected 1 request, got %d", len(reqs))
 	}
 
-	var body []map[string]interface{}
+	var body []map[string]any
 	if err := json.Unmarshal(reqs[0].Body, &body); err != nil {
 		t.Fatalf("failed to parse request body: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestHTTPRequestModule_PipelineIntegration_EmptyRecords(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL + "/api/data",
 			"method":   "POST",
 		}),
@@ -156,7 +156,7 @@ func TestHTTPRequestModule_PipelineIntegration_EmptyRecords(t *testing.T) {
 	}
 
 	// Send empty records (e.g., after filtering removed all records)
-	sent, err := module.Send(context.Background(), []map[string]interface{}{})
+	sent, err := module.Send(context.Background(), []map[string]any{})
 	if err != nil {
 		t.Fatalf("Send with empty records should not fail: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestHTTPRequestModule_PipelineIntegration_WithFiltering(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL + "/api/filtered",
 			"method":   "PUT",
 		}),
@@ -194,7 +194,7 @@ func TestHTTPRequestModule_PipelineIntegration_WithFiltering(t *testing.T) {
 	}
 
 	// Simulated filtered/transformed records from filter module
-	filteredRecords := []map[string]interface{}{
+	filteredRecords := []map[string]any{
 		{"target_id": "usr_001", "full_name": "ALICE SMITH", "active": true},
 	}
 
@@ -224,7 +224,7 @@ func TestHTTPRequestModule_PipelineIntegration_MultipleCallsReusesModule(t *test
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL + "/api/data",
 			"method":   "POST",
 		}),
@@ -236,11 +236,11 @@ func TestHTTPRequestModule_PipelineIntegration_MultipleCallsReusesModule(t *test
 	}
 
 	// Multiple Send calls (e.g., batched processing)
-	batch1 := []map[string]interface{}{{"batch": 1}}
-	batch2 := []map[string]interface{}{{"batch": 2}}
-	batch3 := []map[string]interface{}{{"batch": 3}}
+	batch1 := []map[string]any{{"batch": 1}}
+	batch2 := []map[string]any{{"batch": 2}}
+	batch3 := []map[string]any{{"batch": 3}}
 
-	for i, batch := range [][]map[string]interface{}{batch1, batch2, batch3} {
+	for i, batch := range [][]map[string]any{batch1, batch2, batch3} {
 		sent, err := module.Send(context.Background(), batch)
 		if err != nil {
 			t.Fatalf("Send batch %d failed: %v", i+1, err)
@@ -267,10 +267,10 @@ func TestHTTPRequestModule_PipelineIntegration_WithAuthentication(t *testing.T) 
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL + "/api/secure",
 			"method":   "POST",
-			"authentication": map[string]interface{}{
+			"authentication": map[string]any{
 				"type": "bearer",
 				"credentials": map[string]string{
 					"token": "pipeline-auth-token",
@@ -284,7 +284,7 @@ func TestHTTPRequestModule_PipelineIntegration_WithAuthentication(t *testing.T) 
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"secure": "data"}}
+	records := []map[string]any{{"secure": "data"}}
 	_, err = module.Send(context.Background(), records)
 	if err != nil {
 		t.Fatalf("Send failed: %v", err)
@@ -313,7 +313,7 @@ func TestHTTPRequestModule_PipelineIntegration_ErrorHandling(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": errorServer.URL + "/api/data",
 			"method":   "POST",
 		}),
@@ -324,7 +324,7 @@ func TestHTTPRequestModule_PipelineIntegration_ErrorHandling(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	records := []map[string]interface{}{{"test": "data"}}
+	records := []map[string]any{{"test": "data"}}
 	sent, err := module.Send(context.Background(), records)
 
 	// Error should be returned to pipeline executor
@@ -348,7 +348,7 @@ func TestHTTPRequestModule_PipelineIntegration_LargeDataSet(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL + "/api/bulk",
 			"method":   "POST",
 		}),
@@ -360,9 +360,9 @@ func TestHTTPRequestModule_PipelineIntegration_LargeDataSet(t *testing.T) {
 	}
 
 	// Create large dataset
-	records := make([]map[string]interface{}, 1000)
+	records := make([]map[string]any, 1000)
 	for i := 0; i < 1000; i++ {
-		records[i] = map[string]interface{}{
+		records[i] = map[string]any{
 			"id":    i,
 			"name":  "User " + string(rune(i)),
 			"email": "user@example.com",
@@ -399,7 +399,7 @@ func TestHTTPRequestModule_Templating_EndpointWithRecordData(t *testing.T) {
 	// Configure with templated endpoint
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint":    server.URL + "/api/users/{{record.user_id}}/orders",
 			"method":      "POST",
 			"requestMode": "single", // Single record mode to evaluate template per record
@@ -413,7 +413,7 @@ func TestHTTPRequestModule_Templating_EndpointWithRecordData(t *testing.T) {
 	defer func() { _ = module.Close() }()
 
 	// Send records with different user_ids
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"user_id": "123", "order": "A001"},
 		{"user_id": "456", "order": "A002"},
 	}
@@ -450,7 +450,7 @@ func TestHTTPRequestModule_Templating_NestedFieldAccess(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint":    server.URL + "/api/customers/{{record.customer.id}}/profile",
 			"method":      "PUT",
 			"requestMode": "single",
@@ -463,9 +463,9 @@ func TestHTTPRequestModule_Templating_NestedFieldAccess(t *testing.T) {
 	}
 	defer func() { _ = module.Close() }()
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{
-			"customer": map[string]interface{}{
+			"customer": map[string]any{
 				"id":   "cust_001",
 				"name": "Alice",
 			},
@@ -494,10 +494,10 @@ func TestHTTPRequestModule_Templating_HeadersWithRecordData(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL + "/api/data",
 			"method":   "POST",
-			"headers": map[string]interface{}{
+			"headers": map[string]any{
 				"X-User-ID":     "{{record.user_id}}",
 				"X-Tenant":      "{{record.tenant}}",
 				"X-Static":      "static-value",
@@ -513,7 +513,7 @@ func TestHTTPRequestModule_Templating_HeadersWithRecordData(t *testing.T) {
 	}
 	defer func() { _ = module.Close() }()
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"user_id": "user_123", "tenant": "acme-corp", "correlation_id": "req-abc"},
 	}
 
@@ -547,7 +547,7 @@ func TestHTTPRequestModule_Templating_MissingFieldWithDefault(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint":    server.URL + `/api/users/{{record.user_id | default: "unknown"}}/data`,
 			"method":      "POST",
 			"requestMode": "single",
@@ -561,7 +561,7 @@ func TestHTTPRequestModule_Templating_MissingFieldWithDefault(t *testing.T) {
 	defer func() { _ = module.Close() }()
 
 	// Record without user_id field
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"data": "some data"},
 	}
 
@@ -586,7 +586,7 @@ func TestHTTPRequestModule_Templating_URLEncoding(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint":    server.URL + "/api/search/{{record.query}}",
 			"method":      "POST",
 			"requestMode": "single",
@@ -600,7 +600,7 @@ func TestHTTPRequestModule_Templating_URLEncoding(t *testing.T) {
 	defer func() { _ = module.Close() }()
 
 	// Record with special characters
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"query": "hello world"},
 	}
 
@@ -626,7 +626,7 @@ func TestHTTPRequestModule_Templating_BatchModeUsesFirstRecord(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint":    server.URL + "/api/tenants/{{record.tenant_id}}/bulk",
 			"method":      "POST",
 			"requestMode": "batch", // Batch mode
@@ -640,7 +640,7 @@ func TestHTTPRequestModule_Templating_BatchModeUsesFirstRecord(t *testing.T) {
 	defer func() { _ = module.Close() }()
 
 	// All records have the same tenant_id (batch scenario)
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"tenant_id": "tenant_001", "data": "record1"},
 		{"tenant_id": "tenant_001", "data": "record2"},
 		{"tenant_id": "tenant_001", "data": "record3"},
@@ -673,7 +673,7 @@ func TestHTTPRequestModule_Templating_ArrayIndex(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint":    server.URL + "/api/items/{{record.items[0].id}}",
 			"method":      "POST",
 			"requestMode": "single",
@@ -686,11 +686,11 @@ func TestHTTPRequestModule_Templating_ArrayIndex(t *testing.T) {
 	}
 	defer func() { _ = module.Close() }()
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{
-			"items": []interface{}{
-				map[string]interface{}{"id": "item_001", "name": "First"},
-				map[string]interface{}{"id": "item_002", "name": "Second"},
+			"items": []any{
+				map[string]any{"id": "item_001", "name": "First"},
+				map[string]any{"id": "item_002", "name": "Second"},
 			},
 		},
 	}
@@ -714,7 +714,7 @@ func TestHTTPRequestModule_Templating_InvalidSyntax(t *testing.T) {
 	tests := []struct {
 		name     string
 		endpoint string
-		headers  map[string]interface{}
+		headers  map[string]any
 		wantErr  bool
 	}{
 		{
@@ -730,7 +730,7 @@ func TestHTTPRequestModule_Templating_InvalidSyntax(t *testing.T) {
 		{
 			name:     "unmatched braces in header",
 			endpoint: "https://api.example.com/users",
-			headers: map[string]interface{}{
+			headers: map[string]any{
 				"X-User": "{{record.id",
 			},
 			wantErr: true,
@@ -744,7 +744,7 @@ func TestHTTPRequestModule_Templating_InvalidSyntax(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rawMap := map[string]interface{}{
+			rawMap := map[string]any{
 				"endpoint": tt.endpoint,
 				"method":   "POST",
 			}
@@ -791,7 +791,7 @@ func TestHTTPRequestModule_Templating_BodyTemplateFile(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint":         server.URL + "/api/users",
 			"method":           "POST",
 			"requestMode":      "single",
@@ -805,7 +805,7 @@ func TestHTTPRequestModule_Templating_BodyTemplateFile(t *testing.T) {
 	}
 	defer func() { _ = module.Close() }()
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"user_id": "123", "name": "Alice", "email": "alice@example.com"},
 	}
 
@@ -818,7 +818,7 @@ func TestHTTPRequestModule_Templating_BodyTemplateFile(t *testing.T) {
 	}
 
 	reqs := server.getRequests()
-	var body map[string]interface{}
+	var body map[string]any
 	if err := json.Unmarshal(reqs[0].Body, &body); err != nil {
 		t.Fatalf("failed to parse body: %v", err)
 	}
@@ -866,7 +866,7 @@ func TestHTTPRequestModule_Templating_BodyTemplateFileNested(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint":         server.URL + "/api/data",
 			"method":           "POST",
 			"requestMode":      "single",
@@ -880,10 +880,10 @@ func TestHTTPRequestModule_Templating_BodyTemplateFileNested(t *testing.T) {
 	}
 	defer func() { _ = module.Close() }()
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{
 			"id": "rec_001",
-			"profile": map[string]interface{}{
+			"profile": map[string]any{
 				"name": "Test User",
 			},
 		},
@@ -898,13 +898,13 @@ func TestHTTPRequestModule_Templating_BodyTemplateFileNested(t *testing.T) {
 	}
 
 	reqs := server.getRequests()
-	var body map[string]interface{}
+	var body map[string]any
 	if err := json.Unmarshal(reqs[0].Body, &body); err != nil {
 		t.Fatalf("failed to parse body: %v", err)
 	}
 
 	// Check nested templated values
-	data, ok := body["data"].(map[string]interface{})
+	data, ok := body["data"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected data to be a map")
 	}
@@ -941,7 +941,7 @@ func TestHTTPRequestModule_Templating_BodyTemplateFileBatch(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint":         server.URL + "/api/bulk",
 			"method":           "POST",
 			"requestMode":      "batch", // Batch mode
@@ -956,7 +956,7 @@ func TestHTTPRequestModule_Templating_BodyTemplateFileBatch(t *testing.T) {
 	defer func() { _ = module.Close() }()
 
 	// All records share the same batch_id and tenant_id (batch scenario)
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"batch_id": "batch_001", "tenant_id": "tenant_123", "data": "record1"},
 		{"batch_id": "batch_001", "tenant_id": "tenant_123", "data": "record2"},
 	}
@@ -974,7 +974,7 @@ func TestHTTPRequestModule_Templating_BodyTemplateFileBatch(t *testing.T) {
 		t.Fatalf("expected 1 batch request, got %d", len(reqs))
 	}
 
-	var body map[string]interface{}
+	var body map[string]any
 	if err := json.Unmarshal(reqs[0].Body, &body); err != nil {
 		t.Fatalf("failed to parse body: %v", err)
 	}
@@ -1019,10 +1019,10 @@ func TestHTTPRequestModule_Templating_XMLTemplate(t *testing.T) {
 
 	config := &connector.ModuleConfig{
 		Type: "httpRequest",
-		Raw: mustJSON(map[string]interface{}{
+		Raw: mustJSON(map[string]any{
 			"endpoint": server.URL + "/soap/api",
 			"method":   "POST",
-			"headers": map[string]interface{}{
+			"headers": map[string]any{
 				"Content-Type": "application/soap+xml",
 			},
 			"requestMode":      "single",
@@ -1036,7 +1036,7 @@ func TestHTTPRequestModule_Templating_XMLTemplate(t *testing.T) {
 	}
 	defer func() { _ = module.Close() }()
 
-	records := []map[string]interface{}{
+	records := []map[string]any{
 		{"user_id": "456", "name": "Bob", "email": "bob@example.com"},
 	}
 
@@ -1074,12 +1074,12 @@ func TestHTTPRequestModule_Templating_XMLTemplate(t *testing.T) {
 func TestNewHTTPRequestFromConfig_InvalidTemplateSyntax(t *testing.T) {
 	tests := []struct {
 		name        string
-		config      map[string]interface{}
+		config      map[string]any
 		expectError string
 	}{
 		{
 			name: "invalid endpoint template - unmatched opening brace",
-			config: map[string]interface{}{
+			config: map[string]any{
 				"endpoint": "https://api.example.com/{{record.id",
 				"method":   "POST",
 			},
@@ -1087,7 +1087,7 @@ func TestNewHTTPRequestFromConfig_InvalidTemplateSyntax(t *testing.T) {
 		},
 		{
 			name: "invalid endpoint template - unmatched closing brace",
-			config: map[string]interface{}{
+			config: map[string]any{
 				"endpoint": "https://api.example.com/record.id}}",
 				"method":   "POST",
 			},
@@ -1095,7 +1095,7 @@ func TestNewHTTPRequestFromConfig_InvalidTemplateSyntax(t *testing.T) {
 		},
 		{
 			name: "invalid endpoint template - empty variable",
-			config: map[string]interface{}{
+			config: map[string]any{
 				"endpoint": "https://api.example.com/{{}}",
 				"method":   "POST",
 			},
@@ -1103,10 +1103,10 @@ func TestNewHTTPRequestFromConfig_InvalidTemplateSyntax(t *testing.T) {
 		},
 		{
 			name: "invalid header template - unmatched brace",
-			config: map[string]interface{}{
+			config: map[string]any{
 				"endpoint": "https://api.example.com/data",
 				"method":   "POST",
-				"headers": map[string]interface{}{
+				"headers": map[string]any{
 					"X-User-ID": "{{record.user_id",
 				},
 			},
@@ -1114,7 +1114,7 @@ func TestNewHTTPRequestFromConfig_InvalidTemplateSyntax(t *testing.T) {
 		},
 		{
 			name: "invalid body template file - unmatched brace",
-			config: map[string]interface{}{
+			config: map[string]any{
 				"endpoint":         "https://api.example.com/data",
 				"method":           "POST",
 				"bodyTemplateFile": createInvalidTemplateFile(t, "{{record.id"),

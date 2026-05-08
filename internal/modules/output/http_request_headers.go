@@ -8,7 +8,7 @@ import (
 // extractHeadersFromRecord extracts header values from record data.
 // Supports both HeadersFromRecord (field path lookup) and template syntax ({{record.field}}).
 // Validates header names and values per RFC 7230.
-func (h *HTTPRequestModule) extractHeadersFromRecord(record map[string]interface{}) map[string]string {
+func (h *HTTPRequestModule) extractHeadersFromRecord(record map[string]any) map[string]string {
 	headers := make(map[string]string)
 
 	for headerName, headerValue := range h.headers {

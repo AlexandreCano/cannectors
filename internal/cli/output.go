@@ -146,7 +146,7 @@ func splitLines(s string) []string {
 }
 
 // PrintConfigSummary prints connector name and version if available.
-func PrintConfigSummary(data map[string]interface{}) {
+func PrintConfigSummary(data map[string]any) {
 	if data == nil {
 		return
 	}

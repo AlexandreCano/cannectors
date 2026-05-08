@@ -6,10 +6,10 @@ import (
 
 // mergeData merges response data into record according to the module's
 // configured mergeStrategy ("merge", "replace", or "append").
-func (m *HTTPCallModule) mergeData(record, responseData map[string]interface{}) map[string]interface{} {
+func (m *HTTPCallModule) mergeData(record, responseData map[string]any) map[string]any {
 	switch m.mergeStrategy {
 	case "replace":
-		result := make(map[string]interface{}, len(record)+len(responseData))
+		result := make(map[string]any, len(record)+len(responseData))
 		for k, v := range record {
 			result[k] = v
 		}
@@ -18,7 +18,7 @@ func (m *HTTPCallModule) mergeData(record, responseData map[string]interface{}) 
 		}
 		return result
 	case "append":
-		result := make(map[string]interface{}, len(record)+1)
+		result := make(map[string]any, len(record)+1)
 		for k, v := range record {
 			result[k] = v
 		}
@@ -31,15 +31,15 @@ func (m *HTTPCallModule) mergeData(record, responseData map[string]interface{}) 
 
 // deepMerge performs a recursive merge of two maps. Values from b override
 // values from a at each level, except for nested maps which are merged.
-func (m *HTTPCallModule) deepMerge(a, b map[string]interface{}) map[string]interface{} {
-	result := make(map[string]interface{}, len(a)+len(b))
+func (m *HTTPCallModule) deepMerge(a, b map[string]any) map[string]any {
+	result := make(map[string]any, len(a)+len(b))
 	for k, v := range a {
 		result[k] = v
 	}
 	for k, vb := range b {
 		if va, exists := result[k]; exists {
-			if mapA, okA := va.(map[string]interface{}); okA {
-				if mapB, okB := vb.(map[string]interface{}); okB {
+			if mapA, okA := va.(map[string]any); okA {
+				if mapB, okB := vb.(map[string]any); okB {
 					result[k] = m.deepMerge(mapA, mapB)
 					continue
 				}

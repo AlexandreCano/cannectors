@@ -154,15 +154,15 @@ func resolveNestedFilter(nestedConfig *filter.NestedModuleConfig, index int) (fi
 		return nil, nil
 	}
 
-	rawMap := make(map[string]interface{})
+	rawMap := make(map[string]any)
 	for k, v := range nestedConfig.Config {
 		rawMap[k] = v
 	}
 
 	if len(nestedConfig.Mappings) > 0 {
-		mappings := make([]interface{}, len(nestedConfig.Mappings))
+		mappings := make([]any, len(nestedConfig.Mappings))
 		for i, m := range nestedConfig.Mappings {
-			mappings[i] = map[string]interface{}{
+			mappings[i] = map[string]any{
 				"source": m.Source,
 				"target": m.Target,
 			}

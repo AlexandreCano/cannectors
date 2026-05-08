@@ -130,7 +130,12 @@ func assertRecordsEqual(t *testing.T, got, want []map[string]any) {
 
 func assertMapped(t *testing.T, input []map[string]any, mappings []FieldMapping, want []map[string]any) {
 	t.Helper()
-	mapper, err := NewMappingFromConfig(mappings, "fail")
+	assertMappedWithOnError(t, input, mappings, "fail", want)
+}
+
+func assertMappedWithOnError(t *testing.T, input []map[string]any, mappings []FieldMapping, onError string, want []map[string]any) {
+	t.Helper()
+	mapper, err := NewMappingFromConfig(mappings, onError)
 	if err != nil {
 		t.Fatalf("NewMappingFromConfig() error = %v", err)
 	}
@@ -139,6 +144,20 @@ func assertMapped(t *testing.T, input []map[string]any, mappings []FieldMapping,
 		t.Fatalf("Process() error = %v", err)
 	}
 	assertRecordsEqual(t, got, want)
+}
+
+// assertMappingFails runs the mapping with onError="fail" and expects an error,
+// matching the boilerplate used by tabular tests with `wantErr: true`.
+func assertMappingFails(t *testing.T, input []map[string]any, mappings []FieldMapping) {
+	t.Helper()
+	mapper, err := NewMappingFromConfig(mappings, "fail")
+	if err != nil {
+		// Construction-time failure also satisfies the contract.
+		return
+	}
+	if _, err := mapper.Process(context.Background(), input); err == nil {
+		t.Fatalf("Process() error = nil, want error")
+	}
 }
 
 func containsString(s, substr string) bool {

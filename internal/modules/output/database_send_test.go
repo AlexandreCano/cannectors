@@ -208,6 +208,53 @@ func TestDatabaseOutput_OnErrorSkipAndFail(t *testing.T) {
 	})
 }
 
+// TestDatabaseOutput_BatchVsIndividual contrasts the two write modes on the
+// same input: with Transaction=true a mid-batch failure rolls back every
+// preceding record, while Transaction=false commits each record independently
+// so the failing one is the only loss.
+func TestDatabaseOutput_BatchVsIndividual(t *testing.T) {
+	records := []map[string]any{
+		{"id": 1, "name": "Alice", "email": "alice@example.com"},
+		{"id": 2, "name": "Duplicate", "email": "alice@example.com"}, // unique violation
+		{"id": 3, "name": "Charlie", "email": "charlie@example.com"},
+	}
+
+	t.Run("batch transaction rolls back all on failure", func(t *testing.T) {
+		db := setupDatabaseOutputSQLiteDB(t)
+		output := newDatabaseOutputForTest(db, DatabaseOutputConfig{
+			SQLRequestBase: moduleconfig.SQLRequestBase{Query: "INSERT INTO users (id, name, email) VALUES ({{record.id}}, {{record.name}}, {{record.email}})"},
+			Transaction:    true,
+		})
+
+		_, err := output.Send(context.Background(), records)
+		if err == nil {
+			t.Fatal("Send() error = nil, want unique constraint error")
+		}
+		if count := countOutputRows(t, db); count != 0 {
+			t.Fatalf("rows after rollback = %d, want 0 (transaction discarded prior inserts)", count)
+		}
+	})
+
+	t.Run("individual mode commits prior records and stops on failure", func(t *testing.T) {
+		db := setupDatabaseOutputSQLiteDB(t)
+		output := newDatabaseOutputForTest(db, DatabaseOutputConfig{
+			SQLRequestBase: moduleconfig.SQLRequestBase{Query: "INSERT INTO users (id, name, email) VALUES ({{record.id}}, {{record.name}}, {{record.email}})"},
+			Transaction:    false,
+		})
+
+		sent, err := output.Send(context.Background(), records)
+		if err == nil {
+			t.Fatal("Send() error = nil, want unique constraint error")
+		}
+		if sent != 1 {
+			t.Fatalf("sent before failure = %d, want 1", sent)
+		}
+		if count := countOutputRows(t, db); count != 1 {
+			t.Fatalf("rows after failure = %d, want 1 (first record kept, no rollback in individual mode)", count)
+		}
+	})
+}
+
 func TestDatabaseOutput_BuildParameterizedQueryUnmatchedTemplate(t *testing.T) {
 	output := newDatabaseOutputForTest(setupDatabaseOutputSQLiteDB(t), DatabaseOutputConfig{})
 	_, _, err := output.buildParameterizedQuery("INSERT INTO users (name) VALUES ({{record.name)", map[string]any{"name": "Alice"})

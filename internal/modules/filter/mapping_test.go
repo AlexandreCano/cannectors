@@ -292,26 +292,11 @@ func TestMapping_Process_BasicMappings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mapper, err := NewMappingFromConfig(tt.mappings, "fail")
-			if err != nil {
-				t.Fatalf("NewMappingFromConfig() error = %v", err)
-			}
-
-			got, err := mapper.Process(context.Background(), tt.input)
 			if tt.wantErr {
-				if err == nil {
-					t.Errorf("Process() expected error, got nil")
-				}
+				assertMappingFails(t, tt.input, tt.mappings)
 				return
 			}
-			if err != nil {
-				t.Errorf("Process() unexpected error = %v", err)
-				return
-			}
-
-			if !recordsEqual(got, tt.want) {
-				t.Errorf("Process() = %v, want %v", got, tt.want)
-			}
+			assertMapped(t, tt.input, tt.mappings, tt.want)
 		})
 	}
 }
@@ -438,26 +423,11 @@ func TestMapping_Process_NestedPaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mapper, err := NewMappingFromConfig(tt.mappings, "fail")
-			if err != nil {
-				t.Fatalf("NewMappingFromConfig() error = %v", err)
-			}
-
-			got, err := mapper.Process(context.Background(), tt.input)
 			if tt.wantErr {
-				if err == nil {
-					t.Errorf("Process() expected error, got nil")
-				}
+				assertMappingFails(t, tt.input, tt.mappings)
 				return
 			}
-			if err != nil {
-				t.Errorf("Process() unexpected error = %v", err)
-				return
-			}
-
-			if !recordsEqual(got, tt.want) {
-				t.Errorf("Process() = %v, want %v", got, tt.want)
-			}
+			assertMapped(t, tt.input, tt.mappings, tt.want)
 		})
 	}
 }
@@ -631,26 +601,11 @@ func TestMapping_Process_ArrayIndexing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mapper, err := NewMappingFromConfig(tt.mappings, "fail")
-			if err != nil {
-				t.Fatalf("NewMappingFromConfig() error = %v", err)
-			}
-
-			got, err := mapper.Process(context.Background(), tt.input)
 			if tt.wantErr {
-				if err == nil {
-					t.Errorf("Process() expected error, got nil")
-				}
+				assertMappingFails(t, tt.input, tt.mappings)
 				return
 			}
-			if err != nil {
-				t.Errorf("Process() unexpected error = %v", err)
-				return
-			}
-
-			if !recordsEqual(got, tt.want) {
-				t.Errorf("Process() = %v, want %v", got, tt.want)
-			}
+			assertMapped(t, tt.input, tt.mappings, tt.want)
 		})
 	}
 }
@@ -707,26 +662,11 @@ func TestMapping_Process_MissingIntermediatePaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mapper, err := NewMappingFromConfig(tt.mappings, "fail")
-			if err != nil {
-				t.Fatalf("NewMappingFromConfig() error = %v", err)
-			}
-
-			got, err := mapper.Process(context.Background(), tt.input)
 			if tt.wantErr {
-				if err == nil {
-					t.Errorf("Process() expected error, got nil")
-				}
+				assertMappingFails(t, tt.input, tt.mappings)
 				return
 			}
-			if err != nil {
-				t.Errorf("Process() unexpected error = %v", err)
-				return
-			}
-
-			if !recordsEqual(got, tt.want) {
-				t.Errorf("Process() = %v, want %v", got, tt.want)
-			}
+			assertMapped(t, tt.input, tt.mappings, tt.want)
 		})
 	}
 }
@@ -868,26 +808,11 @@ func TestMapping_Process_OnMissing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mapper, err := NewMappingFromConfig(tt.mappings, "fail")
-			if err != nil {
-				t.Fatalf("NewMappingFromConfig() error = %v", err)
-			}
-
-			got, err := mapper.Process(context.Background(), tt.input)
 			if tt.wantErr {
-				if err == nil {
-					t.Errorf("Process() expected error, got nil")
-				}
+				assertMappingFails(t, tt.input, tt.mappings)
 				return
 			}
-			if err != nil {
-				t.Errorf("Process() unexpected error = %v", err)
-				return
-			}
-
-			if !recordsEqual(got, tt.want) {
-				t.Errorf("Process() = %v, want %v", got, tt.want)
-			}
+			assertMapped(t, tt.input, tt.mappings, tt.want)
 		})
 	}
 }
@@ -1257,26 +1182,11 @@ func TestMapping_Process_Transforms(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mapper, err := NewMappingFromConfig(tt.mappings, "fail")
-			if err != nil {
-				t.Fatalf("NewMappingFromConfig() error = %v", err)
-			}
-
-			got, err := mapper.Process(context.Background(), tt.input)
 			if tt.wantErr {
-				if err == nil {
-					t.Errorf("Process() expected error, got nil")
-				}
+				assertMappingFails(t, tt.input, tt.mappings)
 				return
 			}
-			if err != nil {
-				t.Errorf("Process() unexpected error = %v", err)
-				return
-			}
-
-			if !recordsEqual(got, tt.want) {
-				t.Errorf("Process() = %v, want %v", got, tt.want)
-			}
+			assertMapped(t, tt.input, tt.mappings, tt.want)
 		})
 	}
 }

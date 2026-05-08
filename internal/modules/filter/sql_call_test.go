@@ -578,6 +578,25 @@ func TestSQLCall_ContextCancellationAndEmptyResult(t *testing.T) {
 		}
 	})
 
+	t.Run("module timeout expires during query", func(t *testing.T) {
+		db := setupSQLCallSQLiteDB(t)
+		module := newSQLCallTestModule(t, db, SQLCallConfig{
+			SQLRequestBase: moduleconfig.SQLRequestBase{Query: "SELECT name FROM users WHERE id = {{record.id}}"},
+		})
+		// The module derives a per-query context via context.WithTimeout(ctx, m.timeout)
+		// in executeQuery. Setting it to a nanosecond guarantees the deadline has
+		// elapsed before QueryContext can run, exercising the timeout branch.
+		module.timeout = time.Nanosecond
+
+		_, err := module.Process(context.Background(), []map[string]any{{"id": 1}})
+		if err == nil {
+			t.Fatal("Process() error = nil, want deadline error")
+		}
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("Process() error = %v, want context.DeadlineExceeded", err)
+		}
+	})
+
 	t.Run("empty result", func(t *testing.T) {
 		db := setupSQLCallSQLiteDB(t)
 		module := newSQLCallTestModule(t, db, SQLCallConfig{

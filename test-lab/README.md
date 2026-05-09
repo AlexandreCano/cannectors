@@ -306,10 +306,12 @@ Run with `make test-lab-verify-retry` (or `bash test-lab/scripts/verify-retry.sh
 
 ### Local E2E test runner (story 23.3)
 
-The runner orchestrates the whole lab from a single command. Each scenario is
+The runner orchestrates the whole lab from a single command. Most scenarios are
 a small YAML file under `test-lab/scenarios/` describing which pipeline to
 run, the expected pipeline status, and a list of declarative assertions
 against the WireMock journal, the PostgreSQL database, and the pipeline log.
+Webhook scenarios use `test-lab/scripts/verify-webhook.sh` because they start
+long-running listeners and send requests into them.
 
 Run the full suite:
 
@@ -329,9 +331,10 @@ SCENARIO=db- python3 test-lab/run.py
 ```
 
 The runner exits non-zero if any scenario fails. On failure it prints the
-failing assertions and the last 15 log lines of the pipeline. Webhook
-pipelines (story 22.7) are not yet integrated into the runner — keep using
-`make test-lab-verify-webhook` for those.
+failing assertions and the last 15 log lines of the pipeline. With no
+`SCENARIO` filter, `make test-lab-run` runs the declarative suite first and
+then the webhook suite. When `SCENARIO` is set, the filter applies only to the
+declarative scenarios; use `make test-lab-verify-webhook` to run only webhooks.
 
 #### Scenario YAML format
 
@@ -342,10 +345,11 @@ pipeline: test-lab/pipelines/<file>.yaml
 expect_status: success         # success | error
 timeout: 30                    # seconds passed to run-pipeline-once.sh
 setup:
+  reset_mappings: true         # default true (reloads WireMock mappings from disk)
   reset_journal: true          # default true
   reset_scenarios: true        # default true (WireMock scenario state)
-  reset_state: false           # default false (clears test-lab/state/state-*.json)
-  reset_db: false              # default false (re-runs reset.sql + 002_seed.sql)
+  reset_state: true            # default true (clears test-lab/state/state-*.json)
+  reset_db: true               # default true (re-runs reset.sql + 002_seed.sql)
   commands:                    # optional list of bash commands to run before the pipeline
     - "echo prepared"
 assertions:
@@ -379,7 +383,8 @@ CI runs a curated subset (see below). To make a scenario CI-safe:
 - Use deterministic stubs, deterministic seed data, and explicit assertions;
   avoid `http_count_ge` with a vague lower bound when an exact count is
   knowable.
-- Prefer `reset_db: true` / `reset_state: true` over relying on prior state.
+- Leave the default resets enabled unless the scenario intentionally needs
+  custom setup.
 - Add the scenario name to the `SCENARIO` list in
   `.github/workflows/test-lab.yml` once it is stable locally.
 
@@ -391,6 +396,8 @@ push and pull request to `main` / `develop`:
 - builds the CLI
 - starts WireMock + PostgreSQL via Docker Compose with healthchecks
 - runs `python3 test-lab/run.py` filtered by a `SCENARIO=...` allowlist
+- supports manual `workflow_dispatch` runs with a custom comma-separated
+  scenario filter for long or focused suites
 - on failure, dumps the WireMock journal, the WireMock mappings, the
   container logs and the PostgreSQL row counts as workflow artifacts under
   `test-lab-logs/`

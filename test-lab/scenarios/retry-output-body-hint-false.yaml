@@ -1,0 +1,10 @@
+name: retry-output-body-hint-false
+description: Output does not retry when retryHintFromBody evaluates false.
+pipeline: test-lab/pipelines/retry-output-body-hint-false.yaml
+expect_status: error
+assertions:
+  - http_count_eq:
+      method: POST
+      path: /reliability/destination/body-hint-false
+      status: 500
+      expected: 1

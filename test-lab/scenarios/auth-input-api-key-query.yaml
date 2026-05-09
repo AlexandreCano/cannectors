@@ -1,0 +1,17 @@
+name: auth-input-api-key-query
+description: API-key-in-query source returns 200 and destination receives the batch.
+pipeline: test-lab/pipelines/auth-input-api-key-query.yaml
+expect_status: success
+assertions:
+  - http_count_eq:
+      method: GET
+      path: /auth/source/api-key-query
+      query:
+        api_key: lab-api-key-query
+      status: 200
+      expected: 1
+  - http_count_eq:
+      method: POST
+      path: /auth/destination/public
+      status: 200
+      expected: 1

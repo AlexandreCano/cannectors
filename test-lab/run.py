@@ -351,14 +351,17 @@ def load_scenario(path: Path) -> dict[str, Any]:
 
 
 def apply_setup(setup: dict[str, Any]) -> None:
-    # Defaults: reset journal + scenarios always, state/db on opt-in.
-    if setup.get("reset_journal", True):
-        reset_journal()
+    # Defaults: every scenario starts from a clean lab. The order matters:
+    # reload mappings first, reset WireMock state, then clear the journal.
+    if setup.get("reset_mappings", True):
+        reset_mappings()
     if setup.get("reset_scenarios", True):
         reset_scenarios()
-    if setup.get("reset_state", False):
+    if setup.get("reset_journal", True):
+        reset_journal()
+    if setup.get("reset_state", True):
         reset_state_dir()
-    if setup.get("reset_db", False):
+    if setup.get("reset_db", True):
         reset_database()
     for cmd in setup.get("commands", []):
         subprocess.run(cmd, shell=True, check=True)

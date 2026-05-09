@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Comma-separated scenario filter for manual runs'
+        required: false
+        default: 'pagination-page,db-input-basic,db-output-insert,auth-input-bearer,auth-input-api-key-header,auth-negative-bearer-wrong,retry-output-500,retry-input-invalid-json'
 
 env:
   GO_VERSION: '1.25'
@@ -51,12 +56,12 @@ jobs:
             pg_isready -U cannectors_test -d cannectors_test
 
       # Curated CI suite: covers HTTP polling → HTTP output, database I/O,
-      # one auth scenario, one retry scenario. Long, slow or flaky scenarios
+      # focused auth scenarios, and focused retry/error scenarios. Long or slow scenarios
       # are excluded from PRs and can be run manually with workflow_dispatch
       # on a separate filter.
       - name: Run curated CI scenarios
         env:
-          SCENARIO: pagination-page,db-input-basic,db-output-insert,auth-input-bearer,auth-input-api-key-header,auth-negative-bearer-wrong,retry-output-500,retry-input-invalid-json
+          SCENARIO: ${{ github.event.inputs.scenario || 'pagination-page,db-input-basic,db-output-insert,auth-input-bearer,auth-input-api-key-header,auth-negative-bearer-wrong,retry-output-500,retry-input-invalid-json' }}
         run: python3 test-lab/run.py
 
       - name: Dump WireMock request journal on failure

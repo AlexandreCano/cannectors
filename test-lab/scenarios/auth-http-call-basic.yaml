@@ -1,0 +1,17 @@
+name: auth-http-call-basic
+description: http_call enrichment sends Basic auth for each order before output.
+pipeline: test-lab/pipelines/auth-http-call-basic.yaml
+expect_status: success
+assertions:
+  - http_count_eq:
+      method: GET
+      path_prefix: /auth/enrichment/orders/
+      headers:
+        Authorization: Basic bGFiLWVucmljaC11c2VyOmxhYi1lbnJpY2gtcGFzcw==
+      status: 200
+      expected: 2
+  - http_count_eq:
+      method: POST
+      path: /auth/destination/public
+      status: 200
+      expected: 1

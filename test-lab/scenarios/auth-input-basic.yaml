@@ -1,0 +1,17 @@
+name: auth-input-basic
+description: Basic-auth source returns 200 and destination receives the batch.
+pipeline: test-lab/pipelines/auth-input-basic.yaml
+expect_status: success
+assertions:
+  - http_count_eq:
+      method: GET
+      path: /auth/source/basic
+      headers:
+        Authorization: Basic bGFiLXVzZXI6bGFiLXBhc3M=
+      status: 200
+      expected: 1
+  - http_count_eq:
+      method: POST
+      path: /auth/destination/public
+      status: 200
+      expected: 1

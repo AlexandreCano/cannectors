@@ -144,11 +144,11 @@ test-lab-verify-retry: ## Run reliability (retry/timeout/error) scenarios (story
 	bash test-lab/scripts/verify-retry.sh
 
 .PHONY: test-lab-run
-test-lab-run: ## Run the full test-lab E2E suite (story 23.3). Filter with SCENARIO=name1,name2.
+test-lab-run: ## Run the full test-lab E2E suite, including webhook scenarios. Filter declarative scenarios with SCENARIO=name1,name2.
 	@if [ -n "$(SCENARIO)" ]; then \
 		SCENARIO="$(SCENARIO)" python3 test-lab/run.py; \
 	else \
-		python3 test-lab/run.py; \
+		python3 test-lab/run.py && bash test-lab/scripts/verify-webhook.sh; \
 	fi
 
 ##@ Code Quality

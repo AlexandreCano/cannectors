@@ -19,8 +19,7 @@ FAIL=0
 
 reset_journal() { curl -fsS -X DELETE "$WM/__admin/requests" >/dev/null; }
 
-# Run a pipeline once. If a 4th arg is given it is the expected pipeline status
-# (success|error). The pipeline log is captured for assertions.
+# Run a pipeline once. The pipeline log is captured for assertions.
 run_pipeline() {
   local pipeline="$1"
   LAST_LOG="$(mktemp)"

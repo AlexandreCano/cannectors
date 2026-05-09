@@ -1,0 +1,8 @@
+{
+  "request": { "method": "GET", "urlPath": "/source/filters/raw" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "bodyFileName": "source/filters/raw.json"
+  }
+}

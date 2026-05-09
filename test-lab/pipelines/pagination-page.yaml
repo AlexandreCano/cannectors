@@ -1,0 +1,25 @@
+name: pagination-page
+version: 1.0.0
+description: Page-based pagination scenario against the local lab. Expects 3 pages of 2 customers each.
+tags:
+  - test-lab
+  - pagination
+  - pagination-page
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/source/paginated/customers
+  dataField: data
+  pagination:
+    type: page
+    pageParam: page
+    limitParam: page_size
+    limit: 2
+    totalPagesField: total_pages
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/pagination/customers
+  method: POST
+  headers:
+    Content-Type: application/json

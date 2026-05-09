@@ -1,0 +1,8 @@
+{
+  "products": [
+    { "line_id": "L-1", "sku": "SKU-001", "qty": 2 },
+    { "line_id": "L-2", "sku": "SKU-002", "qty": 1 },
+    { "line_id": "L-3", "sku": "SKU-001", "qty": 4 },
+    { "line_id": "L-4", "sku": "SKU-999", "qty": 7 }
+  ]
+}

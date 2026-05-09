@@ -1,0 +1,22 @@
+name: db-output-transaction-rollback
+version: 1.0.0
+description: |-
+  HTTP feed contains a record whose email collides with an existing dest_customers row
+  (duplicate@example.test). With transaction=true and onError=fail (the default), the
+  whole batch must be rolled back: no DBOUT-100/102 row should land in dest_customers.
+tags:
+  - test-lab
+  - database
+  - output
+  - transaction
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/source/db-feed/customers-with-conflict
+filters: []
+output:
+  type: database
+  connectionString: postgres://cannectors_test:cannectors_test@localhost:15432/cannectors_test?sslmode=disable
+  transaction: true
+  onError: fail
+  query: "INSERT INTO dest_customers (external_id, email, full_name, segment, source_updated_at, synced_at) VALUES ({{record.externalId}}, {{record.email}}, {{record.fullName}}, {{record.segment}}, {{record.sourceUpdatedAt}}, NOW())"

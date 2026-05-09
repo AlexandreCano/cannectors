@@ -1,0 +1,24 @@
+name: sql-call-query-file
+version: 1.0.0
+description: Same lookup as sql-call-merge but the query is loaded from a SQL file on disk.
+tags:
+  - test-lab
+  - sql_call
+  - query-file
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/source/enrichment/orders
+  dataField: orders
+filters:
+  - type: sql_call
+    connectionString: postgres://cannectors_test:cannectors_test@localhost:15432/cannectors_test?sslmode=disable
+    driver: postgres
+    queryFile: test-lab/assets/sql/customer-lookup.sql
+    mergeStrategy: merge
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/enrichment/query-file
+  method: POST
+  headers:
+    Content-Type: application/json

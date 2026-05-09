@@ -103,6 +103,38 @@ test-lab-requests: ## List requests captured by WireMock
 test-lab-requests-reset: ## Clear WireMock request journal
 	curl -fsS -X DELETE http://localhost:18080/__admin/requests
 
+.PHONY: test-lab-mappings-reload
+test-lab-mappings-reload: ## Reload WireMock stub mappings from disk
+	curl -fsS -X POST http://localhost:18080/__admin/mappings/reset >/dev/null
+
+.PHONY: test-lab-verify-pagination
+test-lab-verify-pagination: ## Run HTTP pagination scenarios (story 22.1)
+	bash test-lab/scripts/verify-pagination.sh
+
+.PHONY: test-lab-verify-database
+test-lab-verify-database: ## Run database input/output scenarios (story 22.2)
+	bash test-lab/scripts/verify-database.sh
+
+.PHONY: test-lab-verify-sql-call
+test-lab-verify-sql-call: ## Run sql_call enrichment scenarios (story 22.3)
+	bash test-lab/scripts/verify-sql-call.sh
+
+.PHONY: test-lab-verify-http-call
+test-lab-verify-http-call: ## Run http_call enrichment scenarios (story 22.4)
+	bash test-lab/scripts/verify-http-call.sh
+
+.PHONY: test-lab-verify-filters
+test-lab-verify-filters: ## Run transformation filter scenarios (story 22.5)
+	bash test-lab/scripts/verify-filters.sh
+
+.PHONY: test-lab-verify-state-persistence
+test-lab-verify-state-persistence: ## Run httpPolling state persistence scenarios (story 22.6)
+	bash test-lab/scripts/verify-state-persistence.sh
+
+.PHONY: test-lab-verify-webhook
+test-lab-verify-webhook: ## Run webhook input scenarios (story 22.7)
+	bash test-lab/scripts/verify-webhook.sh
+
 ##@ Code Quality
 
 .PHONY: fmt

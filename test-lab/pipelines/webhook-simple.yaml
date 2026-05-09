@@ -1,0 +1,18 @@
+name: webhook-simple
+version: 1.0.0
+description: Webhook input without authentication, forwarded to a downstream HTTP destination.
+tags:
+  - test-lab
+  - webhook
+input:
+  type: webhook
+  path: /webhooks/simple
+  listenAddress: 127.0.0.1:18181
+  dataField: orders
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/webhook/simple
+  method: POST
+  headers:
+    Content-Type: application/json

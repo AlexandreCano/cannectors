@@ -1,0 +1,8 @@
+{
+  "request": { "method": "GET", "urlPath": "/source/state/events" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "bodyFileName": "source/state/events.json"
+  }
+}

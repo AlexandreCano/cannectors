@@ -1,0 +1,22 @@
+[
+  {
+    "externalId": "DBOUT-200",
+    "email": "zeta@example.test",
+    "fullName": "Zeta Test",
+    "segment": "trial",
+    "sourceUpdatedAt": "2026-02-03T08:00:00Z"
+  },
+  {
+    "externalId": "DBOUT-201",
+    "fullName": "Missing Email",
+    "segment": "trial",
+    "sourceUpdatedAt": "2026-02-03T08:05:00Z"
+  },
+  {
+    "externalId": "DBOUT-202",
+    "email": "eta@example.test",
+    "fullName": "Eta Test",
+    "segment": "premium",
+    "sourceUpdatedAt": "2026-02-03T08:10:00Z"
+  }
+]

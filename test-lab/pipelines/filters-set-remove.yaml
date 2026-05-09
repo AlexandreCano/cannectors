@@ -1,0 +1,29 @@
+name: filters-set-remove
+version: 1.0.0
+description: Apply set on flat and nested paths and remove flat and nested fields.
+tags:
+  - test-lab
+  - filters
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/source/filters/raw
+  dataField: records
+filters:
+  - type: set
+    target: routing.bucket
+    value: "default"
+  - type: set
+    target: meta.processed
+    value: true
+  - type: remove
+    targets:
+      - card.cvv
+      - card.number
+      - deprecatedField
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/filters/set-remove
+  method: POST
+  headers:
+    Content-Type: application/json

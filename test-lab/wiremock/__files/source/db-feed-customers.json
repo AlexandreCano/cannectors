@@ -1,0 +1,23 @@
+[
+  {
+    "externalId": "DBOUT-001",
+    "email": "alpha@example.test",
+    "fullName": "Alpha Test",
+    "segment": "premium",
+    "sourceUpdatedAt": "2026-02-01T08:00:00Z"
+  },
+  {
+    "externalId": "DBOUT-002",
+    "email": "beta@example.test",
+    "fullName": "Beta Test",
+    "segment": "standard",
+    "sourceUpdatedAt": "2026-02-01T08:05:00Z"
+  },
+  {
+    "externalId": "DBOUT-003",
+    "email": "gamma@example.test",
+    "fullName": "Gamma Test",
+    "segment": "trial",
+    "sourceUpdatedAt": "2026-02-01T08:10:00Z"
+  }
+]

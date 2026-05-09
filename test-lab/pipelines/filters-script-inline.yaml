@@ -1,0 +1,28 @@
+name: filters-script-inline
+version: 1.0.0
+description: Apply an inline JavaScript transform.
+tags:
+  - test-lab
+  - filters
+  - script
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/source/filters/raw
+  dataField: records
+filters:
+  - type: script
+    script: |
+      function transform(record) {
+        record.statusUpper = String(record.status || "").toUpperCase();
+        record.fullLabel = record.id + ":" + record.statusUpper;
+        record.scoreNum = Number(record.score);
+        record.isLargeAmount = Number(record.amount_int) > 50;
+        return record;
+      }
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/filters/script-inline
+  method: POST
+  headers:
+    Content-Type: application/json

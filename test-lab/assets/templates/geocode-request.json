@@ -1,0 +1,5 @@
+{
+  "address": "{{record.address.line1}}",
+  "city": "{{record.address.city}}",
+  "country": "{{record.address.country}}"
+}

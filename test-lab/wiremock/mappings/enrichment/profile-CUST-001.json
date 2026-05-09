@@ -1,0 +1,12 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/enrichment/customers/CUST-001"
+  },
+  "priority": 1,
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "bodyFileName": "enrichment/profile-CUST-001.json"
+  }
+}

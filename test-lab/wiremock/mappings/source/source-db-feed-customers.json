@@ -1,0 +1,13 @@
+{
+  "name": "source-db-feed-customers",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/source/db-feed/customers"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "bodyFileName": "source/db-feed-customers.json"
+  }
+}

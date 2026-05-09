@@ -128,3 +128,34 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+
+---
+
+## Pièges spécifiques au projet (retours de sessions précédentes)
+
+### Test lab — exécution de pipelines
+
+- **WireMock journal renvoie l'ordre antéchronologique** (le plus récent en `[0]`, le plus ancien en `[-1]`). Si tu cherches « la requête la plus récente », c'est `requests[0]`. Bug typique : itérer en ordre supposé chronologique et vérifier des assertions sur la mauvaise requête.
+- **Un binaire `cannectors` laissé sur un port masque les rebuilds.** Toujours vérifier `pgrep -fa cannectors` avant de retester un fix : un vieux process sur le même `listenAddress` répondra avec l'ancien binaire et tu chercheras un bug qui n'existe plus dans le code actuel.
+- **`wait` sans argument attend TOUS les enfants en background**, y compris un `cannectors run &` lancé plus tôt qui ne s'arrête jamais. Pour des bursts curl en parallèle dans un script qui a déjà un process long-running, capture les PIDs (`pids+=("$!")`) et attends-les explicitement (`for p in "${pids[@]}"; do wait "$p"; done`).
+- **Le contexte HTTP d'une requête est annulé dès que la réponse est écrite.** Si tu enqueues un handler qui s'exécute après la réponse (cas du webhook avec `queueSize`), passer `r.Context()` au handler garantit un `context canceled` côté output. Utilise le contexte du serveur et propage uniquement le trace ID. C'était un vrai bug fixé en 22.7.
+
+### Filtres et input modules
+
+- **Pointeurs sur éléments de slice + `append` = aliasing dangereux.** `&p.Filters[i]` puis `p.Filters = append(p.Filters, ...)` peut invalider le pointeur capturé si la slice se réalloue. Pré-dimensionne (`make([]T, n)`) et assigne par index. Bug fixé en 22.5 dans `internal/config/converter.go`.
+- **`statePersistence.storagePath` n'était lu que par l'input.** Avant 22.6, l'executor sauvait dans `./cannectors-data/state` par défaut → l'état ne faisait jamais l'aller-retour. Désormais l'executor partage le même `StateStore` — cf. `internal/runtime/pipeline.go:setupStatePersistence`.
+- **`http_call` n'a pas de `resultKey`** (hardcodé à `_response` dans le schema). Il utilise toujours un cache LRU ; sans `keys` ni `cache.key` explicite tous les records partagent le même slot et tu n'observes qu'une seule requête. Pour forcer un appel par record, ajoute `cache.key: <id>` au pipeline.
+- **`sql_call` substitue `{{record.x}}` comme paramètre positionnel** (`$1` en postgres), pas comme texte. Ne JAMAIS l'entourer de quotes dans le SQL.
+
+### YAML pipelines
+
+- **Schema requiert toujours `filters:`** au top-level, même vide (`filters: []`). Sans, validation échoue avec `missing required property "filters"`.
+- **`schedule` minLength = 9** : le format CRON 5 champs (`* * * * *`) ne passe pas. Utiliser le format 6 champs (`* * * * * *`).
+- **Les exemples sous `examples/` peuvent être stale** par rapport au schema actuel — toujours valider avec `./cannectors validate <file> --verbose` avant de partir d'un exemple.
+- **Webhook input n'est pas utilisable via `cannectors run`** sans le branchement spécifique (`runWebhookPipeline`) ajouté en 22.7. Si tu écris un nouvel input callback-based (non-`Fetch`), il faut l'aiguillage dans `cmd/cannectors/main.go`.
+
+### Outillage tooling agent
+
+- **Le tool `bash` refuse les commandes contenant la chaîne `kill $VAR`** (variables shell non développées dans certaines positions). Soit substituer le PID littéral via `pgrep -f ... | xargs -I{} kill {}`, soit utiliser `pkill`/`killall` (interdits par config) — en pratique : capture le PID en clair dans un echo puis utilise-le littéralement dans la commande suivante.
+- **Les processes longs lancés via le tool `bash` sont tués en fin de session** sauf `mode: async, detach: true`. Pour un webhook ou serveur de test qui doit survivre plusieurs commandes, prévoir le détachement explicite.

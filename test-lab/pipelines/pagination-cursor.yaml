@@ -1,0 +1,25 @@
+name: pagination-cursor
+version: 1.0.0
+description: Cursor pagination scenario against the local lab. Expects 3 cursor iterations of 2 inventory rows.
+tags:
+  - test-lab
+  - pagination
+  - pagination-cursor
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/source/paginated/inventory
+  dataField: data
+  pagination:
+    type: cursor
+    cursorParam: cursor
+    limitParam: page_size
+    limit: 2
+    nextCursorField: next_cursor
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/pagination/inventory
+  method: POST
+  headers:
+    Content-Type: application/json

@@ -1,0 +1,24 @@
+name: state-id
+version: 1.0.0
+description: HTTP polling with ID state persistence (after_id query param on subsequent runs).
+tags:
+  - test-lab
+  - state
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/source/state/events
+  dataField: events
+  statePersistence:
+    id:
+      enabled: true
+      field: event.id
+      queryParam: after_id
+    storagePath: ./test-lab/state
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/state/id
+  method: POST
+  headers:
+    Content-Type: application/json

@@ -1,0 +1,8 @@
+{
+  "page": 3,
+  "total_pages": 3,
+  "data": [
+    { "id": "CUST-005", "email": "alan.turing@example.test", "name": "Alan Turing" },
+    { "id": "CUST-006", "email": "donald.knuth@example.test", "name": "Donald Knuth" }
+  ]
+}

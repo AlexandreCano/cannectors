@@ -1,0 +1,13 @@
+{
+  "name": "destination-pagination-inventory",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/destination/pagination/inventory"
+  },
+  "response": {
+    "status": 202,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "accepted": true, "scenario": "pagination-cursor" }
+  }
+}

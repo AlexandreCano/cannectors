@@ -1,0 +1,20 @@
+name: db-input-parameters
+version: 1.0.0
+description: Read only active customers using a named SQL parameter.
+tags:
+  - test-lab
+  - database
+  - input
+input:
+  type: database
+  connectionString: postgres://cannectors_test:cannectors_test@localhost:15432/cannectors_test?sslmode=disable
+  query: "SELECT external_id, email, full_name FROM source_customers WHERE status = :status ORDER BY id"
+  parameters:
+    status: active
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/db-input/active-customers
+  method: POST
+  headers:
+    Content-Type: application/json

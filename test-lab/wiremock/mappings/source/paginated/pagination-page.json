@@ -1,0 +1,17 @@
+{
+  "name": "source-paginated-page",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/source/paginated/customers",
+    "queryParameters": {
+      "page": { "matches": "[1-3]" }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "bodyFileName": "source/paginated/page-{{request.query.page}}.json",
+    "transformers": ["response-template"]
+  }
+}

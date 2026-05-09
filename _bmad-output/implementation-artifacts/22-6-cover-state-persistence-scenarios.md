@@ -1,6 +1,6 @@
 # Story 22.6: Cover state persistence scenarios
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 

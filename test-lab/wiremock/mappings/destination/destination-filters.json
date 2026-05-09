@@ -1,0 +1,8 @@
+{
+  "request": { "method": "POST", "urlPathPattern": "/destination/filters/.*" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "body": "{\"status\":\"ok\"}"
+  }
+}

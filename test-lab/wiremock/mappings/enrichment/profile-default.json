@@ -1,0 +1,12 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/enrichment/customers/.*"
+  },
+  "priority": 10,
+  "response": {
+    "status": 404,
+    "headers": { "Content-Type": "application/json" },
+    "body": "{\"error\":\"not_found\"}"
+  }
+}

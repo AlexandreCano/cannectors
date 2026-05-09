@@ -1,0 +1,13 @@
+{
+  "name": "destination-pagination-orders",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/destination/pagination/orders"
+  },
+  "response": {
+    "status": 202,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "accepted": true, "scenario": "pagination-offset" }
+  }
+}

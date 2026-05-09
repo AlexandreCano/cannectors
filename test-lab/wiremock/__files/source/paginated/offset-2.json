@@ -1,0 +1,7 @@
+{
+  "total": 6,
+  "data": [
+    { "id": "ORD-1003", "customerId": "CUST-003", "amount": 0.00 },
+    { "id": "ORD-1004", "customerId": "CUST-004", "amount": 19.99 }
+  ]
+}

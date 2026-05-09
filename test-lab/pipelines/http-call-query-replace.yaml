@@ -1,0 +1,27 @@
+name: http-call-query-replace
+version: 1.0.0
+description: Enrich orders by GET /enrichment/segments?customerId=..., replace overlapping fields.
+tags:
+  - test-lab
+  - http_call
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/source/enrichment/orders
+  dataField: orders
+filters:
+  - type: http_call
+    onError: skip
+    endpoint: http://localhost:18080/enrichment/segments
+    method: GET
+    keys:
+      - field: customer.id
+        paramType: query
+        paramName: customerId
+    mergeStrategy: replace
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/enrichment/http-replace
+  method: POST
+  headers:
+    Content-Type: application/json

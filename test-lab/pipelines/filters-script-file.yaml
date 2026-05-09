@@ -1,0 +1,22 @@
+name: filters-script-file
+version: 1.0.0
+description: Apply a JavaScript transform loaded from disk via scriptFile.
+tags:
+  - test-lab
+  - filters
+  - script
+  - script-file
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/source/filters/raw
+  dataField: records
+filters:
+  - type: script
+    scriptFile: test-lab/assets/scripts/normalize.js
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/filters/script-file
+  method: POST
+  headers:
+    Content-Type: application/json

@@ -1,0 +1,27 @@
+name: sql-call-replace
+version: 1.0.0
+description: Replace each order record with the customer reference lookup result.
+tags:
+  - test-lab
+  - sql_call
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/source/enrichment/orders
+  dataField: orders
+filters:
+  - type: sql_call
+    connectionString: postgres://cannectors_test:cannectors_test@localhost:15432/cannectors_test?sslmode=disable
+    driver: postgres
+    query: |
+      SELECT external_id, segment, region, active
+      FROM customer_reference
+      WHERE external_id = {{record.customer.id}}
+      LIMIT 1
+    mergeStrategy: replace
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/enrichment/replace
+  method: POST
+  headers:
+    Content-Type: application/json

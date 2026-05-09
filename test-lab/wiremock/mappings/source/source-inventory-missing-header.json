@@ -1,0 +1,23 @@
+{
+  "name": "source-inventory-missing-header",
+  "priority": 5,
+  "request": {
+    "method": "GET",
+    "urlPath": "/source/inventory",
+    "headers": {
+      "X-Source-Token": {
+        "absent": true
+      }
+    }
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "error": "missing_header",
+      "message": "X-Source-Token is required for /source/inventory"
+    }
+  }
+}

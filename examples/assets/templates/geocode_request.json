@@ -1,0 +1,6 @@
+{
+  "address": "{{record.address.line1}}",
+  "city": "{{record.address.city}}",
+  "postal_code": "{{record.address.postalCode}}",
+  "country": "{{record.address.country | default: \"US\"}}"
+}

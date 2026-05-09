@@ -1,0 +1,31 @@
+name: sql-call-merge-cache
+version: 1.0.0
+description: Enrich records with a SQL lookup and deep merge the result.
+tags:
+  - sql-call
+  - cache
+input:
+  type: httpPolling
+  schedule: "*/30 * * * *"
+  endpoint: https://source.example.com/api/orders
+  dataField: orders
+filters:
+  - type: sql_call
+    connectionStringRef: ${REFERENCE_DATABASE_URL}
+    driver: postgres
+    query: |
+      select segment, account_owner
+      from customer_reference
+      where customer_id = {{record.customer.id}}
+      limit 1
+    mergeStrategy: merge
+    cache:
+      enabled: true
+      maxSize: 2000
+      defaultTTL: 600
+      key: "customer:{{record.customer.id}}"
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/orders/enriched
+  method: POST
+  requestMode: batch

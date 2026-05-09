@@ -1,0 +1,31 @@
+name: database-output-transaction-query-file
+version: 1.0.0
+description: Write records with a SQL query file in a transaction.
+tags:
+  - database-output
+  - transaction
+input:
+  type: httpPolling
+  schedule: "0 * * * *"
+  endpoint: https://source.example.com/api/products
+  dataField: products
+filters:
+  - type: mapping
+    mappings:
+      - source: id
+        target: product_id
+      - source: sku
+        target: sku
+      - source: price
+        target: price
+        transforms:
+          - op: toFloat
+      - source: updated_at
+        target: updated_at
+output:
+  type: database
+  connectionStringRef: ${WAREHOUSE_DATABASE_URL}
+  driver: postgres
+  queryFile: examples/assets/sql/upsert_product.sql
+  transaction: true
+  onError: fail

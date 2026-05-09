@@ -1,0 +1,38 @@
+name: http-polling-page-pagination
+version: 1.0.0
+description: Poll page-number pagination and normalize fields before output.
+tags:
+  - http-polling
+  - pagination
+input:
+  type: httpPolling
+  schedule: "0 */1 * * *"
+  endpoint: https://source.example.com/api/customers
+  dataField: data
+  pagination:
+    type: page
+    pageParam: page
+    limitParam: per_page
+    limit: 100
+    totalPagesField: total_pages
+filters:
+  - type: mapping
+    mappings:
+      - source: id
+        target: customer.id
+        transforms:
+          - op: toString
+      - source: email
+        target: customer.email
+        transforms:
+          - op: trim
+          - op: lowercase
+      - source: name
+        target: customer.name
+        onMissing: useDefault
+        defaultValue: Unknown
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/customers
+  method: POST
+  requestMode: batch

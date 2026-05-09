@@ -1,0 +1,36 @@
+name: database-input-basic-to-http
+version: 1.0.0
+description: Read rows from a database and send them as an HTTP batch.
+tags:
+  - database-input
+  - http-output
+input:
+  type: database
+  connectionStringRef: ${SOURCE_DATABASE_URL}
+  driver: postgres
+  query: |
+    select id, email, updated_at
+    from customers
+    where active = true
+    order by updated_at asc
+filters:
+  - type: mapping
+    mappings:
+      - source: id
+        target: id
+        transforms:
+          - op: toString
+      - source: email
+        target: email
+        transforms:
+          - op: lowercase
+      - source: updated_at
+        target: updatedAt
+        transforms:
+          - op: dateFormat
+            format: YYYY-MM-DDTHH:mm:ss
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/customers/sync
+  method: POST
+  requestMode: batch

@@ -164,12 +164,45 @@ development_status:
   # Epic 20: Test Hygiene & Coverage (from audit 2026-04-21)
   # Couverture des modules sous-testés (sql_call 29%, database 55-68%) + E2E
   # Source: docs/AUDIT_TECHNIQUE_2026-04-21.md §4.1, §4.3, §5 P2.6
-  epic-20: review
-  20-1-raise-sql-call-test-coverage: review
-  20-2-raise-database-modules-test-coverage: review
-  20-3-refactor-mapping-test-fixtures: review
-  20-4-e2e-tests-per-module-combination: review
+  epic-20: done
+  20-1-raise-sql-call-test-coverage: done
+  20-2-raise-database-modules-test-coverage: done
+  20-3-refactor-mapping-test-fixtures: done
+  20-4-e2e-tests-per-module-combination: done
   epic-20-retrospective: optional
+
+  # Epic 21: Local Integration Test Lab Foundation
+  # Infrastructure Docker locale pour tester Cannectors contre WireMock et PostgreSQL
+  # Source: local test lab planning session
+  epic-21: backlog
+  21-1-scaffold-local-docker-test-lab: ready-for-dev
+  21-2-seed-local-test-database: ready-for-dev
+  21-3-add-wiremock-source-api-stubs: ready-for-dev
+  21-4-add-wiremock-destination-api-stubs: ready-for-dev
+  epic-21-retrospective: optional
+
+  # Epic 22: Core Connector Coverage in Local Test Lab
+  # Scénarios d'intégration locaux pour les modules runtime principaux
+  # Source: local test lab planning session
+  epic-22: backlog
+  22-1-cover-http-pagination-scenarios: ready-for-dev
+  22-2-cover-database-input-output-scenarios: ready-for-dev
+  22-3-cover-sql-call-enrichment-scenarios: ready-for-dev
+  22-4-cover-http-call-enrichment-scenarios: ready-for-dev
+  22-5-cover-transformation-filters-scenarios: ready-for-dev
+  22-6-cover-state-persistence-scenarios: ready-for-dev
+  22-7-cover-webhook-input-scenarios: ready-for-dev
+  epic-22-retrospective: optional
+
+  # Epic 23: Reliability, Auth and Test Lab Automation
+  # Authentification, erreurs/retry/timeout, runner local et CI du test lab
+  # Source: local test lab planning session
+  epic-23: backlog
+  23-1-cover-http-authentication-scenarios: ready-for-dev
+  23-2-cover-retry-error-timeout-scenarios: ready-for-dev
+  23-3-build-local-e2e-test-runner: ready-for-dev
+  23-4-add-test-lab-ci-workflow: ready-for-dev
+  epic-23-retrospective: optional
 
   # Epic 4: Advanced Runtime Features (remaining stories - after Epic 14)
   4-5-create-cli-commands-interface: backlog

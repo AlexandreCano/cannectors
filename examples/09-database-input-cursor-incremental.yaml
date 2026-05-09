@@ -1,0 +1,44 @@
+name: database-input-cursor-incremental
+version: 1.0.0
+description: Read database rows incrementally using cursor pagination metadata.
+tags:
+  - database-input
+  - incremental
+input:
+  type: database
+  connectionStringRef: ${SOURCE_DATABASE_URL}
+  driver: postgres
+  query: |
+    select id, customer_id, total, updated_at
+    from orders
+    where updated_at > {{lastRunTimestamp}}
+      and id > :last_id
+    order by id asc
+    limit :limit
+  pagination:
+    type: cursor
+    limit: 200
+    cursorField: id
+    cursorParam: last_id
+  incremental:
+    enabled: true
+    timestampField: updated_at
+    timestampParam: lastRunTimestamp
+    idField: id
+    idParam: last_id
+filters:
+  - type: mapping
+    mappings:
+      - source: id
+        target: order.id
+      - source: customer_id
+        target: order.customerId
+      - source: total
+        target: order.total
+        transforms:
+          - op: toFloat
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/orders
+  method: POST
+  requestMode: batch

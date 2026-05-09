@@ -1,0 +1,19 @@
+{
+  "name": "destination-unmatched-route",
+  "priority": 100,
+  "request": {
+    "method": "ANY",
+    "urlPathPattern": "/destination/.*"
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "accepted": false,
+      "error": "unexpected_destination_route",
+      "message": "No destination stub matched this method, path, query, header, or payload"
+    }
+  }
+}

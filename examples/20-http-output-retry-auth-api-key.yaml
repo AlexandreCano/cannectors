@@ -1,0 +1,46 @@
+name: http-output-retry-auth-api-key
+version: 1.0.0
+description: Send records with API key authentication and output retry handling.
+tags:
+  - http-output
+  - retry
+input:
+  type: httpPolling
+  schedule: "*/5 * * * *"
+  endpoint: https://source.example.com/api/shipments
+  dataField: shipments
+filters:
+  - type: condition
+    expression: id != nil
+    onTrue: continue
+    onFalse: skip
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/shipments
+  method: POST
+  requestMode: batch
+  authentication:
+    type: api-key
+    credentials:
+      key: ${DESTINATION_API_KEY}
+      location: header
+      headerName: X-API-Key
+  retry:
+    maxAttempts: 3
+    delayMs: 500
+    backoffMultiplier: 2
+    maxDelayMs: 5000
+    retryableStatusCodes:
+      - 408
+      - 429
+      - 500
+      - 502
+      - 503
+      - 504
+    useRetryAfterHeader: true
+    retryHintFromBody: body.retryable == true
+  success:
+    statusCodes:
+      - 200
+      - 201
+      - 202

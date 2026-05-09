@@ -1,0 +1,41 @@
+name: http-output-single-template
+version: 1.0.0
+description: Send one templated HTTP request per record with path, query, and header keys.
+tags:
+  - http-output
+  - body-template
+input:
+  type: httpPolling
+  schedule: "*/10 * * * *"
+  endpoint: https://source.example.com/api/tasks
+  dataField: tasks
+filters:
+  - type: remove
+    targets:
+      - internal
+      - debug
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/projects/{projectId}/tasks/{{record.id}}
+  method: PUT
+  requestMode: single
+  bodyTemplateFile: examples/assets/templates/task_update.json
+  queryParams:
+    source: cannectors
+  keys:
+    - field: project.id
+      paramType: path
+      paramName: projectId
+    - field: updatedAt
+      paramType: query
+      paramName: updated_at
+    - field: tenantId
+      paramType: header
+      paramName: X-Tenant-Id
+  headers:
+    Content-Type: application/json
+    X-Trace-Source: "{{record.source | default: \"unknown\"}}"
+  success:
+    statusCodes:
+      - 200
+      - 204

@@ -1,0 +1,20 @@
+{
+  "name": "source-inventory-authorized-header",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/source/inventory",
+    "headers": {
+      "X-Source-Token": {
+        "equalTo": "local-source-token"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "source/inventory.json"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "source-inventory-invalid-header",
+  "priority": 10,
+  "request": {
+    "method": "GET",
+    "urlPath": "/source/inventory"
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "error": "invalid_header",
+      "message": "X-Source-Token must match the local test token"
+    }
+  }
+}

@@ -1,0 +1,76 @@
+name: mapping-transforms-all
+version: 1.0.0
+description: Demonstrate every mapping transform implemented by the mapping filter.
+tags:
+  - mapping
+  - transforms
+input:
+  type: httpPolling
+  schedule: "0 * * * *"
+  endpoint: https://source.example.com/api/raw-records
+  dataField: records
+filters:
+  - type: mapping
+    onError: log
+    mappings:
+      - source: name
+        target: name
+        transforms:
+          - op: trim
+          - op: uppercase
+      - source: email
+        target: email
+        transforms:
+          - op: trim
+          - op: lowercase
+      - source: phone
+        target: phone
+        transforms:
+          - op: replace
+            pattern: "[^0-9+]"
+            replacement: ""
+      - source: created_at
+        target: createdDate
+        transforms:
+          - op: dateFormat
+            format: YYYY-MM-DD
+      - source: amount
+        target: amountInt
+        transforms:
+          - op: toInt
+      - source: score
+        target: scoreFloat
+        transforms:
+          - op: toFloat
+      - source: active
+        target: active
+        transforms:
+          - op: toBool
+      - source: tags_csv
+        target: tags
+        transforms:
+          - op: split
+            separator: ","
+      - source: tag_list
+        target: tagString
+        transforms:
+          - op: join
+            separator: "|"
+      - source: external_id
+        target: externalId
+        transforms:
+          - op: toString
+      - source: payload
+        target: payloadArray
+        transforms:
+          - op: toArray
+      - source: attributes
+        target: attributes
+        transforms:
+          - op: toObject
+      - target: deprecatedField
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/normalized-records
+  method: POST
+  requestMode: batch

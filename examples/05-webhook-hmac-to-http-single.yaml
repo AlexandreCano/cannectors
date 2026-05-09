@@ -1,0 +1,32 @@
+name: webhook-hmac-to-http-single
+version: 1.0.0
+description: Receive signed webhook payloads and forward each record separately.
+tags:
+  - webhook
+  - hmac
+input:
+  type: webhook
+  path: /webhooks/orders
+  listenAddress: 0.0.0.0:8080
+  dataField: orders
+  signature:
+    type: hmac-sha256
+    header: X-Webhook-Signature
+    secret: ${WEBHOOK_SECRET}
+filters:
+  - type: set
+    target: metadata.received_by
+    value: cannectors
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/orders/{orderId}
+  method: PATCH
+  requestMode: single
+  keys:
+    - field: id
+      paramType: path
+      paramName: orderId
+  success:
+    statusCodes:
+      - 200
+      - 204

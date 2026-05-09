@@ -1,0 +1,35 @@
+{
+  "inventory": [
+    {
+      "sku": "SKU-001",
+      "warehouse": "east",
+      "quantityAvailable": 12,
+      "reorderPoint": 5,
+      "updatedAt": "2026-01-03T08:00:00Z"
+    },
+    {
+      "sku": "SKU-002",
+      "warehouse": "east",
+      "quantityAvailable": 0,
+      "reorderPoint": 10,
+      "updatedAt": "2026-01-03T08:05:00Z",
+      "scenario": "out-of-stock"
+    },
+    {
+      "sku": "SKU-003",
+      "warehouse": "west",
+      "quantityAvailable": null,
+      "reorderPoint": 2,
+      "updatedAt": "2026-01-03T08:10:00Z",
+      "scenario": "missing-quantity"
+    },
+    {
+      "sku": "SKU-BROKEN",
+      "warehouse": "east",
+      "quantityAvailable": -5,
+      "reorderPoint": 1,
+      "updatedAt": "2026-01-03T08:20:00Z",
+      "scenario": "controlled-check-violation"
+    }
+  ]
+}

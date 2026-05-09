@@ -1,0 +1,145 @@
+# Cannectors local test lab
+
+This directory contains a Docker Compose lab for local integration testing. It is for development and tests only; credentials, ports, and volumes are intentionally isolated from production.
+
+## Prerequisites
+
+- Docker Engine with Docker Compose v2
+- `make`
+- `curl` for manual HTTP checks
+- Optional: `psql` if you want to inspect PostgreSQL from the host
+
+## Services and ports
+
+| Service | Host port | Container port | Notes |
+| --- | ---: | ---: | --- |
+| WireMock | `18080` | `8080` | Source and destination HTTP stubs |
+| PostgreSQL | `15432` | `5432` | Local database seeded at startup |
+
+PostgreSQL local credentials:
+
+```text
+database: cannectors_test
+user: cannectors_test
+password: cannectors_test
+connection string: postgres://cannectors_test:cannectors_test@localhost:15432/cannectors_test?sslmode=disable
+```
+
+## Commands
+
+```bash
+make test-lab-up
+make test-lab-down
+make test-lab-reset
+```
+
+`test-lab-up` starts WireMock and PostgreSQL and waits for Compose healthchecks. `test-lab-reset` removes the PostgreSQL volume, recreates both services, reloads WireMock mappings from disk, and resets the WireMock request journal.
+
+Additional helpers:
+
+```bash
+make test-lab-db-reset
+make test-lab-requests
+make test-lab-requests-reset
+```
+
+## Readiness checks
+
+```bash
+docker compose -f test-lab/docker-compose.yml ps
+curl -fsS http://localhost:18080/__admin/mappings
+docker compose -f test-lab/docker-compose.yml exec -T postgres pg_isready -U cannectors_test -d cannectors_test
+```
+
+## Source API stubs
+
+These endpoints support `httpPolling` scenarios.
+
+| Scenario | Request | Shape |
+| --- | --- | --- |
+| Root array customers | `GET /source/customers` | JSON array at response root |
+| Nested orders | `GET /source/orders` | JSON object with records in `orders` |
+| Header-protected inventory | `GET /source/inventory` with `X-Source-Token: local-source-token` | JSON object with records in `inventory` |
+
+Manual checks:
+
+```bash
+curl -fsS http://localhost:18080/source/customers
+curl -fsS http://localhost:18080/source/orders
+curl -fsS -H 'X-Source-Token: local-source-token' http://localhost:18080/source/inventory
+curl -i http://localhost:18080/source/inventory
+```
+
+Example nested response shape for `dataField: orders`:
+
+```json
+{
+  "meta": {
+    "scenario": "orders-data-field"
+  },
+  "orders": [
+    {
+      "id": "ORD-1001",
+      "customerId": "CUST-001"
+    }
+  ]
+}
+```
+
+## Destination API stubs
+
+These endpoints support `httpRequest` batch and single-record scenarios. WireMock records all matched and unmatched requests in its request journal.
+
+Batch imports:
+
+```bash
+curl -fsS -X POST http://localhost:18080/destination/customers/import \
+  -H 'Content-Type: application/json' \
+  -d '[{"id":"CUST-001","email":"ada.lovelace@example.test"}]'
+
+curl -fsS -X POST http://localhost:18080/destination/orders/import \
+  -H 'Content-Type: application/json' \
+  -d '[{"id":"ORD-1001","customerId":"CUST-001"}]'
+
+curl -fsS -X POST http://localhost:18080/destination/inventory/import \
+  -H 'Content-Type: application/json' \
+  -d '[{"sku":"SKU-001","warehouse":"east"}]'
+```
+
+Single-record matching examples:
+
+```bash
+curl -fsS -X PUT 'http://localhost:18080/destination/customers/CUST-001?source=cannectors' \
+  -H 'Content-Type: application/json' \
+  -H 'X-Tenant-Id: tenant-local' \
+  -d '{"email":"ada.lovelace@example.test"}'
+
+curl -fsS -X PATCH 'http://localhost:18080/destination/orders/ORD-1001/status?notify=true' \
+  -H 'Content-Type: application/json' \
+  -H 'X-Trace-Id: local-trace-001' \
+  -d '{"status":"synced"}'
+
+curl -fsS -X PUT 'http://localhost:18080/destination/inventory/SKU-001?warehouse=east' \
+  -H 'Content-Type: application/json' \
+  -H 'X-Sync-Mode: incremental' \
+  -d '{"quantityAvailable":12}'
+```
+
+Inspect and reset captured destination requests:
+
+```bash
+curl -fsS http://localhost:18080/__admin/requests
+curl -fsS -X DELETE http://localhost:18080/__admin/requests
+```
+
+## PostgreSQL seed data
+
+The schema is created by `postgres/init/001_schema.sql`; deterministic rows are inserted by `postgres/init/002_seed.sql`. `postgres/reset.sql` truncates and reseeds all local test tables.
+
+Tables:
+
+- Source: `source_customers`, `source_orders`, `source_inventory`
+- Destination: `dest_customers`, `dest_orders`, `inventory_snapshot`
+- Reference: `customer_reference`, `product_reference`
+
+The seed data includes nominal rows, nullable fields, pagination and incremental timestamps, missing-reference rows, duplicate destination keys, and rows that can trigger controlled destination check constraint failures.

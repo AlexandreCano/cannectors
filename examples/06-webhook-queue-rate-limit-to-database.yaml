@@ -1,0 +1,39 @@
+name: webhook-queue-rate-limit-to-database
+version: 1.0.0
+description: Receive queued webhooks with rate limiting and insert records into SQL.
+tags:
+  - webhook
+  - database-output
+input:
+  type: webhook
+  path: /webhooks/leads
+  listenAddress: 0.0.0.0:8081
+  dataField: leads
+  queueSize: 500
+  maxConcurrent: 4
+  rateLimit:
+    requestsPerSecond: 20
+    burst: 40
+filters:
+  - type: mapping
+    onError: skip
+    mappings:
+      - source: id
+        target: lead_id
+      - source: email
+        target: email
+        transforms:
+          - op: trim
+          - op: lowercase
+      - source: source
+        target: source
+        onMissing: useDefault
+        defaultValue: webhook
+output:
+  type: database
+  connectionStringRef: ${CRM_DATABASE_URL}
+  driver: postgres
+  query: |
+    insert into leads (lead_id, email, source)
+    values ({{record.lead_id}}, {{record.email}}, {{record.source}})
+  transaction: true

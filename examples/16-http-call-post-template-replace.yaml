@@ -1,0 +1,30 @@
+name: http-call-post-template-replace
+version: 1.0.0
+description: Use POST enrichment with a body template and replace overlapping response fields.
+tags:
+  - http-call
+  - body-template
+input:
+  type: httpPolling
+  schedule: "0 * * * *"
+  endpoint: https://source.example.com/api/addresses
+  dataField: addresses
+filters:
+  - type: http_call
+    endpoint: https://geo.example.com/api/normalize
+    method: POST
+    headers:
+      X-Request-Source: cannectors
+    bodyTemplateFile: examples/assets/templates/geocode_request.json
+    dataField: result
+    mergeStrategy: replace
+    cache:
+      enabled: true
+      maxSize: 5000
+      defaultTTL: 86400
+      key: address.hash
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/addresses/normalized
+  method: POST
+  requestMode: batch

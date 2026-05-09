@@ -1,0 +1,26 @@
+name: script-inline-transform
+version: 1.0.0
+description: Transform records using inline JavaScript.
+tags:
+  - script
+  - inline
+input:
+  type: httpPolling
+  schedule: "0 * * * *"
+  endpoint: https://source.example.com/api/subscriptions
+  dataField: subscriptions
+filters:
+  - type: script
+    onError: skip
+    script: |
+      function transform(record) {
+        record.normalizedStatus = String(record.status || "").toLowerCase();
+        record.isActive = record.normalizedStatus === "active";
+        record.planCode = String(record.plan || "unknown").toUpperCase();
+        return record;
+      }
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/subscriptions
+  method: POST
+  requestMode: batch

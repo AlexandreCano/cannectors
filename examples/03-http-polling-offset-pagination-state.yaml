@@ -1,0 +1,39 @@
+name: http-polling-offset-pagination-state
+version: 1.0.0
+description: Poll offset pagination with timestamp and ID state persistence.
+tags:
+  - http-polling
+  - state
+input:
+  type: httpPolling
+  schedule: "*/10 * * * *"
+  endpoint: https://source.example.com/api/events
+  dataField: events
+  pagination:
+    type: offset
+    offsetParam: offset
+    limitParam: limit
+    limit: 250
+    totalField: total
+  statePersistence:
+    timestamp:
+      enabled: true
+      queryParam: updated_after
+    id:
+      enabled: true
+      field: event.id
+      queryParam: after_id
+    storagePath: ./.cannectors-state
+filters:
+  - type: set
+    target: metadata.source
+    value: events-api
+  - type: remove
+    targets:
+      - debug
+      - internal.notes
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/events
+  method: POST
+  requestMode: batch

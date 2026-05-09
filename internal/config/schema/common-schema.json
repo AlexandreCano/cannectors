@@ -291,7 +291,6 @@
 		"databaseConnectionConfig": {
 			"type": "object",
 			"description": "Database connection configuration. Supports PostgreSQL, MySQL, SQLite.",
-			"additionalProperties": false,
 			"properties": {
 				"connectionString": {
 					"type": "string",

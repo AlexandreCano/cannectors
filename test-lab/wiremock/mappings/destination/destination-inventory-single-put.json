@@ -1,0 +1,30 @@
+{
+  "name": "destination-inventory-single-put-path-query-header",
+  "priority": 1,
+  "request": {
+    "method": "PUT",
+    "urlPathPattern": "/destination/inventory/[^/]+",
+    "queryParameters": {
+      "warehouse": {
+        "matches": "[a-z-]+"
+      }
+    },
+    "headers": {
+      "X-Sync-Mode": {
+        "matches": "full|incremental"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "accepted": true,
+      "resource": "inventory",
+      "mode": "single",
+      "matched": "path-query-header"
+    }
+  }
+}

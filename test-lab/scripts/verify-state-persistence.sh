@@ -53,9 +53,10 @@ run_scenario() {
   check "first run: no state query params" "! echo '$first' | grep -qE 'updated_after|after_id'"
 
   bash "$RUN" "$pipeline" 30 > /dev/null 2>&1
+  # WireMock returns requests in reverse chronological order, so source_url 0
+  # is the most recent request — i.e. the second run we just executed.
   local second
-  second="$(source_url 0)"  # journal was reset before run #1; run #2 keeps both. Take last.
-  second="$(curl -s $WM/__admin/requests | python3 -c "import json,sys; d=json.load(sys.stdin); reqs=[r['request']['url'] for r in d['requests'] if r['request']['url'].startswith('/source/state/events')]; print(reqs[0] if reqs else '')")"
+  second="$(source_url 0)"
   check "second run: source request received" "[ -n \"$second\" ]"
   echo "    second URL: $second"
 }

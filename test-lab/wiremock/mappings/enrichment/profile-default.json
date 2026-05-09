@@ -3,7 +3,7 @@
     "method": "GET",
     "urlPathPattern": "/enrichment/customers/.*"
   },
-  "priority": 5,
+  "priority": 10,
   "response": {
     "status": 404,
     "headers": { "Content-Type": "application/json" },

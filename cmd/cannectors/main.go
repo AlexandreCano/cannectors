@@ -15,6 +15,7 @@ import (
 	// Database drivers registered with database/sql for the CLI binary. Each
 	// blank import calls sql.Register in its init() so that cfg-driven module
 	// runs against PostgreSQL/MySQL/SQLite work out of the box.
+	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 
@@ -247,10 +248,15 @@ func runPipeline(_ *cobra.Command, args []string) {
 		return
 	}
 
-	// Webhook inputs are callback-based: they expose Start(ctx, handler) and
-	// don't fit the Fetch-based one-shot/scheduler flow. Detect by input type
-	// and route to the dedicated long-running runner.
-	if pipeline.Input != nil && pipeline.Input.Type == "webhook" && !dryRun {
+	// Webhook inputs are callback-based (no Fetch); dry-run has no meaning
+	// since there is no source data to materialize. Surface a clear error
+	// instead of silently falling through to runPipelineOnce.
+	if pipeline.Input != nil && pipeline.Input.Type == "webhook" {
+		if dryRun {
+			fmt.Fprintln(os.Stderr, "✗ webhook input is not supported in dry-run mode")
+			fmt.Fprintln(os.Stderr, "  Webhooks are event-driven: there is no source payload to materialize without a live HTTP request.")
+			os.Exit(ExitValidationError)
+		}
 		runWebhookPipeline(pipeline)
 		return
 	}

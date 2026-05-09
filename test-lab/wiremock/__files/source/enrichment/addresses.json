@@ -1,0 +1,6 @@
+{
+  "addresses": [
+    { "id": "ADDR-1", "address": { "line1": "1 rue Test", "city": "Paris", "country": "FR" } },
+    { "id": "ADDR-2", "address": { "line1": "2 av Lab", "city": "Lyon", "country": "FR" } }
+  ]
+}

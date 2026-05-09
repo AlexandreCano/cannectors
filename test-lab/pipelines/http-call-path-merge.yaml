@@ -1,0 +1,33 @@
+name: http-call-path-merge
+version: 1.0.0
+description: Enrich orders by GET /enrichment/customers/{id}, deep-merge response into the record (cache enabled).
+tags:
+  - test-lab
+  - http_call
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/source/enrichment/orders
+  dataField: orders
+filters:
+  - type: http_call
+    onError: skip
+    endpoint: http://localhost:18080/enrichment/customers/{customerId}
+    method: GET
+    keys:
+      - field: customer.id
+        paramType: path
+        paramName: customerId
+    dataField: profile
+    mergeStrategy: merge
+    cache:
+      enabled: true
+      maxSize: 100
+      defaultTTL: 60
+      key: customer.id
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/enrichment/http-merge
+  method: POST
+  headers:
+    Content-Type: application/json

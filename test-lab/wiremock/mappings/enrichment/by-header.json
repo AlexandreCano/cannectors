@@ -1,0 +1,16 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/enrichment/by-header",
+    "headers": {
+      "X-Customer-Id": { "matches": ".+" }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "permissions": ["read", "write"]
+    }
+  }
+}

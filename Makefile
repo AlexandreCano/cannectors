@@ -119,6 +119,10 @@ test-lab-verify-database: ## Run database input/output scenarios (story 22.2)
 test-lab-verify-sql-call: ## Run sql_call enrichment scenarios (story 22.3)
 	bash test-lab/scripts/verify-sql-call.sh
 
+.PHONY: test-lab-verify-http-call
+test-lab-verify-http-call: ## Run http_call enrichment scenarios (story 22.4)
+	bash test-lab/scripts/verify-http-call.sh
+
 ##@ Code Quality
 
 .PHONY: fmt

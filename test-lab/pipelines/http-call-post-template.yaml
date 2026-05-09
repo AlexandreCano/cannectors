@@ -1,0 +1,30 @@
+name: http-call-post-template
+version: 1.0.0
+description: Enrich addresses by POST /enrichment/geocode with a body template, replace overlapping fields.
+tags:
+  - test-lab
+  - http_call
+  - body-template
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/source/enrichment/addresses
+  dataField: addresses
+filters:
+  - type: http_call
+    onError: skip
+    endpoint: http://localhost:18080/enrichment/geocode
+    method: POST
+    headers:
+      Content-Type: application/json
+    bodyTemplateFile: test-lab/assets/templates/geocode-request.json
+    dataField: result
+    mergeStrategy: replace
+    cache:
+      key: id
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/enrichment/http-post
+  method: POST
+  headers:
+    Content-Type: application/json

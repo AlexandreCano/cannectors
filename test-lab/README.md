@@ -212,3 +212,16 @@ Four pipelines exercise the `sql_call` filter against the seeded `customer_refer
 | `sql-call-query-file.yaml` | `merge` | same lookup as `sql-call-merge` but query loaded from `test-lab/assets/sql/customer-lookup.sql` |
 
 Run with `test-lab/scripts/verify-sql-call.sh` (or `make test-lab-verify-sql-call`). The script re-issues each pipeline and asserts the resulting destination payloads carry the expected enriched fields, including the empty-result case where no SQL row matches.
+
+### `http_call` enrichment (story 22.4)
+
+Four pipelines exercise the `http_call` filter against WireMock enrichment stubs.
+
+| Pipeline | Strategy | What it covers |
+| --- | --- | --- |
+| `http-call-path-merge.yaml` | `merge` | path key (`{customerId}`), `dataField`, cache deduplicates on `customer.id`, `onError=skip` for the 404 case |
+| `http-call-query-replace.yaml` | `replace` | query key (`?customerId=...`), shallow overwrite |
+| `http-call-header-append.yaml` | `append` | header key (`X-Customer-Id`), response stored under `_response` |
+| `http-call-post-template.yaml` | `replace` | POST with `bodyTemplateFile`, per-record cache key |
+
+Run `make test-lab-verify-http-call` (or `bash test-lab/scripts/verify-http-call.sh`). Assertions cover the WireMock journal (request count after caching, headers received) and the enriched payloads forwarded to the destination.

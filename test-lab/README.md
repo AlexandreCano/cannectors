@@ -134,7 +134,7 @@ curl -fsS -X DELETE http://localhost:18080/__admin/requests
 
 ## PostgreSQL seed data
 
-The schema is created by `postgres/init/001_schema.sql`; deterministic rows are inserted by `postgres/init/002_seed.sql`. `postgres/reset.sql` truncates and reseeds all local test tables.
+The schema is created by `postgres/init/001_schema.sql`; deterministic rows are inserted by `postgres/init/002_seed.sql`. The seed file is insert-only. For resets, `make test-lab-db-reset` runs `postgres/reset.sql` first and then replays `postgres/init/002_seed.sql`.
 
 Tables:
 

@@ -1,14 +1,3 @@
-TRUNCATE TABLE
-    inventory_snapshot,
-    dest_orders,
-    dest_customers,
-    product_reference,
-    customer_reference,
-    source_inventory,
-    source_orders,
-    source_customers
-RESTART IDENTITY CASCADE;
-
 INSERT INTO source_customers (id, external_id, email, full_name, status, phone, updated_at, created_at, metadata) VALUES
     (1, 'CUST-001', 'ada.lovelace@example.test', 'Ada Lovelace', 'active', '+1-555-0101', '2026-01-01T10:00:00Z', '2025-12-01T08:00:00Z', '{"plan":"pro","source":"erp"}'),
     (2, 'CUST-002', 'grace.hopper@example.test', 'Grace Hopper', 'active', NULL, '2026-01-01T10:05:00Z', '2025-12-02T08:00:00Z', '{"plan":"enterprise","source":"crm"}'),

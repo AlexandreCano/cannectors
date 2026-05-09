@@ -1,5 +1,5 @@
--- Truncate all test-lab tables and reseed from 002_seed.sql.
--- This file is kept minimal to avoid duplicating seed data.
+-- Canonical cleanup step for deterministic database resets.
+-- Seed rows live only in init/002_seed.sql to avoid duplicating seed data.
 -- Usage: cat reset.sql 002_seed.sql | psql ...
 TRUNCATE TABLE
     inventory_snapshot,

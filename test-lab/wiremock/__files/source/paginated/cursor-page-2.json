@@ -1,0 +1,7 @@
+{
+  "next_cursor": "cursor-page-3",
+  "data": [
+    { "id": "INV-003", "sku": "SKU-003", "warehouse": "west", "quantity": 5 },
+    { "id": "INV-004", "sku": "SKU-004", "warehouse": "west", "quantity": 50 }
+  ]
+}

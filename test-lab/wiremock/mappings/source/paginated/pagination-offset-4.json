@@ -1,0 +1,17 @@
+{
+  "name": "source-paginated-offset-4",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/source/paginated/orders",
+    "queryParameters": {
+      "offset": { "equalTo": "4" },
+      "limit": { "equalTo": "2" }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "bodyFileName": "source/paginated/offset-4.json"
+  }
+}

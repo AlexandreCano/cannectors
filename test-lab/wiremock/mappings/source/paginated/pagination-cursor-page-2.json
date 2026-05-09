@@ -1,0 +1,16 @@
+{
+  "name": "source-paginated-cursor-page-2",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/source/paginated/inventory",
+    "queryParameters": {
+      "cursor": { "equalTo": "cursor-page-2" }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "bodyFileName": "source/paginated/cursor-page-2.json"
+  }
+}

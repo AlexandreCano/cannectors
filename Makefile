@@ -103,6 +103,14 @@ test-lab-requests: ## List requests captured by WireMock
 test-lab-requests-reset: ## Clear WireMock request journal
 	curl -fsS -X DELETE http://localhost:18080/__admin/requests
 
+.PHONY: test-lab-mappings-reload
+test-lab-mappings-reload: ## Reload WireMock stub mappings from disk
+	curl -fsS -X POST http://localhost:18080/__admin/mappings/reset >/dev/null
+
+.PHONY: test-lab-verify-pagination
+test-lab-verify-pagination: ## Run HTTP pagination scenarios (story 22.1)
+	bash test-lab/scripts/verify-pagination.sh
+
 ##@ Code Quality
 
 .PHONY: fmt

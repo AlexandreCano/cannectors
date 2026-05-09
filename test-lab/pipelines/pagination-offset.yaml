@@ -1,0 +1,25 @@
+name: pagination-offset
+version: 1.0.0
+description: Offset/limit pagination scenario against the local lab. Expects 3 pages of 2 orders each.
+tags:
+  - test-lab
+  - pagination
+  - pagination-offset
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/source/paginated/orders
+  dataField: data
+  pagination:
+    type: offset
+    offsetParam: offset
+    limitParam: limit
+    limit: 2
+    totalField: total
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/pagination/orders
+  method: POST
+  headers:
+    Content-Type: application/json

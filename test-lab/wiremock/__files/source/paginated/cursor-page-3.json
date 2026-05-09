@@ -1,0 +1,7 @@
+{
+  "next_cursor": "",
+  "data": [
+    { "id": "INV-005", "sku": "SKU-BROKEN", "warehouse": "east", "quantity": 0 },
+    { "id": "INV-006", "sku": "SKU-002", "warehouse": "central", "quantity": 7 }
+  ]
+}

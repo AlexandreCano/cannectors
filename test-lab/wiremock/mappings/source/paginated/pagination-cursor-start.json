@@ -1,0 +1,16 @@
+{
+  "name": "source-paginated-cursor-start",
+  "priority": 2,
+  "request": {
+    "method": "GET",
+    "urlPath": "/source/paginated/inventory",
+    "queryParameters": {
+      "cursor": { "absent": true }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "bodyFileName": "source/paginated/cursor-start.json"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "destination-pagination-customers",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/destination/pagination/customers"
+  },
+  "response": {
+    "status": 202,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "accepted": true, "scenario": "pagination-page" }
+  }
+}

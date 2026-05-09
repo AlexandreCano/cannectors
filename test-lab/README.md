@@ -143,3 +143,34 @@ Tables:
 - Reference: `customer_reference`, `product_reference`
 
 The seed data includes nominal rows, nullable fields, pagination and incremental timestamps, missing-reference rows, duplicate destination keys, and rows that can trigger controlled destination check constraint failures.
+
+## Scenario pipelines
+
+Pipelines that exercise the lab live under `test-lab/pipelines/`. Each pipeline targets WireMock at `http://localhost:18080` and PostgreSQL at `localhost:15432` and is validated by the canonical schema.
+
+All pipelines use the CRON expression `* * * * * *` (every second) so that the helper script `test-lab/scripts/run-pipeline-once.sh` can start the binary, wait for the first `execution completed` event, and SIGTERM the process.
+
+```bash
+# Run a pipeline once and dump its logs:
+test-lab/scripts/run-pipeline-once.sh test-lab/pipelines/pagination-page.yaml
+```
+
+### HTTP pagination (story 22.1)
+
+Three pipelines validate the three pagination strategies of `httpPolling` against deterministic WireMock stubs.
+
+| Pipeline | Pagination type | Source endpoint | Expected pages |
+| --- | --- | --- | --- |
+| `pagination-page.yaml` | `page` | `GET /source/paginated/customers` | 3 pages of 2 customers |
+| `pagination-offset.yaml` | `offset` | `GET /source/paginated/orders` | 3 pages of 2 orders |
+| `pagination-cursor.yaml` | `cursor` | `GET /source/paginated/inventory` | 3 cursor iterations of 2 inventory rows |
+
+Run all three with the helper script:
+
+```bash
+make test-lab-up
+make test-lab-requests-reset
+test-lab/scripts/verify-pagination.sh
+```
+
+The script asserts the number of GET requests on each source endpoint, that the destination batch endpoint received the records in deterministic order, and that the polling loop terminates without running forever.

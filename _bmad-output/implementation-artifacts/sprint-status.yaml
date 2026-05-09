@@ -174,18 +174,18 @@ development_status:
   # Epic 21: Local Integration Test Lab Foundation
   # Infrastructure Docker locale pour tester Cannectors contre WireMock et PostgreSQL
   # Source: local test lab planning session
-  epic-21: backlog
-  21-1-scaffold-local-docker-test-lab: ready-for-dev
-  21-2-seed-local-test-database: ready-for-dev
-  21-3-add-wiremock-source-api-stubs: ready-for-dev
-  21-4-add-wiremock-destination-api-stubs: ready-for-dev
+  epic-21: done
+  21-1-scaffold-local-docker-test-lab: done
+  21-2-seed-local-test-database: done
+  21-3-add-wiremock-source-api-stubs: done
+  21-4-add-wiremock-destination-api-stubs: done
   epic-21-retrospective: optional
 
   # Epic 22: Core Connector Coverage in Local Test Lab
   # Scénarios d'intégration locaux pour les modules runtime principaux
   # Source: local test lab planning session
   epic-22: backlog
-  22-1-cover-http-pagination-scenarios: ready-for-dev
+  22-1-cover-http-pagination-scenarios: done
   22-2-cover-database-input-output-scenarios: ready-for-dev
   22-3-cover-sql-call-enrichment-scenarios: ready-for-dev
   22-4-cover-http-call-enrichment-scenarios: ready-for-dev

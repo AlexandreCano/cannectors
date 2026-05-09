@@ -4,6 +4,7 @@ package filter
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -103,6 +104,55 @@ type NestedModuleConfig struct {
 	OnError    string                `json:"onError,omitempty"`
 	Then       []*NestedModuleConfig `json:"then,omitempty"`
 	Else       []*NestedModuleConfig `json:"else,omitempty"`
+}
+
+// UnmarshalJSON preserves the top-level filter shape for nested condition
+// modules. Known routing fields stay on NestedModuleConfig; every other field
+// is treated as module-specific configuration and passed through Config.
+func (c *NestedModuleConfig) UnmarshalJSON(data []byte) error {
+	type nestedModuleConfigAlias NestedModuleConfig
+
+	var known nestedModuleConfigAlias
+	if err := json.Unmarshal(data, &known); err != nil {
+		return err
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	*c = NestedModuleConfig(known)
+	if c.Config == nil {
+		c.Config = make(map[string]any)
+	}
+
+	for key, valueRaw := range raw {
+		if isNestedModuleStructuralField(key) {
+			continue
+		}
+
+		var value any
+		if err := json.Unmarshal(valueRaw, &value); err != nil {
+			return fmt.Errorf("parsing nested module field %q: %w", key, err)
+		}
+		c.Config[key] = value
+	}
+
+	if len(c.Config) == 0 {
+		c.Config = nil
+	}
+
+	return nil
+}
+
+func isNestedModuleStructuralField(key string) bool {
+	switch key {
+	case "type", "config", "mappings", "expression", "lang", "onTrue", "onFalse", "onError", "then", "else":
+		return true
+	default:
+		return false
+	}
 }
 
 // ConditionModule implements conditional filtering and routing.

@@ -1,0 +1,31 @@
+name: http-call-get-merge-cache
+version: 1.0.0
+description: Enrich each record with an HTTP GET response and merge it recursively.
+tags:
+  - http-call
+  - cache
+input:
+  type: httpPolling
+  schedule: "*/20 * * * *"
+  endpoint: https://source.example.com/api/orders
+  dataField: orders
+filters:
+  - type: http_call
+    endpoint: https://profiles.example.com/api/customers/{customerId}
+    method: GET
+    keys:
+      - field: customer.id
+        paramType: path
+        paramName: customerId
+    dataField: profile
+    mergeStrategy: merge
+    cache:
+      enabled: true
+      maxSize: 10000
+      defaultTTL: 900
+      key: customer.id
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/orders/enriched
+  method: POST
+  requestMode: batch

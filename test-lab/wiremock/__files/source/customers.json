@@ -1,0 +1,34 @@
+[
+  {
+    "id": "CUST-001",
+    "email": "ada.lovelace@example.test",
+    "fullName": "Ada Lovelace",
+    "status": "active",
+    "updatedAt": "2026-01-01T10:00:00Z",
+    "optionalPhone": "+1-555-0101"
+  },
+  {
+    "id": "CUST-002",
+    "email": "grace.hopper@example.test",
+    "fullName": "Grace Hopper",
+    "status": "active",
+    "updatedAt": "2026-01-01T10:05:00Z",
+    "optionalPhone": null
+  },
+  {
+    "id": "CUST-003",
+    "email": null,
+    "fullName": "Null Email Customer",
+    "status": "pending",
+    "updatedAt": "2026-01-01T10:10:00Z",
+    "scenario": "missing-email"
+  },
+  {
+    "id": "CUST-004",
+    "email": "duplicate@example.test",
+    "fullName": "Duplicate Email Candidate",
+    "status": "active",
+    "updatedAt": "2026-01-01T10:15:00Z",
+    "scenario": "dest-unique-violation"
+  }
+]

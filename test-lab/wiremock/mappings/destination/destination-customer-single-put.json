@@ -1,0 +1,30 @@
+{
+  "name": "destination-customer-single-put-path-query-header",
+  "priority": 1,
+  "request": {
+    "method": "PUT",
+    "urlPathPattern": "/destination/customers/[^/]+",
+    "queryParameters": {
+      "source": {
+        "equalTo": "cannectors"
+      }
+    },
+    "headers": {
+      "X-Tenant-Id": {
+        "matches": ".+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "accepted": true,
+      "resource": "customers",
+      "mode": "single",
+      "matched": "path-query-header"
+    }
+  }
+}

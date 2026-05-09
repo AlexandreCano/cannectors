@@ -1,0 +1,19 @@
+name: script-file-transform
+version: 1.0.0
+description: Transform records with a JavaScript file referenced by scriptFile.
+tags:
+  - script
+  - script-file
+input:
+  type: httpPolling
+  schedule: "0 */2 * * *"
+  endpoint: https://source.example.com/api/customers
+  dataField: customers
+filters:
+  - type: script
+    scriptFile: examples/assets/scripts/customer_enrichment.js
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/customers/enriched
+  method: POST
+  requestMode: batch

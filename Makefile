@@ -22,6 +22,7 @@ GOVET=$(GOCMD) vet
 CMD_DIR=./cmd/cannectors
 BIN_DIR=./bin
 DIST_DIR=./dist
+TEST_LAB_COMPOSE_FILE=test-lab/docker-compose.yml
 
 # Default target
 .DEFAULT_GOAL := help
@@ -30,7 +31,7 @@ DIST_DIR=./dist
 
 .PHONY: help
 help: ## Display this help
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 ##@ Development
 
@@ -74,6 +75,33 @@ test-coverage: ## Run tests with coverage report
 test-race: ## Run tests with race detector
 	@echo "Running tests with race detector..."
 	$(GOTEST) -v -race ./...
+
+##@ Local Test Lab
+
+.PHONY: test-lab-up
+test-lab-up: ## Start local PostgreSQL and WireMock test lab
+	docker compose -f $(TEST_LAB_COMPOSE_FILE) up -d --wait
+
+.PHONY: test-lab-down
+test-lab-down: ## Stop local test lab without deleting persisted volumes
+	docker compose -f $(TEST_LAB_COMPOSE_FILE) down --remove-orphans
+
+.PHONY: test-lab-reset
+test-lab-reset: ## Recreate local test lab volumes, database seeds, stubs, and request journal
+	docker compose -f $(TEST_LAB_COMPOSE_FILE) down --volumes --remove-orphans
+	docker compose -f $(TEST_LAB_COMPOSE_FILE) up -d --wait
+
+.PHONY: test-lab-db-reset
+test-lab-db-reset: ## Truncate and reseed the local PostgreSQL test database
+	cat test-lab/postgres/reset.sql test-lab/postgres/init/002_seed.sql | docker compose -f $(TEST_LAB_COMPOSE_FILE) exec -T postgres psql -U cannectors_test -d cannectors_test
+
+.PHONY: test-lab-requests
+test-lab-requests: ## List requests captured by WireMock
+	curl -fsS http://localhost:18080/__admin/requests
+
+.PHONY: test-lab-requests-reset
+test-lab-requests-reset: ## Clear WireMock request journal
+	curl -fsS -X DELETE http://localhost:18080/__admin/requests
 
 ##@ Code Quality
 

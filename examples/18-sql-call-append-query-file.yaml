@@ -1,0 +1,28 @@
+name: sql-call-append-query-file
+version: 1.0.0
+description: Use queryFile for SQL enrichment and append the lookup result under a custom key.
+tags:
+  - sql-call
+  - query-file
+input:
+  type: httpPolling
+  schedule: "0 * * * *"
+  endpoint: https://source.example.com/api/customers
+  dataField: customers
+filters:
+  - type: sql_call
+    connectionStringRef: ${REFERENCE_DATABASE_URL}
+    driver: postgres
+    queryFile: examples/assets/sql/customer_lookup.sql
+    mergeStrategy: append
+    resultKey: reference
+    cache:
+      enabled: true
+      maxSize: 1000
+      defaultTTL: 300
+      key: "customer:{{record.id}}"
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/customers/reference
+  method: POST
+  requestMode: batch

@@ -1,0 +1,16 @@
+name: empty-filter-pass-through
+version: 1.0.0
+description: Pass records from input to output without filter modules.
+tags:
+  - pass-through
+input:
+  type: httpPolling
+  schedule: "0 * * * *"
+  endpoint: https://source.example.com/api/items
+  dataField: items
+filters: []
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/items
+  method: POST
+  requestMode: batch

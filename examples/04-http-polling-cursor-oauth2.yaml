@@ -1,0 +1,34 @@
+name: http-polling-cursor-oauth2
+version: 1.0.0
+description: Poll cursor pagination with OAuth2 client credentials.
+tags:
+  - http-polling
+  - oauth2
+input:
+  type: httpPolling
+  schedule: "0 */6 * * *"
+  endpoint: https://source.example.com/api/invoices
+  dataField: items
+  authentication:
+    type: oauth2
+    credentials:
+      tokenUrl: https://source.example.com/oauth/token
+      clientId: ${SOURCE_CLIENT_ID}
+      clientSecret: ${SOURCE_CLIENT_SECRET}
+      scope: invoices.read customers.read
+  pagination:
+    type: cursor
+    cursorParam: cursor
+    limitParam: limit
+    limit: 100
+    nextCursorField: next_cursor
+filters:
+  - type: condition
+    expression: status == "paid"
+    onTrue: continue
+    onFalse: skip
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/invoices
+  method: POST
+  requestMode: batch

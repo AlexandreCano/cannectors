@@ -1,0 +1,43 @@
+name: auth-basic-bearer-query-key
+version: 1.0.0
+description: Combine bearer input authentication, basic enrichment auth, and query API key output auth.
+tags:
+  - authentication
+input:
+  type: httpPolling
+  schedule: "*/30 * * * *"
+  endpoint: https://source.example.com/api/accounts
+  dataField: accounts
+  authentication:
+    type: bearer
+    credentials:
+      token: ${SOURCE_BEARER_TOKEN}
+filters:
+  - type: http_call
+    endpoint: https://directory.example.com/api/accounts/{accountId}
+    method: GET
+    authentication:
+      type: basic
+      credentials:
+        username: ${DIRECTORY_USERNAME}
+        password: ${DIRECTORY_PASSWORD}
+    keys:
+      - field: id
+        paramType: path
+        paramName: accountId
+    mergeStrategy: merge
+    cache:
+      enabled: true
+      maxSize: 1000
+      defaultTTL: 600
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/accounts
+  method: POST
+  requestMode: batch
+  authentication:
+    type: api-key
+    credentials:
+      key: ${DESTINATION_API_KEY}
+      location: query
+      paramName: api_key

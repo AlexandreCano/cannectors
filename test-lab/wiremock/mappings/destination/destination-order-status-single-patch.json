@@ -1,0 +1,30 @@
+{
+  "name": "destination-order-status-single-patch-path-query-header",
+  "priority": 1,
+  "request": {
+    "method": "PATCH",
+    "urlPathPattern": "/destination/orders/[^/]+/status",
+    "queryParameters": {
+      "notify": {
+        "matches": "true|false"
+      }
+    },
+    "headers": {
+      "X-Trace-Id": {
+        "matches": "[A-Za-z0-9._:-]+"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "accepted": true,
+      "resource": "orders",
+      "mode": "single",
+      "matched": "path-query-header"
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "source": "wiremock",
+    "scenario": "orders-data-field",
+    "generatedAt": "2026-01-06T12:00:00Z",
+    "count": 4
+  },
+  "orders": [
+    {
+      "id": "ORD-1001",
+      "customerId": "CUST-001",
+      "sku": "SKU-001",
+      "quantity": 2,
+      "amount": 39.98,
+      "status": "paid",
+      "updatedAt": "2026-01-02T09:00:00Z"
+    },
+    {
+      "id": "ORD-1002",
+      "customerId": "CUST-002",
+      "sku": "SKU-002",
+      "quantity": 1,
+      "amount": 149.0,
+      "status": "paid",
+      "updatedAt": "2026-01-02T09:05:00Z"
+    },
+    {
+      "id": "ORD-1003",
+      "customerId": "CUST-003",
+      "sku": "SKU-003",
+      "quantity": null,
+      "amount": null,
+      "status": "draft",
+      "updatedAt": "2026-01-02T09:10:00Z",
+      "scenario": "optional-fields"
+    },
+    {
+      "id": "ORD-DUPLICATE",
+      "customerId": "CUST-004",
+      "sku": "SKU-001",
+      "quantity": 1,
+      "amount": 19.99,
+      "status": "paid",
+      "updatedAt": "2026-01-02T09:15:00Z",
+      "scenario": "dest-unique-violation"
+    }
+  ]
+}

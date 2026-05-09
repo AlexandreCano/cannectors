@@ -1,0 +1,26 @@
+name: http-polling-basic-to-http-batch
+version: 1.0.0
+description: Poll a JSON array from an HTTP API and send it as one batch request.
+tags:
+  - http-polling
+  - http-output
+input:
+  type: httpPolling
+  schedule: "*/15 * * * *"
+  endpoint: https://source.example.com/api/orders
+  headers:
+    Accept: application/json
+  dataField: orders
+filters: []
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/orders/import
+  method: POST
+  requestMode: batch
+  headers:
+    Content-Type: application/json
+  success:
+    statusCodes:
+      - 200
+      - 201
+      - 202

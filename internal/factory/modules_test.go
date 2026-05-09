@@ -92,6 +92,71 @@ func TestCreateFilterModules_Mapping(t *testing.T) {
 	}
 }
 
+func TestCreateFilterModules_ConditionNestedTopLevelModuleShape(t *testing.T) {
+	cfgs := []connector.ModuleConfig{
+		{
+			Type: "condition",
+			Raw: mustJSON(map[string]any{
+				"expression": "status == 'paid'",
+				"then": []any{
+					map[string]any{
+						"type":   "set",
+						"target": "routing.bucket",
+						"value":  "billable",
+					},
+				},
+				"else": []any{
+					map[string]any{
+						"type":    "remove",
+						"targets": []any{"card.number", "card.cvv"},
+					},
+				},
+			}),
+		},
+	}
+
+	modules, err := CreateFilterModules(cfgs)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(modules) != 1 {
+		t.Fatalf("expected 1 module, got %d", len(modules))
+	}
+
+	result, err := modules[0].Process(context.Background(), []map[string]any{
+		{"status": "paid"},
+		{"status": "pending", "card": map[string]any{"number": "4111111111111111", "cvv": "123", "last4": "1111"}},
+	})
+	if err != nil {
+		t.Fatalf("processing nested condition: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("expected 2 records, got %d", len(result))
+	}
+
+	routing, ok := result[0]["routing"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected routing map, got %T", result[0]["routing"])
+	}
+	if routing["bucket"] != "billable" {
+		t.Fatalf("expected billable bucket, got %v", routing["bucket"])
+	}
+
+	card, ok := result[1]["card"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected card map, got %T", result[1]["card"])
+	}
+	if _, exists := card["number"]; exists {
+		t.Fatal("expected card.number to be removed")
+	}
+	if _, exists := card["cvv"]; exists {
+		t.Fatal("expected card.cvv to be removed")
+	}
+	if card["last4"] != "1111" {
+		t.Fatalf("expected card.last4 to remain, got %v", card["last4"])
+	}
+}
+
 func TestCreateFilterModules_Unknown(t *testing.T) {
 	cfgs := []connector.ModuleConfig{
 		{Type: "unknownFilter", Raw: mustJSON(map[string]any{})},

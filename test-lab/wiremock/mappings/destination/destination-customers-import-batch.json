@@ -1,0 +1,24 @@
+{
+  "name": "destination-customers-import-batch",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/destination/customers/import",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[0]"
+      }
+    ]
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "accepted": true,
+      "resource": "customers",
+      "mode": "batch"
+    }
+  }
+}

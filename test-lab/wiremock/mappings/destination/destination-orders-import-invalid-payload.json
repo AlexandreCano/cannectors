@@ -1,0 +1,19 @@
+{
+  "name": "destination-orders-import-invalid-payload",
+  "priority": 10,
+  "request": {
+    "method": "POST",
+    "urlPath": "/destination/orders/import"
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "accepted": false,
+      "error": "invalid_batch_payload",
+      "message": "Expected a JSON array for order batch import"
+    }
+  }
+}

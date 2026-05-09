@@ -3,6 +3,7 @@ package filter
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -830,6 +831,42 @@ func TestConditionTypeMismatchHandling(t *testing.T) {
 // ===========================================================================
 // Task 2b: Nested Modules Tests
 // ===========================================================================
+
+func TestNestedModuleConfigUnmarshalPreservesTopLevelFilterShape(t *testing.T) {
+	raw := []byte(`{
+		"expression": "status == 'paid'",
+		"then": [
+			{"type": "set", "target": "routing.bucket", "value": "billable"},
+			{"type": "mapping", "mappings": [{"source": "id", "target": "payment.id"}]}
+		],
+		"else": [
+			{"type": "remove", "targets": ["card.number", "card.cvv"]}
+		]
+	}`)
+
+	var cfg ConditionConfig
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		t.Fatalf("unmarshal condition config: %v", err)
+	}
+
+	if got := cfg.Then[0].Config["target"]; got != "routing.bucket" {
+		t.Fatalf("expected nested set target in Config, got %v", got)
+	}
+	if got := cfg.Then[0].Config["value"]; got != "billable" {
+		t.Fatalf("expected nested set value in Config, got %v", got)
+	}
+	if len(cfg.Then[1].Mappings) != 1 {
+		t.Fatalf("expected nested mapping mappings to be preserved, got %d", len(cfg.Then[1].Mappings))
+	}
+
+	targets, ok := cfg.Else[0].Config["targets"].([]any)
+	if !ok {
+		t.Fatalf("expected nested remove targets in Config, got %T", cfg.Else[0].Config["targets"])
+	}
+	if len(targets) != 2 || targets[0] != "card.number" || targets[1] != "card.cvv" {
+		t.Fatalf("unexpected nested remove targets: %v", targets)
+	}
+}
 
 // TestConditionNestedThenMapping tests 'then' with a nested mapping module
 func TestConditionNestedThenMapping(t *testing.T) {

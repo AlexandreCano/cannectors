@@ -1,0 +1,34 @@
+name: http-call-query-header-append
+version: 1.0.0
+description: Use query and header keys for an HTTP enrichment call and append the response.
+tags:
+  - http-call
+  - append
+input:
+  type: httpPolling
+  schedule: "*/20 * * * *"
+  endpoint: https://source.example.com/api/tickets
+  dataField: tickets
+filters:
+  - type: http_call
+    endpoint: https://support.example.com/api/sla
+    method: GET
+    headers:
+      X-Tenant: "{{record.tenantId}}"
+    keys:
+      - field: priority
+        paramType: query
+        paramName: priority
+      - field: tenantId
+        paramType: header
+        paramName: X-Tenant-Id
+    mergeStrategy: append
+    cache:
+      enabled: true
+      maxSize: 1000
+      defaultTTL: 300
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/tickets
+  method: POST
+  requestMode: batch

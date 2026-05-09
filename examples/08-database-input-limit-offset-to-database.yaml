@@ -1,0 +1,31 @@
+name: database-input-limit-offset-to-database
+version: 1.0.0
+description: Read a paginated SQL source and write rows into another database.
+tags:
+  - database-input
+  - pagination
+input:
+  type: database
+  connectionStringRef: ${SOURCE_DATABASE_URL}
+  driver: postgres
+  query: |
+    select id, sku, quantity
+    from inventory
+    order by id asc
+    limit :limit offset :offset
+  pagination:
+    type: limit-offset
+    limit: 500
+    offsetParam: offset
+filters:
+  - type: set
+    target: sync_source
+    value: source-db
+output:
+  type: database
+  connectionStringRef: ${WAREHOUSE_DATABASE_URL}
+  driver: postgres
+  query: |
+    insert into inventory_snapshot (id, sku, quantity, sync_source)
+    values ({{record.id}}, {{record.sku}}, {{record.quantity}}, {{record.sync_source}})
+  transaction: true

@@ -1,0 +1,15 @@
+{
+  "name": "source-orders-data-field",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/source/orders"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "bodyFileName": "source/orders-wrapper.json"
+  }
+}

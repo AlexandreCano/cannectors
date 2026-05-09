@@ -1,0 +1,39 @@
+name: defaults-inheritance
+version: 1.0.0
+description: Apply top-level timeout, retry, and onError defaults across modules.
+tags:
+  - defaults
+  - retry
+defaults:
+  timeoutMs: 15000
+  onError: log
+  retry:
+    maxAttempts: 2
+    delayMs: 1000
+    backoffMultiplier: 2
+    maxDelayMs: 10000
+    retryableStatusCodes:
+      - 429
+      - 500
+      - 503
+    useRetryAfterHeader: true
+input:
+  type: httpPolling
+  schedule: "*/15 * * * *"
+  endpoint: https://source.example.com/api/accounts
+  dataField: accounts
+filters:
+  - type: mapping
+    onError: skip
+    mappings:
+      - source: id
+        target: account.id
+      - source: name
+        target: account.name
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/accounts
+  method: POST
+  requestMode: batch
+  retry:
+    maxAttempts: 4

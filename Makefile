@@ -115,6 +115,10 @@ test-lab-verify-pagination: ## Run HTTP pagination scenarios (story 22.1)
 test-lab-verify-database: ## Run database input/output scenarios (story 22.2)
 	bash test-lab/scripts/verify-database.sh
 
+.PHONY: test-lab-verify-sql-call
+test-lab-verify-sql-call: ## Run sql_call enrichment scenarios (story 22.3)
+	bash test-lab/scripts/verify-sql-call.sh
+
 ##@ Code Quality
 
 .PHONY: fmt

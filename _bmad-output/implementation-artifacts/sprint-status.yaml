@@ -187,7 +187,7 @@ development_status:
   epic-22: backlog
   22-1-cover-http-pagination-scenarios: done
   22-2-cover-database-input-output-scenarios: done
-  22-3-cover-sql-call-enrichment-scenarios: ready-for-dev
+  22-3-cover-sql-call-enrichment-scenarios: done
   22-4-cover-http-call-enrichment-scenarios: ready-for-dev
   22-5-cover-transformation-filters-scenarios: ready-for-dev
   22-6-cover-state-persistence-scenarios: ready-for-dev

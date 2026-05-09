@@ -199,3 +199,16 @@ test-lab/scripts/verify-database.sh
 ```
 
 The script asserts WireMock received the expected batch from the database inputs, and that each database output left `dest_customers` in the expected state. It always restarts from a clean test seed so re-runs are deterministic.
+
+### `sql_call` enrichment (story 22.3)
+
+Four pipelines exercise the `sql_call` filter against the seeded `customer_reference` and `product_reference` tables, covering the three merge strategies and `queryFile` loading.
+
+| Pipeline | Merge strategy | Notes |
+| --- | --- | --- |
+| `sql-call-merge.yaml` | `merge` | deep-merges customer reference into orders, with cache enabled |
+| `sql-call-replace.yaml` | `replace` | shallow overwrite — SQL columns win, other record fields kept |
+| `sql-call-append.yaml` | `append` | stores product reference under `record.reference` |
+| `sql-call-query-file.yaml` | `merge` | same lookup as `sql-call-merge` but query loaded from `test-lab/assets/sql/customer-lookup.sql` |
+
+Run with `test-lab/scripts/verify-sql-call.sh` (or `make test-lab-verify-sql-call`). The script re-issues each pipeline and asserts the resulting destination payloads carry the expected enriched fields, including the empty-result case where no SQL row matches.

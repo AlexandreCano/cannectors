@@ -1,0 +1,9 @@
+{
+  "orders": [
+    { "order_id": "ORD-A1", "customer": { "id": "CUST-001" }, "amount": 100 },
+    { "order_id": "ORD-A2", "customer": { "id": "CUST-002" }, "amount": 250 },
+    { "order_id": "ORD-A3", "customer": { "id": "CUST-001" }, "amount": 75 },
+    { "order_id": "ORD-A4", "customer": { "id": "CUST-001" }, "amount": 60 },
+    { "order_id": "ORD-A5", "customer": { "id": "CUST-999" }, "amount": 10 }
+  ]
+}

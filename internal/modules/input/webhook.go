@@ -384,8 +384,9 @@ func (w *Webhook) Start(ctx context.Context, handler WebhookHandler) error {
 		"address", w.actualAddr,
 	)
 
-	// Start queue workers if enabled
-	w.startWorkers(handler)
+	// Start queue workers if enabled. Use the server ctx (not the per-request
+	// ctx) so workers survive past the HTTP response that triggered enqueue.
+	w.startWorkers(ctx, handler)
 
 	// Start server in goroutine
 	serverErr := make(chan error, 1)
@@ -751,7 +752,7 @@ func (w *Webhook) enqueue(req queuedRequest) bool {
 	}
 }
 
-func (w *Webhook) startWorkers(handler WebhookHandler) {
+func (w *Webhook) startWorkers(serverCtx context.Context, handler WebhookHandler) {
 	if handler == nil || w.queueSize <= 0 {
 		return
 	}
@@ -783,7 +784,11 @@ func (w *Webhook) startWorkers(handler WebhookHandler) {
 					if !ok {
 						return
 					}
-					if err := handler(req.ctx, req.data); err != nil {
+					// Use the server context so the handler isn't canceled by
+					// the HTTP response that originally enqueued the request.
+					// Preserve the trace ID from the request context.
+					workerCtx := logger.WithTraceID(serverCtx, logger.TraceIDFrom(req.ctx))
+					if err := handler(workerCtx, req.data); err != nil {
 						logger.Error("webhook handler returned error",
 							slog.String(logger.TraceIDField, logger.TraceIDFrom(req.ctx)),
 							"endpoint", w.endpoint,

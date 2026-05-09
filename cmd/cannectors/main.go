@@ -22,6 +22,7 @@ import (
 	"github.com/cannectors/runtime/internal/config"
 	"github.com/cannectors/runtime/internal/factory"
 	"github.com/cannectors/runtime/internal/logger"
+	"github.com/cannectors/runtime/internal/modules/input"
 	"github.com/cannectors/runtime/internal/persistence"
 	"github.com/cannectors/runtime/internal/runtime"
 	"github.com/cannectors/runtime/internal/scheduler"
@@ -246,6 +247,14 @@ func runPipeline(_ *cobra.Command, args []string) {
 		return
 	}
 
+	// Webhook inputs are callback-based: they expose Start(ctx, handler) and
+	// don't fit the Fetch-based one-shot/scheduler flow. Detect by input type
+	// and route to the dedicated long-running runner.
+	if pipeline.Input != nil && pipeline.Input.Type == "webhook" && !dryRun {
+		runWebhookPipeline(pipeline)
+		return
+	}
+
 	runPipelineOnce(pipeline)
 }
 
@@ -360,6 +369,81 @@ func runScheduledPipeline(pipeline *connector.Pipeline, schedule string) {
 		fmt.Println("✓ Scheduler stopped gracefully")
 	}
 
+	os.Exit(ExitSuccess)
+}
+
+func runWebhookPipeline(pipeline *connector.Pipeline) {
+	if !pipeline.Enabled {
+		fmt.Fprintln(os.Stderr, "✗ Pipeline is disabled")
+		fmt.Fprintln(os.Stderr, "  Set 'enabled: true' in the configuration to run the pipeline")
+		os.Exit(ExitValidationError)
+	}
+
+	inputModule, err := factory.CreateInputModule(pipeline.Input)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Failed to create input module: %v\n", err)
+		os.Exit(ExitRuntimeError)
+	}
+	webhook, ok := inputModule.(*input.Webhook)
+	if !ok {
+		fmt.Fprintln(os.Stderr, "✗ webhook input module type assertion failed")
+		os.Exit(ExitRuntimeError)
+	}
+	filterModules, err := factory.CreateFilterModules(pipeline.Filters)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Failed to create filter modules: %v\n", err)
+		os.Exit(ExitRuntimeError)
+	}
+	outputModule, err := factory.CreateOutputModule(pipeline.Output)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Failed to create output module: %v\n", err)
+		os.Exit(ExitRuntimeError)
+	}
+
+	executor := runtime.NewExecutorWithModules(nil, filterModules, outputModule, dryRun)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := func(hctx context.Context, data []map[string]any) error {
+		_, execErr := executor.ExecuteWithRecordsContext(hctx, pipeline, data)
+		return execErr
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- webhook.Start(ctx, handler)
+	}()
+
+	if !quiet {
+		fmt.Println("🪝 Webhook server started")
+		fmt.Printf("  Pipeline: %s\n", pipeline.ID)
+		fmt.Println("  Press Ctrl+C to stop...")
+	}
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case sig := <-sigChan:
+		if !quiet {
+			fmt.Printf("\n⏹ Received %s signal, stopping webhook...\n", sig)
+		}
+		cancel()
+		if stopErr := webhook.Stop(); stopErr != nil {
+			fmt.Fprintf(os.Stderr, "⚠ Webhook stop error: %v\n", stopErr)
+		}
+		<-errCh
+	case startErr := <-errCh:
+		if startErr != nil {
+			fmt.Fprintf(os.Stderr, "✗ Webhook server error: %v\n", startErr)
+			os.Exit(ExitRuntimeError)
+		}
+	}
+
+	if !quiet {
+		fmt.Println("✓ Webhook stopped gracefully")
+	}
 	os.Exit(ExitSuccess)
 }
 

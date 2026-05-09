@@ -1,0 +1,24 @@
+name: webhook-queue
+version: 1.0.0
+description: Webhook input with queueSize, maxConcurrent and rateLimit, forwarded to HTTP destination.
+tags:
+  - test-lab
+  - webhook
+  - queue
+input:
+  type: webhook
+  path: /webhooks/queue
+  listenAddress: 127.0.0.1:18183
+  dataField: orders
+  queueSize: 50
+  maxConcurrent: 2
+  rateLimit:
+    requestsPerSecond: 5
+    burst: 5
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/webhook/queue
+  method: POST
+  headers:
+    Content-Type: application/json

@@ -1,0 +1,4 @@
+{
+  "request": { "method": "POST", "urlPathPattern": "/destination/webhook/.*" },
+  "response": { "status": 200, "headers": { "Content-Type": "application/json" }, "body": "{\"status\":\"ok\"}" }
+}

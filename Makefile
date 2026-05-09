@@ -131,6 +131,10 @@ test-lab-verify-filters: ## Run transformation filter scenarios (story 22.5)
 test-lab-verify-state-persistence: ## Run httpPolling state persistence scenarios (story 22.6)
 	bash test-lab/scripts/verify-state-persistence.sh
 
+.PHONY: test-lab-verify-webhook
+test-lab-verify-webhook: ## Run webhook input scenarios (story 22.7)
+	bash test-lab/scripts/verify-webhook.sh
+
 ##@ Code Quality
 
 .PHONY: fmt

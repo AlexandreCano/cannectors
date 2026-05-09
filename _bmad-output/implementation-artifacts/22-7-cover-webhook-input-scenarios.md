@@ -1,6 +1,6 @@
 # Story 22.7: Cover webhook input scenarios
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 

@@ -1,0 +1,23 @@
+name: webhook-hmac
+version: 1.0.0
+description: Webhook input with HMAC-SHA256 signature validation forwarded to HTTP destination.
+tags:
+  - test-lab
+  - webhook
+  - hmac
+input:
+  type: webhook
+  path: /webhooks/hmac
+  listenAddress: 127.0.0.1:18182
+  dataField: orders
+  signature:
+    type: hmac-sha256
+    header: X-Webhook-Signature
+    secret: lab-secret
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/webhook/hmac
+  method: POST
+  headers:
+    Content-Type: application/json

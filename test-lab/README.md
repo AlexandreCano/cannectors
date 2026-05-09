@@ -251,3 +251,15 @@ Three pipelines exercise the `statePersistence` config of the `httpPolling` inpu
 | `state-both.yaml`      | both timestamp + id enabled together |
 
 Run with `make test-lab-verify-state-persistence` (or `bash test-lab/scripts/verify-state-persistence.sh`). The script clears the state directory and the WireMock journal, runs each pipeline twice, and asserts that (a) the first request carries no state query params, (b) the second request carries the expected params with the values persisted to disk, and (c) the `state-<pipeline>.json` file contains the expected `lastTimestamp` / `lastId` keys.
+
+### Webhook input (story 22.7)
+
+Three pipelines exercise the `webhook` input. Unlike scheduled inputs the binary stays alive listening on the configured `listenAddress` (loopback ports 18181/18182/18183 in the lab).
+
+| Pipeline | What it covers |
+| --- | --- |
+| `webhook-simple.yaml` | unauthenticated webhook, payload forwarded to a destination stub |
+| `webhook-hmac.yaml`   | HMAC-SHA256 signature validation (`secret: lab-secret`) — accepts valid sig, rejects invalid + missing |
+| `webhook-queue.yaml`  | `queueSize: 50`, `maxConcurrent: 2`, `rateLimit: 5 rps / burst 5` — observable 429s during a 10-request burst |
+
+Run with `make test-lab-verify-webhook` (or `bash test-lab/scripts/verify-webhook.sh`). The script starts each pipeline as a long-running process, fires curl requests, then asserts response codes and the destination journal entries before SIGTERMing the process.

@@ -225,3 +225,17 @@ Four pipelines exercise the `http_call` filter against WireMock enrichment stubs
 | `http-call-post-template.yaml` | `replace` | POST with `bodyTemplateFile`, per-record cache key |
 
 Run `make test-lab-verify-http-call` (or `bash test-lab/scripts/verify-http-call.sh`). Assertions cover the WireMock journal (request count after caching, headers received) and the enriched payloads forwarded to the destination.
+
+### Transformation filters (story 22.5)
+
+Five pipelines exercise the `mapping`, `set`, `remove`, `condition`, and `script` filters end to end.
+
+| Pipeline | What it covers |
+| --- | --- |
+| `filters-mapping-transforms.yaml` | every supported transform (trim/upper/lower/replace/dateFormat/toInt/toFloat/toBool/split/join/toString) plus `onMissing` strategies (`setNull`, `skipField`, `useDefault`) and target-only deletion |
+| `filters-set-remove.yaml` | `set` on flat and nested paths, `remove` on flat and nested paths |
+| `filters-condition.yaml` | `condition` with `then`/`else` blocks containing nested `set`/`remove` filters |
+| `filters-script-inline.yaml` | inline JavaScript `transform(record)` |
+| `filters-script-file.yaml` | JavaScript transform loaded from `test-lab/assets/scripts/normalize.js` |
+
+Run with `make test-lab-verify-filters` (or `bash test-lab/scripts/verify-filters.sh`). All assertions read the destination payload from the WireMock journal.

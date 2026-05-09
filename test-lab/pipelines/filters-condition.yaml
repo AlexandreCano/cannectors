@@ -1,0 +1,36 @@
+name: filters-condition
+version: 1.0.0
+description: Route records through condition with nested then/else filters.
+tags:
+  - test-lab
+  - filters
+  - condition
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/source/filters/raw
+  dataField: records
+filters:
+  - type: condition
+    lang: simple
+    expression: status == "paid" && amount_int > 100
+    onTrue: continue
+    onFalse: continue
+    then:
+      - type: set
+        target: routing.bucket
+        value: billable
+    else:
+      - type: set
+        target: routing.bucket
+        value: review
+      - type: remove
+        targets:
+          - card.cvv
+          - card.number
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/filters/condition
+  method: POST
+  headers:
+    Content-Type: application/json

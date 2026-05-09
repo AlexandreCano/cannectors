@@ -123,6 +123,10 @@ test-lab-verify-sql-call: ## Run sql_call enrichment scenarios (story 22.3)
 test-lab-verify-http-call: ## Run http_call enrichment scenarios (story 22.4)
 	bash test-lab/scripts/verify-http-call.sh
 
+.PHONY: test-lab-verify-filters
+test-lab-verify-filters: ## Run transformation filter scenarios (story 22.5)
+	bash test-lab/scripts/verify-filters.sh
+
 ##@ Code Quality
 
 .PHONY: fmt

@@ -189,7 +189,7 @@ development_status:
   22-2-cover-database-input-output-scenarios: done
   22-3-cover-sql-call-enrichment-scenarios: done
   22-4-cover-http-call-enrichment-scenarios: done
-  22-5-cover-transformation-filters-scenarios: ready-for-dev
+  22-5-cover-transformation-filters-scenarios: done
   22-6-cover-state-persistence-scenarios: ready-for-dev
   22-7-cover-webhook-input-scenarios: ready-for-dev
   epic-22-retrospective: optional

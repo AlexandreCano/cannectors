@@ -1,0 +1,80 @@
+name: filters-mapping-transforms
+version: 1.0.0
+description: Exercise all mapping transforms plus every onMissing strategy.
+tags:
+  - test-lab
+  - filters
+  - mapping
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/source/filters/raw
+  dataField: records
+filters:
+  - type: mapping
+    onError: log
+    mappings:
+      - source: name
+        target: name
+        transforms:
+          - op: trim
+          - op: uppercase
+      - source: email
+        target: email
+        transforms:
+          - op: trim
+          - op: lowercase
+      - source: phone
+        target: phone
+        transforms:
+          - op: replace
+            pattern: "[^0-9+]"
+            replacement: ""
+      - source: created_at
+        target: createdDate
+        transforms:
+          - op: dateFormat
+            format: "2006-01-02"
+      - source: amount
+        target: amountInt
+        transforms:
+          - op: toInt
+      - source: score
+        target: scoreFloat
+        transforms:
+          - op: toFloat
+      - source: active
+        target: active
+        transforms:
+          - op: toBool
+      - source: tags_csv
+        target: tags
+        transforms:
+          - op: split
+            separator: ","
+      - source: tag_list
+        target: tagString
+        transforms:
+          - op: join
+            separator: "|"
+      - source: external_id
+        target: externalId
+        transforms:
+          - op: toString
+      - source: missingDefault
+        target: defaultedField
+        onMissing: useDefault
+        defaultValue: "FALLBACK"
+      - source: missingNull
+        target: nullField
+        onMissing: setNull
+      - source: missingSkip
+        target: skippedField
+        onMissing: skipField
+      - target: deprecatedField
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/filters/mapping
+  method: POST
+  headers:
+    Content-Type: application/json

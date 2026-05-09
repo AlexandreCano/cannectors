@@ -1,0 +1,40 @@
+{
+  "records": [
+    {
+      "id": "REC-1",
+      "name": "  Alice Doe  ",
+      "email": "  ALICE@Example.COM  ",
+      "phone": "+33 (1) 23 45-67-89",
+      "created_at": "2026-03-04T10:00:00Z",
+      "amount": "42",
+      "score": "98.5",
+      "active": "true",
+      "tags_csv": "vip,beta,early",
+      "tag_list": ["red", "green", "blue"],
+      "external_id": 9001,
+      "payload": "alpha",
+      "attributes": {"source": "feed", "weight": 3},
+      "deprecatedField": "drop-me",
+      "status": "paid",
+      "amount_int": 120,
+      "card": {"number": "4111111111111111", "cvv": "123", "expiry": "12/30"}
+    },
+    {
+      "id": "REC-2",
+      "name": "Bob",
+      "email": "bob@example.test",
+      "created_at": "2026-04-05T08:30:00Z",
+      "amount": "10",
+      "score": "11.0",
+      "active": "false",
+      "tags_csv": "",
+      "tag_list": [],
+      "external_id": 9002,
+      "payload": "beta",
+      "attributes": {},
+      "status": "pending",
+      "amount_int": 5,
+      "card": {"number": "4222222222222222", "cvv": "456", "expiry": "01/28"}
+    }
+  ]
+}

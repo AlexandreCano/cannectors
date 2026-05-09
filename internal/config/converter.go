@@ -120,6 +120,7 @@ func extractModules(p *connector.Pipeline, data map[string]any) ([]*moduleBuilde
 
 	// Extract filters
 	if filtersData, okFilters := data["filters"].([]any); okFilters {
+		filterBuilders := make([]*moduleBuilder, 0, len(filtersData))
 		for i, filterData := range filtersData {
 			filterMap, isMap := filterData.(map[string]any)
 			if !isMap {
@@ -129,10 +130,15 @@ func extractModules(p *connector.Pipeline, data map[string]any) ([]*moduleBuilde
 			if convertErr != nil {
 				return nil, fmt.Errorf("invalid filter at index %d: %w", i, convertErr)
 			}
-			p.Filters = append(p.Filters, *fb.mc)
-			// Point builder at the actual slice element so finalize writes to it
+			filterBuilders = append(filterBuilders, fb)
+		}
+		// Pre-size the slice so element pointers stay stable across the rest of
+		// extractModules, then assign each builder to its final slice element.
+		p.Filters = make([]connector.ModuleConfig, len(filterBuilders))
+		for i, fb := range filterBuilders {
+			p.Filters[i] = *fb.mc
 			builders = append(builders, &moduleBuilder{
-				mc:     &p.Filters[len(p.Filters)-1],
+				mc:     &p.Filters[i],
 				rawMap: fb.rawMap,
 			})
 		}

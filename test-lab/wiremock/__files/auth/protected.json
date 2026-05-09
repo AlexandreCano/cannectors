@@ -1,0 +1,6 @@
+{
+  "items": [
+    { "id": "P-001", "name": "Protected resource 1" },
+    { "id": "P-002", "name": "Protected resource 2" }
+  ]
+}

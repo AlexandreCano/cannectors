@@ -1,0 +1,19 @@
+{
+  "name": "auth-enrichment-basic",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/auth/enrichment/orders/[^/]+",
+    "headers": {
+      "Authorization": { "equalTo": "Basic bGFiLWVucmljaC11c2VyOmxhYi1lbnJpY2gtcGFzcw==" }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "tier": "gold",
+      "verified": true
+    }
+  }
+}

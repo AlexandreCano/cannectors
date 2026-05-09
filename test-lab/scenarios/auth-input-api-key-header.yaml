@@ -1,0 +1,17 @@
+name: auth-input-api-key-header
+description: API-key-in-header source returns 200 → destination receives the batch.
+pipeline: test-lab/pipelines/auth-input-api-key-header.yaml
+expect_status: success
+assertions:
+  - http_count_eq:
+      method: GET
+      path: /auth/source/api-key-header
+      headers:
+        X-API-Key: lab-api-key-header
+      status: 200
+      expected: 1
+  - http_count_ge:
+      method: POST
+      path: /auth/destination/public
+      status: 200
+      expected: 1

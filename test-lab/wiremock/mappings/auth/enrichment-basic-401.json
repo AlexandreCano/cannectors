@@ -1,0 +1,13 @@
+{
+  "name": "auth-enrichment-basic-401",
+  "priority": 5,
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/auth/enrichment/orders/[^/]+"
+  },
+  "response": {
+    "status": 401,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "error": "invalid basic credentials on enrichment" }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "orders": [
+    { "id": "AUTH-ORD-1", "amount": 10 },
+    { "id": "AUTH-ORD-2", "amount": 20 }
+  ]
+}

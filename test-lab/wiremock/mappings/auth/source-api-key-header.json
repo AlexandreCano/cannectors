@@ -1,0 +1,16 @@
+{
+  "name": "auth-source-api-key-header",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/auth/source/api-key-header",
+    "headers": {
+      "X-API-Key": { "equalTo": "lab-api-key-header" }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "bodyFileName": "auth/customers.json"
+  }
+}

@@ -1,0 +1,23 @@
+name: auth-input-basic
+version: 1.0.0
+description: HTTP polling input authenticated with HTTP Basic credentials.
+tags:
+  - test-lab
+  - auth
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/auth/source/basic
+  dataField: customers
+  authentication:
+    type: basic
+    credentials:
+      username: lab-user
+      password: lab-pass
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/auth/destination/public
+  method: POST
+  headers:
+    Content-Type: application/json

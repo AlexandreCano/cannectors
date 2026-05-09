@@ -1,0 +1,25 @@
+name: auth-input-oauth2
+version: 1.0.0
+description: HTTP polling input authenticated with OAuth2 client credentials.
+tags:
+  - test-lab
+  - auth
+  - oauth2
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/auth/oauth2/protected
+  dataField: items
+  authentication:
+    type: oauth2
+    credentials:
+      tokenUrl: http://localhost:18080/auth/oauth2/token
+      clientId: lab-client-id
+      clientSecret: lab-client-secret
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/auth/destination/public
+  method: POST
+  headers:
+    Content-Type: application/json

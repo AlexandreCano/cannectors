@@ -1,0 +1,18 @@
+{
+  "name": "reliability-source-records",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/reliability/source/records"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "records": [
+        { "id": "REL-1", "value": "alpha" },
+        { "id": "REL-2", "value": "beta" }
+      ]
+    }
+  }
+}

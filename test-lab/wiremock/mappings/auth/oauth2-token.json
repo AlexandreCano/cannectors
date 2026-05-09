@@ -1,0 +1,25 @@
+{
+  "name": "auth-oauth2-token",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/auth/oauth2/token",
+    "headers": {
+      "Content-Type": { "contains": "application/x-www-form-urlencoded" }
+    },
+    "bodyPatterns": [
+      { "contains": "grant_type=client_credentials" },
+      { "contains": "client_id=lab-client-id" },
+      { "contains": "client_secret=lab-client-secret" }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "access_token": "lab-oauth2-access-token",
+      "token_type": "Bearer",
+      "expires_in": 3600
+    }
+  }
+}

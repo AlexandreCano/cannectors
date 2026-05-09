@@ -1,0 +1,6 @@
+{
+  "customers": [
+    { "id": "AUTH-001", "email": "ada@auth.test", "status": "active" },
+    { "id": "AUTH-002", "email": "grace@auth.test", "status": "active" }
+  ]
+}

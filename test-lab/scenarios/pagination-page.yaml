@@ -1,0 +1,20 @@
+name: pagination-page
+description: Page pagination — 3 pages of 2 customers, deterministic destination batches.
+pipeline: test-lab/pipelines/pagination-page.yaml
+expect_status: success
+assertions:
+  - http_count_eq:
+      method: GET
+      path: /source/paginated/customers
+      query: { page: "1" }
+      expected: 1
+  - http_count_eq:
+      method: GET
+      path: /source/paginated/customers
+      query: { page: "2" }
+      expected: 1
+  - http_count_eq:
+      method: GET
+      path: /source/paginated/customers
+      query: { page: "3" }
+      expected: 1

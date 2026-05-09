@@ -1,0 +1,17 @@
+name: auth-input-oauth2
+description: OAuth2 client credentials → token endpoint then protected endpoint.
+pipeline: test-lab/pipelines/auth-input-oauth2.yaml
+expect_status: success
+assertions:
+  - http_count_eq:
+      method: POST
+      path: /auth/oauth2/token
+      status: 200
+      expected: 1
+  - http_count_ge:
+      method: GET
+      path: /auth/oauth2/protected
+      headers:
+        Authorization: Bearer lab-oauth2-access-token
+      status: 200
+      expected: 1

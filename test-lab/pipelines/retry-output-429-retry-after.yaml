@@ -1,0 +1,25 @@
+name: retry-output-429-retry-after
+version: 1.0.0
+description: Output retries after a 429 + Retry-After header, respecting the delay hint.
+tags:
+  - test-lab
+  - retry
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/reliability/source/records
+  dataField: records
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/reliability/destination/429-retry-after
+  method: POST
+  headers:
+    Content-Type: application/json
+  retry:
+    maxAttempts: 3
+    delayMs: 50
+    backoffMultiplier: 1
+    maxDelayMs: 5000
+    retryableStatusCodes: [429]
+    useRetryAfterHeader: true

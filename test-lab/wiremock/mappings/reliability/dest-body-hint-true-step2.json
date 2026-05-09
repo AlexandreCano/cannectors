@@ -1,0 +1,15 @@
+{
+  "name": "reliability-dest-body-hint-true-step2",
+  "priority": 1,
+  "scenarioName": "dest-body-hint-true",
+  "requiredScenarioState": "succeeded",
+  "request": {
+    "method": "POST",
+    "urlPath": "/reliability/destination/body-hint-true"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "ok": true }
+  }
+}

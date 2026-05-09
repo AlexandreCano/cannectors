@@ -1,0 +1,23 @@
+name: retry-output-timeout
+version: 1.0.0
+description: Output fails with a timeout when the destination is slower than timeoutMs.
+tags:
+  - test-lab
+  - retry
+  - timeout
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/reliability/source/records
+  dataField: records
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/reliability/destination/slow
+  method: POST
+  headers:
+    Content-Type: application/json
+  timeoutMs: 500
+  retry:
+    maxAttempts: 1
+    delayMs: 50

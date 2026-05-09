@@ -1,0 +1,15 @@
+name: retry-output-body-hint-true
+description: Output retries when retryHintFromBody evaluates true.
+pipeline: test-lab/pipelines/retry-output-body-hint-true.yaml
+expect_status: success
+assertions:
+  - http_count_eq:
+      method: POST
+      path: /reliability/destination/body-hint-true
+      status: 503
+      expected: 1
+  - http_count_eq:
+      method: POST
+      path: /reliability/destination/body-hint-true
+      status: 200
+      expected: 1

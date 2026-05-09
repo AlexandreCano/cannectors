@@ -1,0 +1,13 @@
+{
+  "name": "auth-oauth2-protected-401",
+  "priority": 5,
+  "request": {
+    "method": "GET",
+    "urlPath": "/auth/oauth2/protected"
+  },
+  "response": {
+    "status": 401,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "error": "invalid_token" }
+  }
+}

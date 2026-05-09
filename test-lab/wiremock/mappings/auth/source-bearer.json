@@ -1,0 +1,16 @@
+{
+  "name": "auth-source-bearer",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/auth/source/bearer",
+    "headers": {
+      "Authorization": { "equalTo": "Bearer lab-bearer-token" }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "bodyFileName": "auth/customers.json"
+  }
+}

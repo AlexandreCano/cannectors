@@ -1,0 +1,10 @@
+name: db-output-insert
+description: Database output INSERT writes the source feed into dest_customers.
+pipeline: test-lab/pipelines/db-output-insert.yaml
+expect_status: success
+setup:
+  reset_db: true
+assertions:
+  - sql_eq:
+      query: "SELECT COUNT(*) FROM dest_customers WHERE external_id LIKE 'DBOUT-%'"
+      expected: "3"

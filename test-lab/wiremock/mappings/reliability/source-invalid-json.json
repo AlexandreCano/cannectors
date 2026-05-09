@@ -1,0 +1,13 @@
+{
+  "name": "reliability-source-invalid-json",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/reliability/source/invalid-json"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "body": "{ this is not valid json"
+  }
+}

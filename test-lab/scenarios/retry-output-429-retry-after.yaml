@@ -1,0 +1,15 @@
+name: retry-output-429-retry-after
+description: Output respects Retry-After on a 429.
+pipeline: test-lab/pipelines/retry-output-429-retry-after.yaml
+expect_status: success
+assertions:
+  - http_count_eq:
+      method: POST
+      path: /reliability/destination/429-retry-after
+      status: 429
+      expected: 1
+  - http_count_ge:
+      method: POST
+      path: /reliability/destination/429-retry-after
+      status: 200
+      expected: 1

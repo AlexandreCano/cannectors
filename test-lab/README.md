@@ -263,3 +263,149 @@ Three pipelines exercise the `webhook` input. Unlike scheduled inputs the binary
 | `webhook-queue.yaml`  | `queueSize: 50`, `maxConcurrent: 2`, `rateLimit: 5 rps / burst 5` — observable 429s during a 10-request burst |
 
 Run with `make test-lab-verify-webhook` (or `bash test-lab/scripts/verify-webhook.sh`). The script starts each pipeline as a long-running process, fires curl requests, then asserts response codes and the destination journal entries before SIGTERMing the process.
+
+### HTTP authentication (story 23.1)
+
+Nine pipelines exercise the four supported auth types end-to-end against
+WireMock stubs in `wiremock/mappings/auth/`:
+
+| Pipeline | What it covers |
+| --- | --- |
+| `auth-input-api-key-header.yaml` | `api-key` in `X-API-Key` header on the source |
+| `auth-input-api-key-query.yaml`  | `api-key` in `api_key` query param on the source |
+| `auth-input-bearer.yaml`         | bearer token on the source |
+| `auth-input-basic.yaml`          | HTTP basic on the source |
+| `auth-input-oauth2.yaml`         | OAuth2 client credentials — token endpoint then protected endpoint |
+| `auth-output-api-key.yaml`       | api-key on the destination (output auth) |
+| `auth-http-call-basic.yaml`      | basic auth on a `http_call` enrichment |
+| `auth-negative-bearer-wrong.yaml` | wrong bearer → source 401, pipeline error, destination not called |
+| `auth-negative-oauth2-bad-secret.yaml` | wrong OAuth2 client secret → token 401, pipeline error |
+
+Run with `make test-lab-verify-auth` (or `bash test-lab/scripts/verify-auth.sh`).
+The script asserts the WireMock journal received each authenticated request
+with the expected header/query/body and that negative scenarios fail with an
+explicit pipeline status.
+
+### Reliability — retry / timeout / errors (story 23.2)
+
+Six pipelines exercise the runtime's reliability behavior against WireMock
+stubs in `wiremock/mappings/reliability/`. Several stubs use
+[WireMock scenario state](https://wiremock.org/docs/stateful-behaviour/) to
+return `500`/`429`/`503` on the first call and `200` on subsequent calls.
+
+| Pipeline | What it covers |
+| --- | --- |
+| `retry-output-500.yaml`            | 500 → 200, retry succeeds |
+| `retry-output-429-retry-after.yaml` | 429 + `Retry-After: 1`, `useRetryAfterHeader: true` |
+| `retry-output-body-hint-true.yaml`  | `retryHintFromBody: body.retryable == true` retries on 503 |
+| `retry-output-body-hint-false.yaml` | same expression, body returns `retryable: false` → no retry |
+| `retry-output-timeout.yaml`         | destination delays 3s, `timeoutMs: 500` → fast timeout error |
+| `retry-input-invalid-json.yaml`     | source returns malformed JSON → input error, destination not called |
+
+Run with `make test-lab-verify-retry` (or `bash test-lab/scripts/verify-retry.sh`).
+
+### Local E2E test runner (story 23.3)
+
+The runner orchestrates the whole lab from a single command. Most scenarios are
+a small YAML file under `test-lab/scenarios/` describing which pipeline to
+run, the expected pipeline status, and a list of declarative assertions
+against the WireMock journal, the PostgreSQL database, and the pipeline log.
+Webhook scenarios use `test-lab/scripts/verify-webhook.sh` because they start
+long-running listeners and send requests into them.
+
+Run the full suite:
+
+```bash
+make test-lab-up
+make test-lab-run
+```
+
+Run a subset with a substring filter:
+
+```bash
+make test-lab-run SCENARIO=auth
+make test-lab-run SCENARIO=retry-output-500,retry-output-timeout
+# or directly:
+python3 test-lab/run.py auth-input-bearer
+SCENARIO=db- python3 test-lab/run.py
+```
+
+The runner exits non-zero if any scenario fails. On failure it prints the
+failing assertions and the last 15 log lines of the pipeline. With no
+`SCENARIO` filter, `make test-lab-run` runs the declarative suite first and
+then the webhook suite. When `SCENARIO` is set, the filter applies only to the
+declarative scenarios; use `make test-lab-verify-webhook` to run only webhooks.
+
+#### Scenario YAML format
+
+```yaml
+name: my-scenario              # default = filename stem
+description: optional one-liner
+pipeline: test-lab/pipelines/<file>.yaml
+expect_status: success         # success | error
+timeout: 30                    # seconds passed to run-pipeline-once.sh
+setup:
+  reset_mappings: true         # default true (reloads WireMock mappings from disk)
+  reset_journal: true          # default true
+  reset_scenarios: true        # default true (WireMock scenario state)
+  reset_state: true            # default true (clears test-lab/state/state-*.json)
+  reset_db: true               # default true (re-runs reset.sql + 002_seed.sql)
+  commands:                    # optional list of bash commands to run before the pipeline
+    - "echo prepared"
+assertions:
+  - http_count_eq:
+      method: GET
+      path: /auth/source/bearer
+      headers: { Authorization: "Bearer lab-bearer-token" }
+      query: { page: "1" }      # optional
+      status: 200               # optional WireMock response status filter
+      expected: 1
+  - http_count_ge:
+      method: POST
+      path: /auth/destination/public
+      expected: 1
+  - http_count_eq_zero:
+      method: POST
+      path: /destination/never-called
+  - sql_eq:
+      query: "SELECT COUNT(*) FROM dest_customers"
+      expected: "4"
+  - log_contains: "request timeout"
+  - log_not_contains: "panic:"
+```
+
+#### Adding a CI-safe scenario
+
+CI runs a curated subset (see below). To make a scenario CI-safe:
+
+- Keep total wall time under a few seconds — avoid pipelines that wait many
+  seconds on `Retry-After` or polling backoff.
+- Use deterministic stubs, deterministic seed data, and explicit assertions;
+  avoid `http_count_ge` with a vague lower bound when an exact count is
+  knowable.
+- Leave the default resets enabled unless the scenario intentionally needs
+  custom setup.
+- Add the scenario name to the `SCENARIO` list in
+  `.github/workflows/test-lab.yml` once it is stable locally.
+
+### CI workflow (story 23.4)
+
+`.github/workflows/test-lab.yml` runs a curated subset of scenarios on every
+push and pull request to `main` / `develop`:
+
+- builds the CLI
+- starts WireMock + PostgreSQL via Docker Compose with healthchecks
+- runs `python3 test-lab/run.py` filtered by a `SCENARIO=...` allowlist
+- supports manual `workflow_dispatch` runs with a custom comma-separated
+  scenario filter for long or focused suites
+- on failure, dumps the WireMock journal, the WireMock mappings, the
+  container logs and the PostgreSQL row counts as workflow artifacts under
+  `test-lab-logs/`
+
+To reproduce the CI run locally:
+
+```bash
+make test-lab-reset
+SCENARIO=pagination-page,db-input-basic,db-output-insert,auth-input-bearer,auth-input-api-key-header,auth-negative-bearer-wrong,retry-output-500,retry-input-invalid-json \
+  python3 test-lab/run.py
+```

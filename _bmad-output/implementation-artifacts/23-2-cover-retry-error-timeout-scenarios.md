@@ -1,6 +1,6 @@
 # Story 23.2: Cover retry, error and timeout scenarios
 
-Status: ready-for-dev
+Status: in-review
 
 ## Story
 

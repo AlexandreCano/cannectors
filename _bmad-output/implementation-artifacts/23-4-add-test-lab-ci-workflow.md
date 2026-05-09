@@ -1,6 +1,6 @@
 # Story 23.4: Add test lab CI workflow
 
-Status: ready-for-dev
+Status: in-review
 
 ## Story
 

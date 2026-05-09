@@ -135,6 +135,22 @@ test-lab-verify-state-persistence: ## Run httpPolling state persistence scenario
 test-lab-verify-webhook: ## Run webhook input scenarios (story 22.7)
 	bash test-lab/scripts/verify-webhook.sh
 
+.PHONY: test-lab-verify-auth
+test-lab-verify-auth: ## Run HTTP authentication scenarios (story 23.1)
+	bash test-lab/scripts/verify-auth.sh
+
+.PHONY: test-lab-verify-retry
+test-lab-verify-retry: ## Run reliability (retry/timeout/error) scenarios (story 23.2)
+	bash test-lab/scripts/verify-retry.sh
+
+.PHONY: test-lab-run
+test-lab-run: ## Run the full test-lab E2E suite (story 23.3). Filter with SCENARIO=name1,name2.
+	@if [ -n "$(SCENARIO)" ]; then \
+		SCENARIO="$(SCENARIO)" python3 test-lab/run.py; \
+	else \
+		python3 test-lab/run.py; \
+	fi
+
 ##@ Code Quality
 
 .PHONY: fmt

@@ -1,0 +1,32 @@
+name: auth-http-call-basic
+version: 1.0.0
+description: Enrich orders via http_call protected by HTTP Basic auth, then forward to destination.
+tags:
+  - test-lab
+  - auth
+  - http_call
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/auth/source/orders
+  dataField: orders
+filters:
+  - type: http_call
+    endpoint: http://localhost:18080/auth/enrichment/orders/{orderId}
+    method: GET
+    authentication:
+      type: basic
+      credentials:
+        username: lab-enrich-user
+        password: lab-enrich-pass
+    keys:
+      - field: id
+        paramType: path
+        paramName: orderId
+    mergeStrategy: merge
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/auth/destination/public
+  method: POST
+  headers:
+    Content-Type: application/json

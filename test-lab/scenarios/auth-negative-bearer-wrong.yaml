@@ -1,0 +1,14 @@
+name: auth-negative-bearer-wrong
+description: Wrong bearer token → source 401, pipeline fails, destination not called.
+pipeline: test-lab/pipelines/auth-negative-bearer-wrong.yaml
+expect_status: error
+assertions:
+  - http_count_ge:
+      method: GET
+      path: /auth/source/bearer
+      status: 401
+      expected: 1
+  - http_count_eq_zero:
+      method: POST
+      path: /auth/destination/public
+  - log_contains: "authentication error (status 401)"

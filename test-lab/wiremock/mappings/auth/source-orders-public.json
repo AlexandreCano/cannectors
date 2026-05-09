@@ -1,0 +1,13 @@
+{
+  "name": "auth-source-orders-public",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/auth/source/orders"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "bodyFileName": "auth/orders.json"
+  }
+}

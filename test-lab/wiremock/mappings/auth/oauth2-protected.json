@@ -1,0 +1,16 @@
+{
+  "name": "auth-oauth2-protected",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/auth/oauth2/protected",
+    "headers": {
+      "Authorization": { "equalTo": "Bearer lab-oauth2-access-token" }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "bodyFileName": "auth/protected.json"
+  }
+}

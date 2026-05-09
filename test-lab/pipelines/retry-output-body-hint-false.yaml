@@ -1,0 +1,25 @@
+name: retry-output-body-hint-false
+version: 1.0.0
+description: Output stops retrying when the response body indicates retryable=false even on a normally retryable 500.
+tags:
+  - test-lab
+  - retry
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/reliability/source/records
+  dataField: records
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/reliability/destination/body-hint-false
+  method: POST
+  headers:
+    Content-Type: application/json
+  retry:
+    maxAttempts: 3
+    delayMs: 50
+    backoffMultiplier: 1
+    maxDelayMs: 200
+    retryableStatusCodes: [500, 502, 503, 504]
+    retryHintFromBody: body.retryable == true

@@ -1,0 +1,24 @@
+name: retry-output-500
+version: 1.0.0
+description: Output retries after a 500 then succeeds (WireMock scenario state).
+tags:
+  - test-lab
+  - retry
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/reliability/source/records
+  dataField: records
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/reliability/destination/500-then-200
+  method: POST
+  headers:
+    Content-Type: application/json
+  retry:
+    maxAttempts: 3
+    delayMs: 50
+    backoffMultiplier: 1
+    maxDelayMs: 100
+    retryableStatusCodes: [500, 502, 503, 504]

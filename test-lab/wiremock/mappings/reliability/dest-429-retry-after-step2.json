@@ -1,0 +1,15 @@
+{
+  "name": "reliability-dest-429-then-200-step2",
+  "priority": 1,
+  "scenarioName": "dest-429-then-200",
+  "requiredScenarioState": "succeeded",
+  "request": {
+    "method": "POST",
+    "urlPath": "/reliability/destination/429-retry-after"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "ok": true }
+  }
+}

@@ -1,0 +1,6 @@
+name: retry-output-timeout
+description: Output fails fast when destination is slower than timeoutMs.
+pipeline: test-lab/pipelines/retry-output-timeout.yaml
+expect_status: error
+assertions:
+  - log_contains: "network error: request timeout"

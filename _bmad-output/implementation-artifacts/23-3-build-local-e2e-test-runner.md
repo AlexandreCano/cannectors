@@ -1,6 +1,6 @@
 # Story 23.3: Build local E2E test runner
 
-Status: ready-for-dev
+Status: in-review
 
 ## Story
 

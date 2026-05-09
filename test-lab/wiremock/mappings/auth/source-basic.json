@@ -1,0 +1,16 @@
+{
+  "name": "auth-source-basic",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/auth/source/basic",
+    "headers": {
+      "Authorization": { "equalTo": "Basic bGFiLXVzZXI6bGFiLXBhc3M=" }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "bodyFileName": "auth/customers.json"
+  }
+}

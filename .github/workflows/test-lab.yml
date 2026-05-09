@@ -1,0 +1,95 @@
+name: Test Lab
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  GO_VERSION: '1.25'
+  WIREMOCK_BASE: http://localhost:18080
+
+jobs:
+  test-lab:
+    name: Run E2E test lab (curated CI suite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install python deps
+        run: pip install pyyaml
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends jq
+
+      - name: Build CLI
+        run: go build -o cannectors ./cmd/cannectors
+
+      - name: Start test lab (postgres + wiremock)
+        run: docker compose -f test-lab/docker-compose.yml up -d --wait
+
+      - name: Confirm services are healthy
+        run: |
+          docker compose -f test-lab/docker-compose.yml ps
+          curl -fsS "$WIREMOCK_BASE/__admin/mappings" >/dev/null
+          docker compose -f test-lab/docker-compose.yml exec -T postgres \
+            pg_isready -U cannectors_test -d cannectors_test
+
+      # Curated CI suite: covers HTTP polling → HTTP output, database I/O,
+      # one auth scenario, one retry scenario. Long, slow or flaky scenarios
+      # are excluded from PRs and can be run manually with workflow_dispatch
+      # on a separate filter.
+      - name: Run curated CI scenarios
+        env:
+          SCENARIO: pagination-page,db-input-basic,db-output-insert,auth-input-bearer,auth-input-api-key-header,auth-negative-bearer-wrong,retry-output-500,retry-input-invalid-json
+        run: python3 test-lab/run.py
+
+      - name: Dump WireMock request journal on failure
+        if: failure()
+        run: |
+          curl -fsS "$WIREMOCK_BASE/__admin/requests" \
+            | python3 -m json.tool > wiremock-journal.json || true
+          curl -fsS "$WIREMOCK_BASE/__admin/mappings" \
+            | python3 -m json.tool > wiremock-mappings.json || true
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          mkdir -p test-lab-logs
+          docker compose -f test-lab/docker-compose.yml logs wiremock > test-lab-logs/wiremock.log || true
+          docker compose -f test-lab/docker-compose.yml logs postgres > test-lab-logs/postgres.log || true
+          docker compose -f test-lab/docker-compose.yml exec -T postgres \
+            pg_dump -U cannectors_test -d cannectors_test --schema-only > test-lab-logs/db-schema.sql || true
+          docker compose -f test-lab/docker-compose.yml exec -T postgres \
+            psql -U cannectors_test -d cannectors_test -c "SELECT 'dest_customers' AS table, COUNT(*) FROM dest_customers UNION ALL SELECT 'dest_orders', COUNT(*) FROM dest_orders UNION ALL SELECT 'inventory_snapshot', COUNT(*) FROM inventory_snapshot;" \
+            > test-lab-logs/db-counts.txt || true
+
+      - name: Upload diagnostic artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-lab-logs
+          path: |
+            test-lab-logs/
+            wiremock-journal.json
+            wiremock-mappings.json
+          retention-days: 7
+
+      - name: Stop test lab
+        if: always()
+        run: docker compose -f test-lab/docker-compose.yml down --volumes --remove-orphans

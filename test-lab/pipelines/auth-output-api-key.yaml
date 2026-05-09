@@ -1,0 +1,24 @@
+name: auth-output-api-key
+version: 1.0.0
+description: HTTP polling input (public) sending records to a destination protected by an API key.
+tags:
+  - test-lab
+  - auth
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/auth/source/orders
+  dataField: orders
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/auth/destination/orders
+  method: POST
+  headers:
+    Content-Type: application/json
+  authentication:
+    type: api-key
+    credentials:
+      key: lab-destination-api-key
+      location: header
+      headerName: X-API-Key

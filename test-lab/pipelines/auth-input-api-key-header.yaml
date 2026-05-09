@@ -1,0 +1,24 @@
+name: auth-input-api-key-header
+version: 1.0.0
+description: HTTP polling input authenticated with api-key in X-API-Key header.
+tags:
+  - test-lab
+  - auth
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/auth/source/api-key-header
+  dataField: customers
+  authentication:
+    type: api-key
+    credentials:
+      key: lab-api-key-header
+      location: header
+      headerName: X-API-Key
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/auth/destination/public
+  method: POST
+  headers:
+    Content-Type: application/json

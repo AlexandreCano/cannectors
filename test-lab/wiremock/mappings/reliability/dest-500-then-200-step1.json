@@ -1,0 +1,16 @@
+{
+  "name": "reliability-dest-500-then-200-step1",
+  "priority": 1,
+  "scenarioName": "dest-500-then-200",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "succeeded",
+  "request": {
+    "method": "POST",
+    "urlPath": "/reliability/destination/500-then-200"
+  },
+  "response": {
+    "status": 500,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "error": "transient", "retryable": true }
+  }
+}

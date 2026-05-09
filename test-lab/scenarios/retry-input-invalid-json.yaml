@@ -1,0 +1,9 @@
+name: retry-input-invalid-json
+description: Input fails cleanly when source returns malformed JSON.
+pipeline: test-lab/pipelines/retry-input-invalid-json.yaml
+expect_status: error
+assertions:
+  - http_count_eq_zero:
+      method: POST
+      path: /reliability/destination/never-called
+  - log_contains: "failed to parse JSON response"

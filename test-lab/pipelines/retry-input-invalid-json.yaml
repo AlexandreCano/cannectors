@@ -1,0 +1,19 @@
+name: retry-input-invalid-json
+version: 1.0.0
+description: Input fails cleanly when the source returns invalid JSON.
+tags:
+  - test-lab
+  - retry
+  - error-handling
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/reliability/source/invalid-json
+  dataField: records
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/reliability/destination/never-called
+  method: POST
+  headers:
+    Content-Type: application/json

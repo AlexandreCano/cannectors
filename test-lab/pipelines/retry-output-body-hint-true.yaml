@@ -1,0 +1,25 @@
+name: retry-output-body-hint-true
+version: 1.0.0
+description: Output retries when the response body indicates retryable=true.
+tags:
+  - test-lab
+  - retry
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/reliability/source/records
+  dataField: records
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/reliability/destination/body-hint-true
+  method: POST
+  headers:
+    Content-Type: application/json
+  retry:
+    maxAttempts: 3
+    delayMs: 50
+    backoffMultiplier: 1
+    maxDelayMs: 200
+    retryableStatusCodes: [503]
+    retryHintFromBody: body.retryable == true

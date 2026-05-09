@@ -1,0 +1,13 @@
+{
+  "name": "auth-oauth2-token-401",
+  "priority": 5,
+  "request": {
+    "method": "POST",
+    "urlPath": "/auth/oauth2/token"
+  },
+  "response": {
+    "status": 401,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "error": "invalid_client" }
+  }
+}

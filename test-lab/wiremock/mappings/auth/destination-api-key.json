@@ -1,0 +1,16 @@
+{
+  "name": "auth-destination-api-key",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/auth/destination/orders",
+    "headers": {
+      "X-API-Key": { "equalTo": "lab-destination-api-key" }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "ok": true }
+  }
+}

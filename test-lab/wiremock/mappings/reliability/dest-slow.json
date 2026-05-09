@@ -1,0 +1,14 @@
+{
+  "name": "reliability-dest-slow",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/reliability/destination/slow"
+  },
+  "response": {
+    "status": 200,
+    "fixedDelayMilliseconds": 3000,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "ok": true }
+  }
+}

@@ -1,0 +1,22 @@
+name: auth-input-bearer
+version: 1.0.0
+description: HTTP polling input authenticated with bearer token.
+tags:
+  - test-lab
+  - auth
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/auth/source/bearer
+  dataField: customers
+  authentication:
+    type: bearer
+    credentials:
+      token: lab-bearer-token
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/auth/destination/public
+  method: POST
+  headers:
+    Content-Type: application/json

@@ -1,0 +1,13 @@
+{
+  "name": "reliability-dest-body-hint-false",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/reliability/destination/body-hint-false"
+  },
+  "response": {
+    "status": 500,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "retryable": false, "message": "permanent failure" }
+  }
+}

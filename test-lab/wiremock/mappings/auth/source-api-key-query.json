@@ -1,0 +1,16 @@
+{
+  "name": "auth-source-api-key-query",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/auth/source/api-key-query",
+    "queryParameters": {
+      "api_key": { "equalTo": "lab-api-key-query" }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "bodyFileName": "auth/customers.json"
+  }
+}

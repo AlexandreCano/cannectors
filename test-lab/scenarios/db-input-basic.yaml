@@ -1,0 +1,12 @@
+name: db-input-basic
+description: Database input → batch posted to WireMock destination.
+pipeline: test-lab/pipelines/db-input-basic.yaml
+expect_status: success
+setup:
+  reset_db: true
+assertions:
+  - http_count_ge:
+      method: POST
+      path: /destination/db-input/customers
+      status: 202
+      expected: 1

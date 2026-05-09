@@ -1,0 +1,13 @@
+{
+  "name": "auth-source-api-key-query-401",
+  "priority": 5,
+  "request": {
+    "method": "GET",
+    "urlPath": "/auth/source/api-key-query"
+  },
+  "response": {
+    "status": 401,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "error": "missing or invalid api_key query param" }
+  }
+}

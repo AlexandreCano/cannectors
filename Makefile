@@ -111,6 +111,10 @@ test-lab-mappings-reload: ## Reload WireMock stub mappings from disk
 test-lab-verify-pagination: ## Run HTTP pagination scenarios (story 22.1)
 	bash test-lab/scripts/verify-pagination.sh
 
+.PHONY: test-lab-verify-database
+test-lab-verify-database: ## Run database input/output scenarios (story 22.2)
+	bash test-lab/scripts/verify-database.sh
+
 ##@ Code Quality
 
 .PHONY: fmt

@@ -174,3 +174,28 @@ test-lab/scripts/verify-pagination.sh
 ```
 
 The script asserts the number of GET requests on each source endpoint, that the destination batch endpoint received the records in deterministic order, and that the polling loop terminates without running forever.
+
+### Database input/output (story 22.2)
+
+Three database input pipelines exercise simple reads, parameter binding, and `queryFile` against the seeded `source_*` tables; five database output pipelines exercise plain INSERT, ON CONFLICT upsert via `queryFile`, transactional rollback, and `onError=skip` / `onError=log` strategies against `dest_customers`.
+
+| Pipeline | Path | Notes |
+| --- | --- | --- |
+| `db-input-basic.yaml` | source_customers → POST /destination/db-input/customers | inline query |
+| `db-input-parameters.yaml` | source_customers WHERE status=:status | named parameter |
+| `db-input-query-file.yaml` | source_orders WHERE status='paid' | reads `test-lab/assets/sql/select-paid-orders.sql` |
+| `db-output-insert.yaml` | /source/db-feed/customers → INSERT dest_customers | template-driven INSERT |
+| `db-output-upsert-query-file.yaml` | same feed → ON CONFLICT upsert | reads `test-lab/assets/sql/upsert-dest-customer.sql` |
+| `db-output-transaction-rollback.yaml` | feed with email collision → transaction=true, onError=fail | rollback semantics |
+| `db-output-on-error-skip.yaml` | same feed → transaction=false, onError=skip | skip the offending row |
+| `db-output-on-error-log.yaml` | feed missing required field → onError=log | log and continue |
+
+Run all of them with:
+
+```bash
+make test-lab-up
+make test-lab-db-reset
+test-lab/scripts/verify-database.sh
+```
+
+The script asserts WireMock received the expected batch from the database inputs, and that each database output left `dest_customers` in the expected state. It always restarts from a clean test seed so re-runs are deterministic.

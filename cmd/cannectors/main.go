@@ -12,6 +12,12 @@ import (
 
 	"github.com/spf13/cobra"
 
+	// Database drivers registered with database/sql for the CLI binary. Each
+	// blank import calls sql.Register in its init() so that cfg-driven module
+	// runs against PostgreSQL/MySQL/SQLite work out of the box.
+	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "modernc.org/sqlite"
+
 	"github.com/cannectors/runtime/internal/cli"
 	"github.com/cannectors/runtime/internal/config"
 	"github.com/cannectors/runtime/internal/factory"

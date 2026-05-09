@@ -1,0 +1,18 @@
+name: db-input-query-file
+version: 1.0.0
+description: Read paid orders using an external SQL queryFile.
+tags:
+  - test-lab
+  - database
+  - input
+input:
+  type: database
+  connectionString: postgres://cannectors_test:cannectors_test@localhost:15432/cannectors_test?sslmode=disable
+  queryFile: test-lab/assets/sql/select-paid-orders.sql
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/db-input/paid-orders
+  method: POST
+  headers:
+    Content-Type: application/json

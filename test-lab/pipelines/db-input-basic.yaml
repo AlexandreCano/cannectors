@@ -1,0 +1,18 @@
+name: db-input-basic
+version: 1.0.0
+description: Read source_customers from PostgreSQL and POST as a batch to the destination HTTP endpoint.
+tags:
+  - test-lab
+  - database
+  - input
+input:
+  type: database
+  connectionString: postgres://cannectors_test:cannectors_test@localhost:15432/cannectors_test?sslmode=disable
+  query: "SELECT external_id, email, full_name, status FROM source_customers ORDER BY id"
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/db-input/customers
+  method: POST
+  headers:
+    Content-Type: application/json

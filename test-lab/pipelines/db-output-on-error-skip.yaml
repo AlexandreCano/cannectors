@@ -1,0 +1,22 @@
+name: db-output-on-error-skip
+version: 1.0.0
+description: |-
+  Same conflicting feed as the rollback scenario, but with transaction=false and
+  onError=skip. The conflicting row is skipped and the other rows still land in
+  dest_customers.
+tags:
+  - test-lab
+  - database
+  - output
+  - on-error
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/source/db-feed/customers-with-conflict
+filters: []
+output:
+  type: database
+  connectionString: postgres://cannectors_test:cannectors_test@localhost:15432/cannectors_test?sslmode=disable
+  transaction: false
+  onError: skip
+  query: "INSERT INTO dest_customers (external_id, email, full_name, segment, source_updated_at, synced_at) VALUES ({{record.externalId}}, {{record.email}}, {{record.fullName}}, {{record.segment}}, {{record.sourceUpdatedAt}}, NOW())"

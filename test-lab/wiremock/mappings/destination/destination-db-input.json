@@ -1,0 +1,13 @@
+{
+  "name": "destination-db-input",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/destination/db-input/.*"
+  },
+  "response": {
+    "status": 202,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "accepted": true, "scenario": "db-input" }
+  }
+}

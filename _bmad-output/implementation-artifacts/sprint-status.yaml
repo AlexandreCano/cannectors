@@ -186,7 +186,7 @@ development_status:
   # Source: local test lab planning session
   epic-22: backlog
   22-1-cover-http-pagination-scenarios: done
-  22-2-cover-database-input-output-scenarios: ready-for-dev
+  22-2-cover-database-input-output-scenarios: done
   22-3-cover-sql-call-enrichment-scenarios: ready-for-dev
   22-4-cover-http-call-enrichment-scenarios: ready-for-dev
   22-5-cover-transformation-filters-scenarios: ready-for-dev

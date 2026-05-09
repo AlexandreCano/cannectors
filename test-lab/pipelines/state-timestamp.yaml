@@ -1,0 +1,23 @@
+name: state-timestamp
+version: 1.0.0
+description: HTTP polling with timestamp state persistence (updated_after query param on subsequent runs).
+tags:
+  - test-lab
+  - state
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/source/state/events
+  dataField: events
+  statePersistence:
+    timestamp:
+      enabled: true
+      queryParam: updated_after
+    storagePath: ./test-lab/state
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/destination/state/timestamp
+  method: POST
+  headers:
+    Content-Type: application/json

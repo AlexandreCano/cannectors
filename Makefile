@@ -127,6 +127,10 @@ test-lab-verify-http-call: ## Run http_call enrichment scenarios (story 22.4)
 test-lab-verify-filters: ## Run transformation filter scenarios (story 22.5)
 	bash test-lab/scripts/verify-filters.sh
 
+.PHONY: test-lab-verify-state-persistence
+test-lab-verify-state-persistence: ## Run httpPolling state persistence scenarios (story 22.6)
+	bash test-lab/scripts/verify-state-persistence.sh
+
 ##@ Code Quality
 
 .PHONY: fmt

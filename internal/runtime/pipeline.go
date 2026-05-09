@@ -470,15 +470,16 @@ func (e *Executor) setupStatePersistence(pipeline *connector.Pipeline, traceID s
 	var persistenceConfig *persistence.StatePersistenceConfig
 	if spInput, ok := e.inputModule.(StatePersistentInput); ok {
 		spInput.SetPipelineID(pipeline.ID)
-		// Use executor's state store if available and input module doesn't have a custom storage path
-		// This allows input modules to use their own state store with custom storagePath from config
+		// Align the executor's state store with the input module's configured
+		// storagePath so that LoadState (input) and Save (executor) use the same
+		// directory. Without this, a custom storagePath would be honored on
+		// load but the executor would still persist to the default path.
+		config := spInput.GetPersistenceConfig()
+		if config != nil && config.StoragePath != "" {
+			e.stateStore = persistence.NewStateStore(config.StoragePath)
+		}
 		if e.stateStore != nil {
-			config := spInput.GetPersistenceConfig()
-			// Only override if input module doesn't have a custom storagePath
-			// (if it has one, it already created its own stateStore with that path)
-			if config == nil || config.StoragePath == "" {
-				spInput.SetStateStore(e.stateStore)
-			}
+			spInput.SetStateStore(e.stateStore)
 		}
 		state, err := spInput.LoadState()
 		if err != nil {

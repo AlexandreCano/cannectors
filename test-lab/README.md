@@ -239,3 +239,15 @@ Five pipelines exercise the `mapping`, `set`, `remove`, `condition`, and `script
 | `filters-script-file.yaml` | JavaScript transform loaded from `test-lab/assets/scripts/normalize.js` |
 
 Run with `make test-lab-verify-filters` (or `bash test-lab/scripts/verify-filters.sh`). All assertions read the destination payload from the WireMock journal.
+
+### State persistence (story 22.6)
+
+Three pipelines exercise the `statePersistence` config of the `httpPolling` input, with `storagePath: ./test-lab/state`.
+
+| Pipeline | What it covers |
+| --- | --- |
+| `state-timestamp.yaml` | `timestamp.enabled` only — `updated_after` query param added on subsequent runs |
+| `state-id.yaml`        | `id.enabled` only — `field: event.id`, `after_id` query param added on subsequent runs |
+| `state-both.yaml`      | both timestamp + id enabled together |
+
+Run with `make test-lab-verify-state-persistence` (or `bash test-lab/scripts/verify-state-persistence.sh`). The script clears the state directory and the WireMock journal, runs each pipeline twice, and asserts that (a) the first request carries no state query params, (b) the second request carries the expected params with the values persisted to disk, and (c) the `state-<pipeline>.json` file contains the expected `lastTimestamp` / `lastId` keys.

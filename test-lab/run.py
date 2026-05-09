@@ -280,19 +280,21 @@ def count_requests(spec: dict[str, Any]) -> int:
 def evaluate_assertion(idx: int, spec: dict[str, Any], log_file: Path) -> AssertionResult:
     if "http_count_eq" in spec:
         params = spec["http_count_eq"]
-        expected = int(params.pop("expected"))
-        actual = count_requests(params)
+        expected = int(params["expected"])
+        match_params = {k: v for k, v in params.items() if k != "expected"}
+        actual = count_requests(match_params)
         return AssertionResult(
-            label=f"http_count_eq {params}",
+            label=f"http_count_eq {match_params}",
             ok=actual == expected,
             detail=f"expected={expected}, actual={actual}",
         )
     if "http_count_ge" in spec:
         params = spec["http_count_ge"]
-        expected = int(params.pop("expected"))
-        actual = count_requests(params)
+        expected = int(params["expected"])
+        match_params = {k: v for k, v in params.items() if k != "expected"}
+        actual = count_requests(match_params)
         return AssertionResult(
-            label=f"http_count_ge {params}",
+            label=f"http_count_ge {match_params}",
             ok=actual >= expected,
             detail=f"expected>={expected}, actual={actual}",
         )

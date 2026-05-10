@@ -70,6 +70,11 @@
 					"description": "Webhook server listen address.",
 					"default": "0.0.0.0:8080"
 				},
+				"requestTimeoutMs": {
+					"type": "integer",
+					"minimum": 1,
+					"description": "Per-request HTTP read/write timeout in milliseconds. Does NOT bound the webhook server lifetime."
+				},
 				"signature": {
 					"$ref": "#/$defs/webhookSignature"
 				},
@@ -128,16 +133,17 @@
 				},
 				"header": {
 					"type": "string",
-					"description": "Header name containing the signature."
+					"minLength": 1,
+					"description": "Header name containing the signature. Defaults to X-Hub-Signature-256 when omitted."
 				},
 				"secret": {
 					"type": "string",
+					"minLength": 1,
 					"description": "Secret key for signature validation."
 				}
 			},
 			"required": [
 				"type",
-				"header",
 				"secret"
 			],
 			"additionalProperties": false
@@ -148,16 +154,17 @@
 			"description": "Webhook rate limiting configuration.",
 			"properties": {
 				"requestsPerSecond": {
-					"type": "number",
+					"type": "integer",
 					"description": "Maximum requests per second.",
-					"minimum": 0
+					"minimum": 1
 				},
 				"burst": {
-					"type": "number",
+					"type": "integer",
 					"description": "Maximum burst size.",
 					"minimum": 1
 				}
 			},
+			"required": ["requestsPerSecond"],
 			"additionalProperties": false
 		}
 	}

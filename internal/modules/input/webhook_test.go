@@ -206,9 +206,9 @@ func TestWebhook_Start_UsesConfiguredTimeout(t *testing.T) {
 	config := &connector.ModuleConfig{
 		Type: "webhook",
 		Raw: mustJSON(map[string]any{
-			"path":          "/webhook/test",
-			"listenAddress": "127.0.0.1:0",
-			"timeoutMs":     2000.0,
+			"path":             "/webhook/test",
+			"listenAddress":    "127.0.0.1:0",
+			"requestTimeoutMs": 2000.0,
 		}),
 	}
 
@@ -772,7 +772,7 @@ func TestWebhook_SignatureValidation_Valid(t *testing.T) {
 			"listenAddress": "127.0.0.1:0",
 			"signature": map[string]any{
 				"type":   "hmac-sha256",
-				"header": "X-Webhook-Signature",
+				"header": "X-Hub-Signature-256",
 				"secret": secret,
 			},
 		}),
@@ -812,7 +812,7 @@ func TestWebhook_SignatureValidation_Valid(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "http://"+addr+"/webhook/test", bytes.NewBufferString(payload))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Webhook-Signature", signature)
+	req.Header.Set("X-Hub-Signature-256", signature)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -847,7 +847,7 @@ func TestWebhook_SignatureValidation_Invalid(t *testing.T) {
 			"listenAddress": "127.0.0.1:0",
 			"signature": map[string]any{
 				"type":   "hmac-sha256",
-				"header": "X-Webhook-Signature",
+				"header": "X-Hub-Signature-256",
 				"secret": secret,
 			},
 		}),
@@ -877,7 +877,7 @@ func TestWebhook_SignatureValidation_Invalid(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "http://"+addr+"/webhook/test", bytes.NewBufferString(payload))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Webhook-Signature", "invalid-signature")
+	req.Header.Set("X-Hub-Signature-256", "invalid-signature")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -903,7 +903,7 @@ func TestWebhook_SignatureValidation_MissingSignature(t *testing.T) {
 			"listenAddress": "127.0.0.1:0",
 			"signature": map[string]any{
 				"type":   "hmac-sha256",
-				"header": "X-Webhook-Signature",
+				"header": "X-Hub-Signature-256",
 				"secret": "test-secret",
 			},
 		}),

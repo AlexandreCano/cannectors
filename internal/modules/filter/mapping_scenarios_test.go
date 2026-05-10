@@ -52,7 +52,7 @@ func TestMappingModule_IntegrationScenarios(t *testing.T) {
 				Op:        "split",
 				Separator: ",",
 			}}},
-			{Source: strPtr("metadata.priority"), Target: "priority", OnMissing: "useDefault", DefaultValue: "normal"},
+			{Source: strPtr("metadata.priority"), Target: "priority", OnMissing: "useDefault", HasDefaultValue: true, DefaultValue: "normal"},
 		}
 
 		mapper, err := NewMappingFromConfig(mappings, "fail")
@@ -178,7 +178,7 @@ func TestMapping_Deterministic(t *testing.T) {
 				{Op: "lowercase"},
 			}},
 			{Source: strPtr("email"), Target: "contact.email"},
-			{Source: strPtr("missing"), Target: "optional", OnMissing: "useDefault", DefaultValue: "default"},
+			{Source: strPtr("missing"), Target: "optional", OnMissing: "useDefault", HasDefaultValue: true, DefaultValue: "default"},
 		}
 
 		input := []map[string]any{

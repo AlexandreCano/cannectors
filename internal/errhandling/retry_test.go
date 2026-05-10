@@ -651,26 +651,40 @@ func TestOnErrorStrategy(t *testing.T) {
 }
 
 // TestParseOnErrorStrategy tests parsing OnError strategy.
+// Casing and surrounding whitespace are normalized (Story 24.2 AC9).
+// Truly unknown values return an error (AC10).
 func TestParseOnErrorStrategy(t *testing.T) {
 	tests := []struct {
-		input    string
-		expected OnErrorStrategy
+		input     string
+		expected  OnErrorStrategy
+		expectErr bool
 	}{
-		{"fail", OnErrorFail},
-		{"skip", OnErrorSkip},
-		{"log", OnErrorLog},
-		{"FAIL", OnErrorFail},    // Case insensitive
-		{"Skip", OnErrorSkip},    // Case insensitive
-		{"LOG", OnErrorLog},      // Case insensitive
-		{"", OnErrorFail},        // Default
-		{"invalid", OnErrorFail}, // Invalid defaults to fail
+		{"fail", OnErrorFail, false},
+		{"skip", OnErrorSkip, false},
+		{"log", OnErrorLog, false},
+		{"FAIL", OnErrorFail, false},
+		{"Skip", OnErrorSkip, false},
+		{"LOG", OnErrorLog, false},
+		{" fail ", OnErrorFail, false},
+		{"", OnErrorFail, false},
+		{"invalid", "", true},
+		{"continue", "", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			result := ParseOnErrorStrategy(tt.input)
+			result, err := ParseOnErrorStrategy(tt.input)
+			if tt.expectErr {
+				if err == nil {
+					t.Errorf("ParseOnErrorStrategy(%q) expected error, got nil", tt.input)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("ParseOnErrorStrategy(%q) unexpected error: %v", tt.input, err)
+			}
 			if result != tt.expected {
-				t.Errorf("ParseOnErrorStrategy(%s) = %s, want %s", tt.input, result, tt.expected)
+				t.Errorf("ParseOnErrorStrategy(%q) = %s, want %s", tt.input, result, tt.expected)
 			}
 		})
 	}

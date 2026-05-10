@@ -24,7 +24,7 @@
       "dataField": "orders",
       "pagination": {
         "type": "page",
-        "pageParam": "page",
+        "param": "page",
         "totalPagesField": "meta.total_pages"
       },
       "authentication": {
@@ -41,9 +41,6 @@
       {
         "type": "condition",
         "expression": "status == 'completed' && total > 0",
-        "lang": "simple",
-        "onTrue": "continue",
-        "onFalse": "skip",
         "onError": "log"
       },
       {

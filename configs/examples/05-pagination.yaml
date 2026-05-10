@@ -14,7 +14,7 @@ connector:
     dataField: users
     pagination:
       type: page
-      pageParam: page
+      param: page
       totalPagesField: total_pages
     authentication:
       type: bearer

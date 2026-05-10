@@ -517,9 +517,9 @@ cannectors run my-pipeline.json
 
 | Type | Parameters |
 |------|------------|
-| `page` | `pageParam`, `totalPagesField` |
-| `offset` | `offsetParam`, `limitParam`, `limit`, `totalField` |
-| `cursor` | `cursorParam`, `nextCursorField` |
+| `page` | `param`, `totalPagesField` |
+| `offset` | `param`, `limitParam`, `limit`, `totalField` |
+| `cursor` | `param`, `nextCursorField` |
 
 ### Filter Modules
 

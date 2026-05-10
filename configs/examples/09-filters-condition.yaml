@@ -15,9 +15,8 @@ connector:
   filters:
     - type: condition
       expression: "status == 'active' && price > 0"
-      lang: simple
-      onTrue: continue
-      onFalse: skip
+      else:
+        - type: drop
       onError: fail
 
   output:

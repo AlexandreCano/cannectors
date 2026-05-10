@@ -37,16 +37,25 @@ func (h *HTTPRequestModule) PreviewRequest(records []map[string]any, opts Previe
 }
 
 func (h *HTTPRequestModule) previewBatchMode(records []map[string]any, opts PreviewOptions) ([]RequestPreview, error) {
-	endpoint := h.resolveEndpointForBatch(h.endpoint, records)
+	endpoint, err := h.resolveEndpointForBatch(h.endpoint, records)
+	if err != nil {
+		return nil, err
+	}
 	bodyPreview, err := formatJSONPreview(records)
 	if err != nil {
 		return nil, fmt.Errorf("formatting body preview: %w", err)
 	}
 	var batchHeaders map[string]string
 	if len(records) > 0 {
-		batchHeaders = h.extractHeadersFromRecord(records[0])
+		batchHeaders, err = h.extractHeadersFromRecord(records[0])
+		if err != nil {
+			return nil, err
+		}
 	}
-	headers := h.buildPreviewHeaders(batchHeaders, opts)
+	headers, err := h.buildPreviewHeaders(batchHeaders, opts)
+	if err != nil {
+		return nil, err
+	}
 	return []RequestPreview{{
 		Endpoint:    endpoint,
 		Method:      h.method,
@@ -59,13 +68,22 @@ func (h *HTTPRequestModule) previewBatchMode(records []map[string]any, opts Prev
 func (h *HTTPRequestModule) previewSingleRecordMode(records []map[string]any, opts PreviewOptions) ([]RequestPreview, error) {
 	previews := make([]RequestPreview, 0, len(records))
 	for _, record := range records {
-		endpoint := h.resolveEndpointForRecord(record)
+		endpoint, err := h.resolveEndpointForRecord(record)
+		if err != nil {
+			return nil, err
+		}
 		bodyPreview, err := formatJSONPreview(record)
 		if err != nil {
 			return nil, fmt.Errorf("formatting body preview: %w", err)
 		}
-		recordHeaders := h.extractHeadersFromRecord(record)
-		headers := h.buildPreviewHeaders(recordHeaders, opts)
+		recordHeaders, err := h.extractHeadersFromRecord(record)
+		if err != nil {
+			return nil, err
+		}
+		headers, err := h.buildPreviewHeaders(recordHeaders, opts)
+		if err != nil {
+			return nil, err
+		}
 		previews = append(previews, RequestPreview{
 			Endpoint:    endpoint,
 			Method:      h.method,
@@ -79,14 +97,17 @@ func (h *HTTPRequestModule) previewSingleRecordMode(records []map[string]any, op
 
 // buildPreviewHeaders applies auth masking (or unmasking) on top of the base
 // headers map.
-func (h *HTTPRequestModule) buildPreviewHeaders(recordHeaders map[string]string, opts PreviewOptions) map[string]string {
-	headers := h.buildBaseHeadersMap(recordHeaders)
+func (h *HTTPRequestModule) buildPreviewHeaders(recordHeaders map[string]string, opts PreviewOptions) (map[string]string, error) {
+	headers, err := h.buildBaseHeadersMap(recordHeaders)
+	if err != nil {
+		return nil, err
+	}
 	if opts.ShowCredentials {
 		h.addUnmaskedAuthHeaders(headers)
 	} else {
 		h.addMaskedAuthHeaders(headers)
 	}
-	return headers
+	return headers, nil
 }
 
 func (h *HTTPRequestModule) addMaskedAuthHeaders(headers map[string]string) {

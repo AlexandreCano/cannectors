@@ -60,8 +60,6 @@ connector:
     # Condition filter can access metadata for routing
     - type: condition
       expression: "_metadata.validated == true"
-      onTrue: continue
-      onFalse: skip
 
   output:
     type: httpRequest

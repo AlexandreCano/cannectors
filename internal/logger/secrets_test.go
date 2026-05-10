@@ -143,7 +143,7 @@ func TestPipelineExecution_LogsDoNotLeakSecrets(t *testing.T) {
 	defer inputServer.Close()
 
 	outputServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusCreated)
 	}))
 	defer outputServer.Close()
 

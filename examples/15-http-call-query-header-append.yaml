@@ -26,7 +26,7 @@ filters:
     cache:
       enabled: true
       maxSize: 1000
-      defaultTTL: 300
+      ttlSeconds: 300
 output:
   type: httpRequest
   endpoint: https://destination.example.com/api/tickets

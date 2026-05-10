@@ -41,7 +41,7 @@ type capturedRequest struct {
 func newTestServer() *testServer {
 	ts := &testServer{
 		requests:     make([]*capturedRequest, 0),
-		responseCode: http.StatusOK,
+		responseCode: http.StatusCreated, // 201 is in the default success codes (Story 24.12 AC13)
 	}
 
 	ts.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -125,26 +125,30 @@ func TestNewHTTPRequestFromConfig_MissingEndpoint(t *testing.T) {
 	}
 }
 
-func TestNewHTTPRequestFromConfig_MissingMethod(t *testing.T) {
+func TestNewHTTPRequestFromConfig_MissingMethodDefaultsToPOST(t *testing.T) {
+	// Story 24.12 AC1: when method is omitted, default to POST.
 	config := newModuleConfig(map[string]any{
 		"endpoint": "https://api.example.com/data",
 	})
 
-	_, err := NewHTTPRequestFromConfig(config)
-	if err == nil {
-		t.Fatal("expected error for missing method")
+	module, err := NewHTTPRequestFromConfig(config)
+	if err != nil {
+		t.Fatalf("expected default method to apply, got %v", err)
+	}
+	if module.method != "POST" {
+		t.Fatalf("expected default method POST, got %q", module.method)
 	}
 }
 
 func TestNewHTTPRequestFromConfig_InvalidMethod(t *testing.T) {
 	config := newModuleConfig(map[string]any{
 		"endpoint": "https://api.example.com/data",
-		"method":   "INVALID",
+		"method":   "BAD METHOD",
 	})
 
 	_, err := NewHTTPRequestFromConfig(config)
 	if err == nil {
-		t.Fatal("expected error for invalid method")
+		t.Fatal("expected error for invalid method (non-RFC 7230 token)")
 	}
 }
 
@@ -173,7 +177,7 @@ func TestNewHTTPRequestFromConfig_RetryHintFromBody_TooLong(t *testing.T) {
 }
 
 func TestNewHTTPRequestFromConfig_SupportedMethods(t *testing.T) {
-	methods := []string{"POST", "PUT", "PATCH"}
+	methods := []string{"POST", "PUT", "PATCH", "DELETE", "GET", "HEAD", "OPTIONS"}
 
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {
@@ -1078,28 +1082,21 @@ func TestHTTPRequest_Send_PathParameterWithNilMap(t *testing.T) {
 		t.Fatalf("failed to create module: %v", err)
 	}
 
-	// Record with nil map in path - should not panic
+	// Story 24.12 AC16: missing/null/empty key fields must error instead of
+	// silently producing an unresolved path placeholder.
 	records := []map[string]any{
 		{
-			"user": nil, // nil map should be handled gracefully
+			"user": nil,
 			"name": "test",
 		},
 	}
 
 	_, err = module.Send(context.Background(), records)
-	if err != nil {
-		t.Fatalf("expected no error (nil map should be handled), got %v", err)
+	if err == nil {
+		t.Fatalf("expected error for missing path key, got nil")
 	}
-
-	reqs := ts.getRequests()
-	if len(reqs) != 1 {
-		t.Fatalf("expected 1 request, got %d", len(reqs))
-	}
-
-	// Path parameter should be empty (nil map returns empty string)
-	// So the path should still contain the placeholder or have empty value
-	if !strings.Contains(reqs[0].Path, "/api/users/") {
-		t.Errorf("expected /api/users/ in path, got %s", reqs[0].Path)
+	if !strings.Contains(err.Error(), "user.id") {
+		t.Errorf("expected error to mention missing field, got %v", err)
 	}
 }
 
@@ -1560,6 +1557,8 @@ func TestHTTPRequest_Send_Success200(t *testing.T) {
 	config := newModuleConfig(map[string]any{
 		"endpoint": ts.URL + "/api/data",
 		"method":   "POST",
+		// 200 is no longer a default success code (Story 24.12 AC13).
+		"success": map[string]any{"statusCodes": []int{200}},
 	})
 
 	module, err := NewHTTPRequestFromConfig(config)
@@ -1570,7 +1569,7 @@ func TestHTTPRequest_Send_Success200(t *testing.T) {
 	records := []map[string]any{{"test": "data"}}
 	sent, err := module.Send(context.Background(), records)
 	if err != nil {
-		t.Fatalf("expected no error for 200, got %v", err)
+		t.Fatalf("expected no error for 201, got %v", err)
 	}
 	if sent != 1 {
 		t.Errorf("expected 1 record sent, got %d", sent)
@@ -1938,7 +1937,7 @@ func newTestServerWithRetry(maxFails int) *testServerWithRetry {
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte(`{"success": true}`))
 	}))
 
@@ -2090,7 +2089,7 @@ func TestHTTPRequest_Send_OnErrorSkip_SingleRecordMode(t *testing.T) {
 			_, _ = w.Write([]byte(`{"error": "bad request"}`))
 			return
 		}
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte(`{"success": true}`))
 	}))
 	defer ts.Close()
@@ -2133,7 +2132,7 @@ func TestHTTPRequest_Send_OnErrorLog_SingleRecordMode(t *testing.T) {
 			_, _ = w.Write([]byte(`{"error": "validation error"}`))
 			return
 		}
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte(`{"success": true}`))
 	}))
 	defer ts.Close()
@@ -2268,7 +2267,7 @@ func TestHTTPRequest_Send_ReturnsCorrectCount_PartialFailure(t *testing.T) {
 			_, _ = w.Write([]byte(`{"error": "bad request"}`))
 			return
 		}
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte(`{"success": true}`))
 	}))
 	defer ts.Close()
@@ -3421,7 +3420,7 @@ func TestHTTPRequest_PreviewRequest_NoSideEffects(t *testing.T) {
 	requestCount := 0
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusCreated)
 	}))
 	defer ts.Close()
 
@@ -3515,7 +3514,7 @@ func (ts *testServerWithStatusSequence) getRequestCount() int {
 
 func TestHTTPRequest_CustomRetryableStatusCodes_RetryOn408(t *testing.T) {
 	// 408 is not retryable by default, but should be retryable when in custom list
-	ts := newTestServerWithStatusSequence([]int{408, 408, 200}, 200)
+	ts := newTestServerWithStatusSequence([]int{408, 408, 201}, 201)
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]any{
@@ -3551,7 +3550,7 @@ func TestHTTPRequest_CustomRetryableStatusCodes_RetryOn408(t *testing.T) {
 
 func TestHTTPRequest_CustomRetryableStatusCodes_NoRetryOn500WhenExcluded(t *testing.T) {
 	// 500 is retryable by default, but should NOT be retried when not in custom list
-	ts := newTestServerWithStatusSequence([]int{500}, 200)
+	ts := newTestServerWithStatusSequence([]int{500}, 201)
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]any{
@@ -3584,7 +3583,7 @@ func TestHTTPRequest_CustomRetryableStatusCodes_NoRetryOn500WhenExcluded(t *test
 
 func TestHTTPRequest_CustomRetryableStatusCodes_DefaultFallback(t *testing.T) {
 	// Without custom retryableStatusCodes, should use defaults (429, 500, 502, 503, 504)
-	ts := newTestServerWithStatusSequence([]int{503, 503, 200}, 200)
+	ts := newTestServerWithStatusSequence([]int{503, 503, 201}, 201)
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]any{
@@ -3693,7 +3692,7 @@ func TestHTTPRequest_OAuth2_401ThenSuccess(t *testing.T) {
 			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
 			return
 		}
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusCreated)
 	}))
 	defer apiServer.Close()
 
@@ -3809,7 +3808,7 @@ func newTestServerWithRetryAfter(statusCodes []int, retryAfterValue string) *tes
 	ts := &testServerWithRetryAfter{
 		statusCodes:     statusCodes,
 		retryAfterValue: retryAfterValue,
-		defaultStatus:   200,
+		defaultStatus:   201,
 		requestTimes:    make([]time.Time, 0),
 	}
 
@@ -3844,7 +3843,7 @@ func newTestServerWithRetryAfter(statusCodes []int, retryAfterValue string) *tes
 
 func TestHTTPRequest_RetryAfter_SecondsFormat(t *testing.T) {
 	// Server returns 503 with Retry-After: 1 (second), then succeeds
-	ts := newTestServerWithRetryAfter([]int{503, 200}, "1")
+	ts := newTestServerWithRetryAfter([]int{503, 201}, "1")
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]any{
@@ -3887,7 +3886,7 @@ func TestHTTPRequest_RetryAfter_SecondsFormat(t *testing.T) {
 
 func TestHTTPRequest_RetryAfter_CappedByMaxDelayMs(t *testing.T) {
 	// Server returns 503 with Retry-After: 10 (seconds), maxDelayMs caps at 2s
-	ts := newTestServerWithRetryAfter([]int{503, 200}, "10")
+	ts := newTestServerWithRetryAfter([]int{503, 201}, "10")
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]any{
@@ -3931,7 +3930,7 @@ func TestHTTPRequest_RetryAfter_CappedByMaxDelayMs(t *testing.T) {
 
 func TestHTTPRequest_RetryAfter_InvalidValue_FallbackToBackoff(t *testing.T) {
 	// Server returns 503 with invalid Retry-After, should use backoff
-	ts := newTestServerWithRetryAfter([]int{503, 200}, "invalid")
+	ts := newTestServerWithRetryAfter([]int{503, 201}, "invalid")
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]any{
@@ -3964,7 +3963,7 @@ func TestHTTPRequest_RetryAfter_InvalidValue_FallbackToBackoff(t *testing.T) {
 
 func TestHTTPRequest_RetryAfter_Disabled_UsesBackoff(t *testing.T) {
 	// Server returns 503 with Retry-After: 5, but useRetryAfterHeader=false
-	ts := newTestServerWithRetryAfter([]int{503, 200}, "5")
+	ts := newTestServerWithRetryAfter([]int{503, 201}, "5")
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]any{
@@ -4004,7 +4003,7 @@ func TestHTTPRequest_RetryAfter_Disabled_UsesBackoff(t *testing.T) {
 
 func TestHTTPRequest_RetryAfter_AbsentHeader_UsesBackoff(t *testing.T) {
 	// Server returns 503 without Retry-After header, should use backoff
-	ts := newTestServerWithRetryAfter([]int{503, 200}, "") // Empty = no header
+	ts := newTestServerWithRetryAfter([]int{503, 201}, "") // Empty = no header
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]any{
@@ -4037,7 +4036,7 @@ func TestHTTPRequest_RetryAfter_AbsentHeader_UsesBackoff(t *testing.T) {
 
 func TestHTTPRequest_RetryAfter_ZeroSeconds_ImmediateRetry(t *testing.T) {
 	// Server returns 503 with Retry-After: 0 (immediate retry), then succeeds
-	ts := newTestServerWithRetryAfter([]int{503, 200}, "0")
+	ts := newTestServerWithRetryAfter([]int{503, 201}, "0")
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]any{
@@ -4080,7 +4079,7 @@ func TestHTTPRequest_RetryAfter_HTTPDate_RFC1123(t *testing.T) {
 	// then succeeds. http.TimeFormat enforces the mandated "GMT" suffix.
 	futureTime := time.Now().Add(2 * time.Second).UTC()
 	retryAfterDate := futureTime.Format(http.TimeFormat)
-	ts := newTestServerWithRetryAfter([]int{503, 200}, retryAfterDate)
+	ts := newTestServerWithRetryAfter([]int{503, 201}, retryAfterDate)
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]any{
@@ -4126,7 +4125,7 @@ func TestHTTPRequest_RetryAfter_HTTPDate_RFC850(t *testing.T) {
 	// Server returns 503 with Retry-After: HTTP-date (RFC850 format), then succeeds
 	futureTime := time.Now().Add(1 * time.Second)
 	retryAfterDate := futureTime.Format(time.RFC850)
-	ts := newTestServerWithRetryAfter([]int{503, 200}, retryAfterDate)
+	ts := newTestServerWithRetryAfter([]int{503, 201}, retryAfterDate)
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]any{
@@ -4172,7 +4171,7 @@ func TestHTTPRequest_RetryAfter_HTTPDate_Past_ImmediateRetry(t *testing.T) {
 	// retry immediately (clamped to 0).
 	pastTime := time.Now().Add(-5 * time.Second).UTC()
 	retryAfterDate := pastTime.Format(http.TimeFormat)
-	ts := newTestServerWithRetryAfter([]int{503, 200}, retryAfterDate)
+	ts := newTestServerWithRetryAfter([]int{503, 201}, retryAfterDate)
 	defer ts.Close()
 
 	config := newModuleConfig(map[string]any{
@@ -4241,7 +4240,7 @@ func newTestServerWithBodyHint(statusCodes []int, bodyHints []string) *testServe
 		if idx < len(ts.statusCodes) {
 			status = ts.statusCodes[idx]
 		} else {
-			status = 200
+			status = 201
 		}
 		if idx < len(ts.bodyHints) {
 			body = ts.bodyHints[idx]
@@ -4265,7 +4264,7 @@ func (ts *testServerWithBodyHint) getRequestCount() int {
 func TestHTTPRequest_RetryHintFromBody_ExpressionTrue(t *testing.T) {
 	// Server returns 500 with {"retryable": true}, expression evaluates to true, should retry
 	ts := newTestServerWithBodyHint(
-		[]int{500, 500, 200},
+		[]int{500, 500, 201},
 		[]string{
 			`{"retryable": true}`,
 			`{"retryable": true}`,
@@ -4345,7 +4344,7 @@ func TestHTTPRequest_RetryHintFromBody_ExpressionFalsePreventsRetry(t *testing.T
 func TestHTTPRequest_RetryHintFromBody_NestedExpression(t *testing.T) {
 	// Server returns 500 with {"error": {"code": "TEMPORARY"}}, expression matches
 	ts := newTestServerWithBodyHint(
-		[]int{500, 200},
+		[]int{500, 201},
 		[]string{
 			`{"error": {"code": "TEMPORARY", "retry": true}}`,
 		},
@@ -4387,7 +4386,7 @@ func TestHTTPRequest_RetryHintFromBody_NestedExpression(t *testing.T) {
 func TestHTTPRequest_RetryHintFromBody_NonJSONBody_FallbackToStatusCode(t *testing.T) {
 	// Server returns 500 with non-JSON body, should use status code only
 	ts := newTestServerWithBodyHint(
-		[]int{500, 200},
+		[]int{500, 201},
 		[]string{
 			`not valid json`,
 		},
@@ -4430,7 +4429,7 @@ func TestHTTPRequest_RetryHintFromBody_FieldAbsent_ExpressionsEvaluatesToFalse(t
 	// Server returns 500 with JSON but field doesn't exist
 	// With expr, body.retryable == true evaluates to nil == true -> false, preventing retry
 	ts := newTestServerWithBodyHint(
-		[]int{500, 200},
+		[]int{500, 201},
 		[]string{
 			`{"other_field": "value"}`,
 		},
@@ -4470,7 +4469,7 @@ func TestHTTPRequest_RetryHintFromBody_FieldAbsent_ExpressionsEvaluatesToFalse(t
 func TestHTTPRequest_RetryHintFromBody_NotConfigured_UsesStatusCode(t *testing.T) {
 	// Without retryHintFromBody, should use status code only (existing behavior)
 	ts := newTestServerWithBodyHint(
-		[]int{500, 200},
+		[]int{500, 201},
 		[]string{
 			`{"retryable": false}`, // Would prevent retry if hint was configured
 		},
@@ -4512,7 +4511,7 @@ func TestHTTPRequest_RetryHintFromBody_NotConfigured_UsesStatusCode(t *testing.T
 func TestHTTPRequest_RetryHintFromBody_ComplexExpression(t *testing.T) {
 	// Test complex expression with OR condition
 	ts := newTestServerWithBodyHint(
-		[]int{500, 200},
+		[]int{500, 201},
 		[]string{
 			`{"error": {"type": "RATE_LIMIT", "retryAfter": 5}}`,
 		},
@@ -4557,7 +4556,7 @@ func TestHTTPRequest_MetadataExclusion(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			body, _ := io.ReadAll(r.Body)
 			receivedBody = string(body)
-			w.WriteHeader(200)
+			w.WriteHeader(201)
 		}))
 		defer ts.Close()
 
@@ -4597,7 +4596,7 @@ func TestHTTPRequest_MetadataExclusion(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			body, _ := io.ReadAll(r.Body)
 			receivedBody = string(body)
-			w.WriteHeader(200)
+			w.WriteHeader(201)
 		}))
 		defer ts.Close()
 
@@ -4642,7 +4641,7 @@ func TestHTTPRequest_MetadataExclusion(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			body, _ := io.ReadAll(r.Body)
 			receivedBody = string(body)
-			w.WriteHeader(200)
+			w.WriteHeader(201)
 		}))
 		defer ts.Close()
 

@@ -7,18 +7,87 @@ package filter
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 
+	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/recordpath"
+	"github.com/cannectors/runtime/pkg/connector"
 )
 
 // RemoveConfig represents the configuration for a remove filter module.
+//
+// Target accepts either a single field path (string) or a list of field paths
+// ([]string). The runtime normalizes both shapes into the internal
+// `targetList` slice. The legacy `targets` field has been removed (Story 24.10).
 type RemoveConfig struct {
-	// Target is the field path to remove (supports dot notation for nested paths)
-	Target string `json:"target"`
-	// Targets is a list of field paths to remove (supports dot notation for nested paths)
-	Targets []string `json:"targets"`
+	connector.ModuleBase
+	// Target is either a non-empty string or a non-empty list of non-empty strings.
+	Target any `json:"target"`
+	// targetList is the normalized internal representation populated by
+	// UnmarshalJSON / ParseRemoveConfig.
+	targetList []string `json:"-"`
+}
+
+// UnmarshalJSON normalizes the polymorphic Target field into targetList.
+func (c *RemoveConfig) UnmarshalJSON(data []byte) error {
+	type alias RemoveConfig
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	*c = RemoveConfig(a)
+	targets, err := normalizeRemoveTarget(c.Target)
+	if err != nil {
+		return err
+	}
+	c.targetList = targets
+	return nil
+}
+
+// normalizeRemoveTarget accepts a string or a slice of strings and returns
+// the normalized []string. It rejects empty entries; the schema is the first
+// line of defense, this is the runtime safety net.
+func normalizeRemoveTarget(raw any) ([]string, error) {
+	switch v := raw.(type) {
+	case nil:
+		return nil, errors.New("'target' is required")
+	case string:
+		if v == "" {
+			return nil, errors.New("'target' must be a non-empty string")
+		}
+		return []string{v}, nil
+	case []string:
+		if len(v) == 0 {
+			return nil, errors.New("'target' list must contain at least one entry")
+		}
+		for i, s := range v {
+			if s == "" {
+				return nil, fmt.Errorf("'target[%d]' must be a non-empty string", i)
+			}
+		}
+		return v, nil
+	case []any:
+		if len(v) == 0 {
+			return nil, errors.New("'target' list must contain at least one entry")
+		}
+		out := make([]string, 0, len(v))
+		for i, item := range v {
+			s, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("'target[%d]' must be a string", i)
+			}
+			if s == "" {
+				return nil, fmt.Errorf("'target[%d]' must be a non-empty string", i)
+			}
+			out = append(out, s)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("'target' must be a string or list of strings, got %T", raw)
+	}
 }
 
 // RemoveModule implements the remove filter that removes fields from each record.
@@ -27,31 +96,32 @@ type RemoveModule struct {
 }
 
 // NewRemoveFromConfig creates a new remove filter module from configuration.
-// It validates that at least one target is provided (either via Target or Targets).
+// It validates that at least one target is provided.
 func NewRemoveFromConfig(config RemoveConfig) (*RemoveModule, error) {
-	targets := config.Targets
-
-	// Support single target for backward compatibility
-	if config.Target != "" {
-		targets = append(targets, config.Target)
+	if _, err := errhandling.ParseOnErrorStrategy(config.OnError); err != nil {
+		return nil, err
 	}
 
+	targets := config.targetList
 	if len(targets) == 0 {
-		return nil, errors.New("at least one target field path is required")
-	}
-
-	// Remove duplicates while preserving order
-	seen := make(map[string]bool)
-	uniqueTargets := make([]string, 0, len(targets))
-	for _, t := range targets {
-		if t != "" && !seen[t] {
-			seen[t] = true
-			uniqueTargets = append(uniqueTargets, t)
+		// Caller built the struct directly (programmatic API) and bypassed
+		// UnmarshalJSON; normalize here as a safety net.
+		var err error
+		targets, err = normalizeRemoveTarget(config.Target)
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	if len(uniqueTargets) == 0 {
-		return nil, errors.New("at least one non-empty target field path is required")
+	// De-duplicate while preserving order so identical targets do not trigger
+	// repeated work / log noise.
+	seen := make(map[string]bool, len(targets))
+	uniqueTargets := make([]string, 0, len(targets))
+	for _, t := range targets {
+		if !seen[t] {
+			seen[t] = true
+			uniqueTargets = append(uniqueTargets, t)
+		}
 	}
 
 	logger.Debug("remove filter module initialized", "targets", uniqueTargets)
@@ -62,7 +132,6 @@ func NewRemoveFromConfig(config RemoveConfig) (*RemoveModule, error) {
 // Process implements the filter.Module interface.
 // It removes the configured fields from each record.
 func (m *RemoveModule) Process(ctx context.Context, records []map[string]any) ([]map[string]any, error) {
-	// Respect context cancellation
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -76,7 +145,6 @@ func (m *RemoveModule) Process(ctx context.Context, records []map[string]any) ([
 	result := make([]map[string]any, 0, len(records))
 
 	for i, record := range records {
-		// Check context for long-running operations
 		if i > 0 && i%100 == 0 {
 			select {
 			case <-ctx.Done():
@@ -98,11 +166,9 @@ func (m *RemoveModule) processRecord(record map[string]any) map[string]any {
 		return record
 	}
 	for _, target := range m.targets {
-		// Simple case: no dot notation (flat field)
 		if !recordpath.IsNested(target) {
 			delete(record, target)
 		} else {
-			// Nested path - delete the leaf field
 			recordpath.Delete(record, target)
 		}
 	}
@@ -113,31 +179,16 @@ func (m *RemoveModule) processRecord(record map[string]any) map[string]any {
 func ParseRemoveConfig(config map[string]any) (RemoveConfig, error) {
 	var cfg RemoveConfig
 
-	// Parse single target (backward compatibility)
-	if target, ok := config["target"].(string); ok && target != "" {
-		cfg.Target = target
+	raw, ok := config["target"]
+	if !ok {
+		return cfg, errors.New("'target' is required")
 	}
-
-	// Parse targets array
-	if targets, ok := config["targets"]; ok {
-		switch v := targets.(type) {
-		case []any:
-			cfg.Targets = make([]string, 0, len(v))
-			for _, item := range v {
-				if s, ok := item.(string); ok && s != "" {
-					cfg.Targets = append(cfg.Targets, s)
-				}
-			}
-		case []string:
-			cfg.Targets = v
-		}
+	targets, err := normalizeRemoveTarget(raw)
+	if err != nil {
+		return cfg, err
 	}
-
-	// Validate at least one target is provided
-	if cfg.Target == "" && len(cfg.Targets) == 0 {
-		return cfg, errors.New("'target' or 'targets' is required")
-	}
-
+	cfg.Target = raw
+	cfg.targetList = targets
 	return cfg, nil
 }
 

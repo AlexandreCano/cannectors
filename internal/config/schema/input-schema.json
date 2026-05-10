@@ -31,12 +31,11 @@
 				{ "$ref": "common-schema.json#/$defs/httpRequestBase" },
 				{
 					"type": "object",
-					"description": "HTTP polling input module configuration. Polls an HTTP endpoint on a schedule.",
-					"required": [ "schedule" ],
+					"description": "HTTP polling input module configuration. Without 'schedule', runs once. With 'schedule', registered with the CRON scheduler.",
 					"properties": {
 						"schedule": {
 							"type": "string",
-							"description": "CRON expression for polling. Validated at runtime.",
+							"description": "Optional CRON expression for polling. Validated at runtime.",
 							"minLength": 9
 						},
 						"pagination": {
@@ -48,6 +47,9 @@
 						"dataField": {
 							"type": "string",
 							"description": "JSON field path containing the array of records to extract from the response."
+						},
+						"retry": {
+							"$ref": "common-schema.json#/$defs/retryConfig"
 						}
 					}
 				}
@@ -67,6 +69,11 @@
 					"type": "string",
 					"description": "Webhook server listen address.",
 					"default": "0.0.0.0:8080"
+				},
+				"requestTimeoutMs": {
+					"type": "integer",
+					"minimum": 1,
+					"description": "Per-request HTTP read/write timeout in milliseconds. Does NOT bound the webhook server lifetime."
 				},
 				"signature": {
 					"$ref": "#/$defs/webhookSignature"
@@ -93,9 +100,14 @@
 
 		"databaseInputConfig": {
 			"type": "object",
-			"description": "Database input module configuration. Executes SQL queries to fetch data. Supports {{lastRunTimestamp}} placeholder for incremental queries.",
+			"description": "Database input module configuration. Executes SQL queries to fetch data. Supports {{lastRunTimestamp}} placeholder for incremental queries. Without 'schedule', runs once. With 'schedule', registered with the CRON scheduler.",
 			"allOf": [ { "$ref": "common-schema.json#/$defs/sqlRequestBase" } ],
 			"properties": {
+				"schedule": {
+					"type": "string",
+					"description": "Optional CRON expression to run the database input on a schedule. Validated at runtime.",
+					"minLength": 9
+				},
 				"parameters": {
 					"type": "object",
 					"description": "Query parameters. Keys are parameter names (used with :paramName syntax).",
@@ -121,16 +133,17 @@
 				},
 				"header": {
 					"type": "string",
-					"description": "Header name containing the signature."
+					"minLength": 1,
+					"description": "Header name containing the signature. Defaults to X-Hub-Signature-256 when omitted."
 				},
 				"secret": {
 					"type": "string",
+					"minLength": 1,
 					"description": "Secret key for signature validation."
 				}
 			},
 			"required": [
 				"type",
-				"header",
 				"secret"
 			],
 			"additionalProperties": false
@@ -141,16 +154,17 @@
 			"description": "Webhook rate limiting configuration.",
 			"properties": {
 				"requestsPerSecond": {
-					"type": "number",
+					"type": "integer",
 					"description": "Maximum requests per second.",
-					"minimum": 0
+					"minimum": 1
 				},
 				"burst": {
-					"type": "number",
+					"type": "integer",
 					"description": "Maximum burst size.",
 					"minimum": 1
 				}
 			},
+			"required": ["requestsPerSecond"],
 			"additionalProperties": false
 		}
 	}

@@ -29,7 +29,6 @@ var knownNonCompliantExamples = map[string]string{
 	"07-pagination-cursor.yaml":            "cursor-pagination schema mismatch (missing required fields)",
 	"10-complete.json":                     "demonstrates fields not yet in schema",
 	"10-complete.yaml":                     "demonstrates fields not yet in schema",
-	"14-webhook.yaml":                      "uses `id` and `enabled` at pipeline root, rejected by schema",
 	"16-filters-script.yaml":               "script filter schema not finalized",
 	"17-filters-enrichment.yaml":           "http-enrichment filter schema not finalized",
 	"20-timestamp-and-id-persistence.yaml": "statePersistence shape predates current schema",

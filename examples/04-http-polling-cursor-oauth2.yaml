@@ -18,15 +18,13 @@ input:
       scope: invoices.read customers.read
   pagination:
     type: cursor
-    cursorParam: cursor
+    param: cursor
     limitParam: limit
     limit: 100
     nextCursorField: next_cursor
 filters:
   - type: condition
     expression: status == "paid"
-    onTrue: continue
-    onFalse: skip
 output:
   type: httpRequest
   endpoint: https://destination.example.com/api/invoices

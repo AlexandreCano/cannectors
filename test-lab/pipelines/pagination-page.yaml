@@ -12,7 +12,7 @@ input:
   dataField: data
   pagination:
     type: page
-    pageParam: page
+    param: page
     limitParam: page_size
     limit: 2
     totalPagesField: total_pages

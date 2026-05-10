@@ -263,8 +263,7 @@ func TestExecutor_Execute_ConditionFilterIntegration(t *testing.T) {
 
 	cond, err := filter.NewConditionFromConfig(filter.ConditionConfig{
 		Expression: "value > 10",
-		OnTrue:     "continue",
-		OnFalse:    "skip",
+		Else:       []*filter.NestedModuleConfig{{Type: "drop"}},
 	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -317,8 +316,7 @@ func TestExecutor_Execute_MappingThenConditionIntegration(t *testing.T) {
 
 	cond, err := filter.NewConditionFromConfig(filter.ConditionConfig{
 		Expression: "value > 100",
-		OnTrue:     "continue",
-		OnFalse:    "skip",
+		Else:       []*filter.NestedModuleConfig{{Type: "drop"}},
 	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)

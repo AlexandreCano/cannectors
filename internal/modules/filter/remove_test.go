@@ -14,22 +14,22 @@ func TestParseRemoveConfig_Validation(t *testing.T) {
 		errMsg  string
 	}{
 		{
-			name:    "missing target and targets",
+			name:    "missing target",
 			config:  map[string]any{},
 			wantErr: true,
-			errMsg:  "'target' or 'targets' is required",
+			errMsg:  "'target' is required",
 		},
 		{
-			name:    "empty target without targets",
+			name:    "empty target string",
 			config:  map[string]any{"target": ""},
 			wantErr: true,
-			errMsg:  "'target' or 'targets' is required",
+			errMsg:  "must be a non-empty string",
 		},
 		{
-			name:    "target is not a string",
+			name:    "target is not a string or list",
 			config:  map[string]any{"target": 123},
 			wantErr: true,
-			errMsg:  "'target' or 'targets' is required",
+			errMsg:  "must be a string or list of strings",
 		},
 		{
 			name: "valid config with simple target",
@@ -46,35 +46,27 @@ func TestParseRemoveConfig_Validation(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "valid config with targets array",
+			name: "valid config with target list",
 			config: map[string]any{
-				"targets": []any{"id", "password", "internal_id"},
+				"target": []any{"id", "password", "internal_id"},
 			},
 			wantErr: false,
 		},
 		{
-			name: "valid config with both target and targets",
+			name: "empty target list",
 			config: map[string]any{
-				"target":  "id",
-				"targets": []any{"password"},
-			},
-			wantErr: false,
-		},
-		{
-			name: "empty targets array without target",
-			config: map[string]any{
-				"targets": []any{},
+				"target": []any{},
 			},
 			wantErr: true,
-			errMsg:  "'target' or 'targets' is required",
+			errMsg:  "must contain at least one entry",
 		},
 		{
-			name: "targets array with only empty strings",
+			name: "target list with only empty strings",
 			config: map[string]any{
-				"targets": []any{"", ""},
+				"target": []any{"", ""},
 			},
 			wantErr: true,
-			errMsg:  "'target' or 'targets' is required",
+			errMsg:  "must be a non-empty string",
 		},
 	}
 
@@ -104,10 +96,10 @@ func TestNewRemoveFromConfig_Validation(t *testing.T) {
 		errMsg  string
 	}{
 		{
-			name:    "missing target and targets",
+			name:    "missing target",
 			config:  RemoveConfig{},
 			wantErr: true,
-			errMsg:  "at least one target field path is required",
+			errMsg:  "'target' is required",
 		},
 		{
 			name: "valid config with single target",
@@ -117,27 +109,19 @@ func TestNewRemoveFromConfig_Validation(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "valid config with targets",
+			name: "valid config with target list",
 			config: RemoveConfig{
-				Targets: []string{"id", "password"},
+				Target: []string{"id", "password"},
 			},
 			wantErr: false,
 		},
 		{
-			name: "valid config with both target and targets",
+			name: "target list with empty strings",
 			config: RemoveConfig{
-				Target:  "id",
-				Targets: []string{"password", "secret"},
-			},
-			wantErr: false,
-		},
-		{
-			name: "targets with empty strings only",
-			config: RemoveConfig{
-				Targets: []string{"", ""},
+				Target: []string{"", ""},
 			},
 			wantErr: true,
-			errMsg:  "at least one non-empty target field path is required",
+			errMsg:  "must be a non-empty string",
 		},
 	}
 
@@ -403,7 +387,7 @@ func TestRemoveModule_Process_MultipleTargets(t *testing.T) {
 	}{
 		{
 			name:   "remove multiple flat fields with targets array",
-			config: RemoveConfig{Targets: []string{"password", "internal_id", "secret"}},
+			config: RemoveConfig{Target: []string{"password", "internal_id", "secret"}},
 			input: []map[string]any{
 				{"id": 1, "name": "Alice", "password": "secret123", "internal_id": "int-001", "secret": "key"},
 			},
@@ -413,7 +397,7 @@ func TestRemoveModule_Process_MultipleTargets(t *testing.T) {
 		},
 		{
 			name:   "remove multiple fields including nested",
-			config: RemoveConfig{Targets: []string{"password", "metadata.secret", "internal_id"}},
+			config: RemoveConfig{Target: []string{"password", "metadata.secret", "internal_id"}},
 			input: []map[string]any{
 				{
 					"id":          1,
@@ -432,10 +416,9 @@ func TestRemoveModule_Process_MultipleTargets(t *testing.T) {
 			},
 		},
 		{
-			name: "combine target and targets (backward compatibility)",
+			name: "remove multiple targets via list",
 			config: RemoveConfig{
-				Target:  "password",
-				Targets: []string{"internal_id", "secret"},
+				Target: []string{"password", "internal_id", "secret"},
 			},
 			input: []map[string]any{
 				{"id": 1, "name": "Alice", "password": "secret123", "internal_id": "int-001", "secret": "key"},
@@ -446,7 +429,7 @@ func TestRemoveModule_Process_MultipleTargets(t *testing.T) {
 		},
 		{
 			name:   "remove with some fields missing",
-			config: RemoveConfig{Targets: []string{"password", "nonexistent", "internal_id"}},
+			config: RemoveConfig{Target: []string{"password", "nonexistent", "internal_id"}},
 			input: []map[string]any{
 				{"id": 1, "name": "Alice", "password": "secret123"},
 			},
@@ -456,7 +439,7 @@ func TestRemoveModule_Process_MultipleTargets(t *testing.T) {
 		},
 		{
 			name:   "remove duplicates in targets",
-			config: RemoveConfig{Targets: []string{"password", "password", "internal_id", "internal_id"}},
+			config: RemoveConfig{Target: []string{"password", "password", "internal_id", "internal_id"}},
 			input: []map[string]any{
 				{"id": 1, "password": "secret123", "internal_id": "int-001"},
 			},
@@ -496,13 +479,13 @@ func TestRemoveModule_Process_InFilterChain(t *testing.T) {
 	// Simulate: set filter → remove filter
 	t.Run("remove after set in filter chain", func(t *testing.T) {
 		// First, apply set filter
-		setModule, err := NewSetFromConfig(SetConfig{Target: "status", Value: "processed"})
+		setModule, err := NewSetFromConfig(SetConfig{Target: "status", Value: "processed", HasValue: true})
 		if err != nil {
 			t.Fatalf("failed to create set module: %v", err)
 		}
 
 		// Then, apply remove filter with multiple targets
-		removeModule, err := NewRemoveFromConfig(RemoveConfig{Targets: []string{"internal_id", "secret"}})
+		removeModule, err := NewRemoveFromConfig(RemoveConfig{Target: []string{"internal_id", "secret"}})
 		if err != nil {
 			t.Fatalf("failed to create remove module: %v", err)
 		}
@@ -582,7 +565,7 @@ func TestRemoveModule_Process_ContextCancellation(t *testing.T) {
 
 func TestRemoveModule_Process_Deterministic(t *testing.T) {
 	// Verify that execution is deterministic (AC#5)
-	module, err := NewRemoveFromConfig(RemoveConfig{Targets: []string{"temp", "secret"}})
+	module, err := NewRemoveFromConfig(RemoveConfig{Target: []string{"temp", "secret"}})
 	if err != nil {
 		t.Fatalf("failed to create module: %v", err)
 	}

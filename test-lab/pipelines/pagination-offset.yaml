@@ -12,7 +12,7 @@ input:
   dataField: data
   pagination:
     type: offset
-    offsetParam: offset
+    param: offset
     limitParam: limit
     limit: 2
     totalField: total

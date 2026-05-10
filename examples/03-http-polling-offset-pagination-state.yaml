@@ -11,7 +11,7 @@ input:
   dataField: events
   pagination:
     type: offset
-    offsetParam: offset
+    param: offset
     limitParam: limit
     limit: 250
     totalField: total
@@ -29,7 +29,7 @@ filters:
     target: metadata.source
     value: events-api
   - type: remove
-    targets:
+    target:
       - debug
       - internal.notes
 output:

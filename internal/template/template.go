@@ -28,7 +28,6 @@ const (
 // Error messages for template evaluation
 const (
 	ErrMsgInvalidTemplateSyntax = "invalid template syntax"
-	ErrMsgMissingClosingBrace   = "missing closing }}"
 	ErrMsgEmptyVariablePath     = "empty variable path"
 )
 

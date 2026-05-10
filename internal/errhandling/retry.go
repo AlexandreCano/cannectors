@@ -4,6 +4,7 @@ package errhandling
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -12,11 +13,7 @@ import (
 
 // Default retry configuration values
 const (
-	DefaultMaxAttempts       = 3
-	DefaultDelayMs           = 1000
-	DefaultBackoffMultiplier = 2.0
-	DefaultMaxDelayMs        = 30000
-	DefaultTimeoutMs         = 30000
+	DefaultTimeoutMs = 30000
 )
 
 // OnErrorStrategy defines what action to take when an error occurs.
@@ -165,18 +162,23 @@ func ResolveErrorHandlingConfig(moduleConfig, defaultsConfig *ErrorHandlingConfi
 	return result
 }
 
-// ParseOnErrorStrategy parses an error strategy string.
-// Returns OnErrorFail for invalid or empty input.
-func ParseOnErrorStrategy(s string) OnErrorStrategy {
+// ParseOnErrorStrategy parses an error strategy string and returns the matching
+// strategy. Empty input resolves to OnErrorFail (the default). Casing and
+// surrounding whitespace are normalized so user-facing values like "Skip" or
+// " FAIL " are accepted (Story 24.2 AC9). Unknown values are rejected with a
+// clear error — there is no silent fallback to "fail" (AC10).
+func ParseOnErrorStrategy(s string) (OnErrorStrategy, error) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "fail", "":
-		return OnErrorFail
+	case "":
+		return OnErrorFail, nil
+	case "fail":
+		return OnErrorFail, nil
 	case "skip":
-		return OnErrorSkip
+		return OnErrorSkip, nil
 	case "log":
-		return OnErrorLog
+		return OnErrorLog, nil
 	default:
-		return OnErrorFail
+		return "", fmt.Errorf("invalid onError strategy %q: must be one of fail, skip, log", s)
 	}
 }
 

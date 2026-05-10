@@ -56,3 +56,22 @@ func getRecordFieldString(record map[string]any, path string) string {
 	}
 	return template.ValueToString(value)
 }
+
+// requireRecordFieldString extracts a string value the same way as
+// getRecordFieldString but treats absent, null, or empty values as errors.
+// Used by key resolution (Story 24.12 AC16) where a missing key must surface
+// instead of silently dropping a path/query/header parameter.
+func requireRecordFieldString(record map[string]any, path string) (string, error) {
+	value, ok := recordpath.Get(record, path)
+	if !ok {
+		return "", fmt.Errorf("field %q is missing in record", path)
+	}
+	if value == nil {
+		return "", fmt.Errorf("field %q is null in record", path)
+	}
+	str := template.ValueToString(value)
+	if str == "" {
+		return "", fmt.Errorf("field %q is empty in record", path)
+	}
+	return str, nil
+}

@@ -39,9 +39,9 @@ func (h *HTTPRequestModule) resolveEndpointWithStaticQuery(endpoint string) stri
 // resolveEndpointForBatch resolves template variables and keys in the
 // endpoint for batch mode. Uses the first record for template evaluation
 // and key extraction.
-func (h *HTTPRequestModule) resolveEndpointForBatch(endpoint string, records []map[string]any) string {
+func (h *HTTPRequestModule) resolveEndpointForBatch(endpoint string, records []map[string]any) (string, error) {
 	if len(records) == 0 {
-		return h.resolveEndpointWithStaticQuery(endpoint)
+		return h.resolveEndpointWithStaticQuery(endpoint), nil
 	}
 	return h.resolveEndpointForRecord(records[0])
 }
@@ -49,7 +49,9 @@ func (h *HTTPRequestModule) resolveEndpointForBatch(endpoint string, records []m
 // resolveEndpointForRecord resolves path parameters, template variables, and
 // query params for a single record. Templates ({{record.field}}) are
 // evaluated first, then path parameters ({param}) are substituted.
-func (h *HTTPRequestModule) resolveEndpointForRecord(record map[string]any) string {
+// Returns an error when a configured key references a missing/null/empty
+// record field (Story 24.12 AC16).
+func (h *HTTPRequestModule) resolveEndpointForRecord(record map[string]any) (string, error) {
 	endpoint := h.endpoint
 	if template.HasVariables(endpoint) {
 		endpoint = h.templateEvaluator.EvaluateForURL(endpoint, record)
@@ -57,11 +59,12 @@ func (h *HTTPRequestModule) resolveEndpointForRecord(record map[string]any) stri
 
 	for _, k := range h.request.Keys {
 		if k.paramType == "path" {
-			value := getRecordFieldString(record, k.field)
-			if value != "" {
-				placeholder := "{" + k.paramName + "}"
-				endpoint = strings.ReplaceAll(endpoint, placeholder, url.PathEscape(value))
+			value, err := requireRecordFieldString(record, k.field)
+			if err != nil {
+				return "", fmt.Errorf("path key %q: %w", k.paramName, err)
 			}
+			placeholder := "{" + k.paramName + "}"
+			endpoint = strings.ReplaceAll(endpoint, placeholder, url.PathEscape(value))
 		}
 	}
 
@@ -71,7 +74,7 @@ func (h *HTTPRequestModule) resolveEndpointForRecord(record map[string]any) stri
 			slog.String("endpoint", httpclient.SanitizeURL(endpoint)),
 			slog.String("error", err.Error()),
 		)
-		return endpoint
+		return endpoint, nil
 	}
 
 	q := parsedURL.Query()
@@ -80,10 +83,11 @@ func (h *HTTPRequestModule) resolveEndpointForRecord(record map[string]any) stri
 	}
 	for _, k := range h.request.Keys {
 		if k.paramType == "query" {
-			value := getRecordFieldString(record, k.field)
-			if value != "" {
-				q.Set(k.paramName, value)
+			value, err := requireRecordFieldString(record, k.field)
+			if err != nil {
+				return "", fmt.Errorf("query key %q: %w", k.paramName, err)
 			}
+			q.Set(k.paramName, value)
 		}
 	}
 	parsedURL.RawQuery = q.Encode()
@@ -95,7 +99,7 @@ func (h *HTTPRequestModule) resolveEndpointForRecord(record map[string]any) stri
 			slog.String("error", err.Error()),
 		)
 	}
-	return finalURL
+	return finalURL, nil
 }
 
 // validateURL validates that a URL string is well-formed.

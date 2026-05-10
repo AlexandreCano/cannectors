@@ -13,7 +13,7 @@
       {
         "type": "remove",
         "description": "Remove multiple sensitive fields in one filter",
-        "targets": ["password", "secret_key", "api_token"]
+        "target": ["password", "secret_key", "api_token"]
       },
       {
         "type": "remove",
@@ -23,7 +23,7 @@
       {
         "type": "remove",
         "description": "Remove nested sensitive data",
-        "targets": ["metadata.secret", "user.private_key"]
+        "target": ["metadata.secret", "user.private_key"]
       }
     ],
     "output": {

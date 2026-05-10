@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -96,17 +97,57 @@ func TestNewSQLCallFromConfig_Validation(t *testing.T) {
 	tests := []struct {
 		name    string
 		config  SQLCallConfig
-		wantErr error
+		wantSub string
 	}{
 		{
 			name:    "missing connection string",
 			config:  SQLCallConfig{SQLRequestBase: moduleconfig.SQLRequestBase{Query: "SELECT 1"}},
-			wantErr: ErrSQLCallMissingConnection,
+			wantSub: "connectionString or connectionStringRef is required",
 		},
 		{
 			name:    "missing query",
 			config:  SQLCallConfig{SQLRequestBase: moduleconfig.SQLRequestBase{ConnectionString: "postgres://localhost/db"}},
-			wantErr: ErrSQLCallMissingQuery,
+			wantSub: "query or queryFile is required",
+		},
+		{
+			name: "both connection fields",
+			config: SQLCallConfig{SQLRequestBase: moduleconfig.SQLRequestBase{
+				ConnectionString:    "postgres://localhost/db",
+				ConnectionStringRef: "${DB_URL}",
+				Query:               "SELECT 1",
+			}},
+			wantSub: "mutually exclusive",
+		},
+		{
+			name: "both query fields",
+			config: SQLCallConfig{SQLRequestBase: moduleconfig.SQLRequestBase{
+				ConnectionString: "postgres://localhost/db",
+				Query:            "SELECT 1",
+				QueryFile:        "/tmp/q.sql",
+			}},
+			wantSub: "query and queryFile are mutually exclusive",
+		},
+		{
+			name: "append without resultKey",
+			config: SQLCallConfig{
+				SQLRequestBase: moduleconfig.SQLRequestBase{
+					ConnectionString: "sqlite::memory:",
+					Query:            "SELECT 1",
+				},
+				MergeStrategy: "append",
+			},
+			wantSub: "resultKey is required when mergeStrategy is 'append'",
+		},
+		{
+			name: "invalid mergeStrategy",
+			config: SQLCallConfig{
+				SQLRequestBase: moduleconfig.SQLRequestBase{
+					ConnectionString: "sqlite::memory:",
+					Query:            "SELECT 1",
+				},
+				MergeStrategy: "bogus",
+			},
+			wantSub: "invalid mergeStrategy",
 		},
 	}
 
@@ -114,11 +155,10 @@ func TestNewSQLCallFromConfig_Validation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := NewSQLCallFromConfig(tt.config)
 			if err == nil {
-				t.Error("expected error, got nil")
-				return
+				t.Fatal("expected error, got nil")
 			}
-			if err != tt.wantErr {
-				t.Errorf("error = %v, want %v", err, tt.wantErr)
+			if !strings.Contains(err.Error(), tt.wantSub) {
+				t.Errorf("error = %v, want substring %q", err, tt.wantSub)
 			}
 		})
 	}
@@ -296,13 +336,21 @@ func newSQLCallTestModule(t *testing.T, db *sql.DB, cfg SQLCallConfig) *SQLCallM
 	t.Helper()
 
 	cacheStore, cacheTTL, cacheEnabled := setupCache(cfg)
+	onError, err := errhandling.ParseOnErrorStrategy(cfg.OnError)
+	if err != nil {
+		t.Fatalf("parsing onError: %v", err)
+	}
+	mergeStrategy, err := resolveMergeStrategy(cfg.MergeStrategy)
+	if err != nil {
+		t.Fatalf("resolving mergeStrategy: %v", err)
+	}
 	return &SQLCallModule{
 		db:                db,
 		driver:            "sqlite",
 		query:             cfg.Query,
-		mergeStrategy:     resolveMergeStrategy(cfg.MergeStrategy),
+		mergeStrategy:     mergeStrategy,
 		resultKey:         cfg.ResultKey,
-		onError:           errhandling.ParseOnErrorStrategy(cfg.OnError),
+		onError:           onError,
 		cache:             cacheStore,
 		cacheEnabled:      cacheEnabled,
 		cacheTTL:          cacheTTL,
@@ -349,7 +397,7 @@ func TestSQLCall_CacheHitMissTTLAndEviction(t *testing.T) {
 		db := setupSQLCallSQLiteDB(t)
 		module := newSQLCallTestModule(t, db, SQLCallConfig{
 			SQLRequestBase: moduleconfig.SQLRequestBase{Query: "SELECT name FROM users WHERE id = {{record.id}}"},
-			Cache:          moduleconfig.CacheConfig{Enabled: true, MaxSize: 4, DefaultTTL: 60},
+			Cache:          moduleconfig.CacheConfig{Enabled: true, MaxSize: 4, TTLSeconds: 60},
 		})
 
 		record := []map[string]any{{"id": 1}}
@@ -377,7 +425,7 @@ func TestSQLCall_CacheHitMissTTLAndEviction(t *testing.T) {
 		db := setupSQLCallSQLiteDB(t)
 		module := newSQLCallTestModule(t, db, SQLCallConfig{
 			SQLRequestBase: moduleconfig.SQLRequestBase{Query: "SELECT name FROM users WHERE id = {{record.id}}"},
-			Cache:          moduleconfig.CacheConfig{Enabled: true, MaxSize: 4, DefaultTTL: 1},
+			Cache:          moduleconfig.CacheConfig{Enabled: true, MaxSize: 4, TTLSeconds: 1},
 		})
 		module.cacheTTL = time.Nanosecond
 
@@ -402,7 +450,7 @@ func TestSQLCall_CacheHitMissTTLAndEviction(t *testing.T) {
 		db := setupSQLCallSQLiteDB(t)
 		module := newSQLCallTestModule(t, db, SQLCallConfig{
 			SQLRequestBase: moduleconfig.SQLRequestBase{Query: "SELECT name FROM users WHERE id = {{record.id}}"},
-			Cache:          moduleconfig.CacheConfig{Enabled: true, MaxSize: 1, DefaultTTL: 60},
+			Cache:          moduleconfig.CacheConfig{Enabled: true, MaxSize: 1, TTLSeconds: 60},
 		})
 
 		if _, err := module.Process(context.Background(), []map[string]any{{"id": 1}}); err != nil {
@@ -451,15 +499,6 @@ func TestSQLCall_MergeStrategies(t *testing.T) {
 			},
 			record: map[string]any{"id": 1},
 			want:   map[string]any{"id": 1, "enrichment": map[string]any{"tier": "gold"}},
-		},
-		{
-			name: "append defaults result key",
-			cfg: SQLCallConfig{
-				SQLRequestBase: moduleconfig.SQLRequestBase{Query: "SELECT 'gold' AS tier"},
-				MergeStrategy:  "append",
-			},
-			record: map[string]any{"id": 1},
-			want:   map[string]any{"id": 1, "_sql_result": map[string]any{"tier": "gold"}},
 		},
 	}
 
@@ -602,13 +641,14 @@ func TestSQLCall_ContextCancellationAndEmptyResult(t *testing.T) {
 		module := newSQLCallTestModule(t, db, SQLCallConfig{
 			SQLRequestBase: moduleconfig.SQLRequestBase{Query: "SELECT name FROM users WHERE id = {{record.id}}"},
 			MergeStrategy:  "append",
+			ResultKey:      "enrichment",
 		})
 
 		got, err := module.Process(context.Background(), []map[string]any{{"id": 999}})
 		if err != nil {
 			t.Fatalf("Process() error = %v", err)
 		}
-		assertSQLCallRecordsEqual(t, got, []map[string]any{{"id": 999, "_sql_result": map[string]any{}}})
+		assertSQLCallRecordsEqual(t, got, []map[string]any{{"id": 999, "enrichment": map[string]any{}}})
 	})
 }
 
@@ -616,7 +656,7 @@ func TestSQLCall_ConcurrentProcess(t *testing.T) {
 	db := setupSQLCallSQLiteDB(t)
 	module := newSQLCallTestModule(t, db, SQLCallConfig{
 		SQLRequestBase: moduleconfig.SQLRequestBase{Query: "SELECT name FROM users WHERE id = {{record.id}}"},
-		Cache:          moduleconfig.CacheConfig{Enabled: true, MaxSize: 16, DefaultTTL: 60},
+		Cache:          moduleconfig.CacheConfig{Enabled: true, MaxSize: 16, TTLSeconds: 60},
 	})
 
 	var wg sync.WaitGroup

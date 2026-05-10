@@ -5,43 +5,34 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/cannectors/runtime/internal/auth"
 	"github.com/cannectors/runtime/internal/cache"
+	"github.com/cannectors/runtime/internal/httpclient"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/template"
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
-// normalizeHTTPCallMethod uppercases and validates the configured HTTP
-// method. GET is used when empty.
+// normalizeHTTPCallMethod uppercases the configured method and validates that
+// it is a well-formed RFC 7230 token. GET is used when empty.
 func normalizeHTTPCallMethod(method string) (string, error) {
-	m := strings.ToUpper(method)
-	if m == "" {
-		m = http.MethodGet
-	}
-	if m != http.MethodGet && m != http.MethodPost && m != http.MethodPut {
-		return "", fmt.Errorf("http_call method must be GET, POST, or PUT, got: %s", method)
-	}
-	return m, nil
+	return httpclient.NormalizeAndValidateMethod(method)
 }
 
-// normalizeHTTPCallMergeStrategy falls back to the default strategy on empty
-// input and logs a warning for unknown values.
-func normalizeHTTPCallMergeStrategy(s string) string {
+// normalizeHTTPCallMergeStrategy validates the merge strategy strictly. The
+// schema enum already restricts callers, but this is the runtime safety net
+// (Story 24.11 AC7). Empty string falls back to the module default.
+func normalizeHTTPCallMergeStrategy(s string) (string, error) {
 	if s == "" {
-		return defaultHTTPCallStrategy
+		return defaultHTTPCallStrategy, nil
 	}
 	if s != "merge" && s != "replace" && s != "append" {
-		logger.Warn("invalid mergeStrategy for http_call module; defaulting to merge",
-			slog.String("merge_strategy", s),
-		)
-		return defaultHTTPCallStrategy
+		return "", fmt.Errorf("invalid mergeStrategy %q for http_call: must be one of merge, replace, append", s)
 	}
-	return s
+	return s, nil
 }
 
 // buildHTTPCallAuth wraps auth.NewHandler with a module-specific error
@@ -57,17 +48,24 @@ func buildHTTPCallAuth(authCfg *connector.AuthConfig, client *http.Client) (auth
 	return h, nil
 }
 
-// buildHTTPCallCache creates the LRU cache used to memoize responses,
-// applying module defaults when inputs are non-positive.
-func buildHTTPCallCache(maxSize, ttlSeconds int) (*cache.LRUCache, time.Duration) {
+// buildHTTPCallCache creates the LRU cache used to memoize responses when
+// the cache is enabled. Returns (nil, 0) when caching is disabled — the
+// caller must guard cache.Get/Set with the returned `enabled` boolean.
+// Story 24.11 AC4: cache.enabled must be honored.
+func buildHTTPCallCache(cfg moduleconfig.CacheConfig) (cache.Cache, time.Duration, bool) {
+	if !cfg.Enabled {
+		return nil, 0, false
+	}
+	maxSize := cfg.MaxSize
 	if maxSize <= 0 {
 		maxSize = defaultCacheMaxSize
 	}
+	ttlSeconds := cfg.TTLSeconds
 	if ttlSeconds <= 0 {
 		ttlSeconds = defaultCacheTTLSeconds
 	}
 	ttl := time.Duration(ttlSeconds) * time.Second
-	return cache.NewLRUCache(maxSize, ttl), ttl
+	return cache.NewLRUCache(maxSize, ttl), ttl, true
 }
 
 // loadHTTPCallBodyTemplate loads a POST/PUT body template from disk and
@@ -119,11 +117,20 @@ func httpCallHasTemplating(endpoint string, headers map[string]string, hasBodyTe
 	return false
 }
 
-// validateKeysConfig validates the keys extraction configuration.
+// validateKeysConfig validates the keys extraction configuration, requiring
+// at least one entry. Used when the call has no body — the keys are then the
+// only way to parameterize the request per record.
 func validateKeysConfig(keys []moduleconfig.KeyConfig) error {
 	if len(keys) == 0 {
 		return newHTTPCallError(ErrCodeHTTPCallKeyMissing, "http_call keys is required (at least one key config)", -1, "", 0, "")
 	}
+	return validateKeyEntries(keys)
+}
+
+// validateKeyEntries validates each key entry independently of whether the
+// list is required. Story 24.11 AC11 requires invalid keys to be rejected at
+// construction even when a body is configured.
+func validateKeyEntries(keys []moduleconfig.KeyConfig) error {
 	for i, key := range keys {
 		if key.Field == "" {
 			return newHTTPCallError(ErrCodeHTTPCallKeyMissing, fmt.Sprintf("http_call keys[%d] field is required", i), -1, "", 0, "")

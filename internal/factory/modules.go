@@ -15,14 +15,36 @@
 package factory
 
 import (
+	"encoding/json"
 	"fmt"
 
+	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/modules/filter"
 	"github.com/cannectors/runtime/internal/modules/input"
 	"github.com/cannectors/runtime/internal/modules/output"
 	"github.com/cannectors/runtime/internal/registry"
 	"github.com/cannectors/runtime/pkg/connector"
 )
+
+// moduleEnabled returns the value of the optional `enabled` field in a module
+// configuration. It defaults to true when the field is absent or the raw
+// payload cannot be parsed (the latter is benign here — schema validation
+// runs before the factory and would have surfaced the error already).
+func moduleEnabled(raw json.RawMessage) bool {
+	if len(raw) == 0 {
+		return true
+	}
+	var probe struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		return true
+	}
+	if probe.Enabled == nil {
+		return true
+	}
+	return *probe.Enabled
+}
 
 // CreateInputModule creates an input module instance from configuration.
 // Uses the registry to look up the constructor by type.
@@ -31,6 +53,10 @@ import (
 func CreateInputModule(cfg *connector.ModuleConfig) (input.Module, error) {
 	if cfg == nil {
 		return nil, nil
+	}
+
+	if !moduleEnabled(cfg.Raw) {
+		return nil, fmt.Errorf("input module %q has enabled=false: input is required for the pipeline to run, remove it from the config or set enabled=true", cfg.Type)
 	}
 
 	constructor := registry.GetInputConstructor(cfg.Type)
@@ -43,7 +69,7 @@ func CreateInputModule(cfg *connector.ModuleConfig) (input.Module, error) {
 }
 
 // CreateFilterModules creates filter module instances from configuration.
-// Supports mapping and condition filter types. Other types use stub implementations.
+// Filters with `enabled: false` are skipped entirely (not constructed, not run).
 func CreateFilterModules(cfgs []connector.ModuleConfig) ([]filter.Module, error) {
 	if len(cfgs) == 0 {
 		return nil, nil
@@ -51,6 +77,13 @@ func CreateFilterModules(cfgs []connector.ModuleConfig) ([]filter.Module, error)
 
 	modules := make([]filter.Module, 0, len(cfgs))
 	for i, cfg := range cfgs {
+		if !moduleEnabled(cfg.Raw) {
+			logger.Debug("skipping disabled filter module",
+				"index", i,
+				"type", cfg.Type,
+			)
+			continue
+		}
 		module, err := createSingleFilterModule(cfg, i)
 		if err != nil {
 			return nil, err
@@ -79,6 +112,10 @@ func createSingleFilterModule(cfg connector.ModuleConfig, index int) (filter.Mod
 func CreateOutputModule(cfg *connector.ModuleConfig) (output.Module, error) {
 	if cfg == nil {
 		return nil, nil
+	}
+
+	if !moduleEnabled(cfg.Raw) {
+		return nil, fmt.Errorf("output module %q has enabled=false: output is required for the pipeline to run, remove it from the config or set enabled=true", cfg.Type)
 	}
 
 	constructor := registry.GetOutputConstructor(cfg.Type)

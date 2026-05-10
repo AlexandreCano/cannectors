@@ -578,7 +578,7 @@ func TestHTTPPolling_Fetch_PageBasedPagination(t *testing.T) {
 			"dataField": "data",
 			"pagination": map[string]any{
 				"type":            "page",
-				"pageParam":       "page",
+				"param":           "page",
 				"totalPagesField": "total_pages",
 			},
 		}),
@@ -642,11 +642,11 @@ func TestHTTPPolling_Fetch_OffsetBasedPagination(t *testing.T) {
 			"endpoint":  server.URL,
 			"dataField": "items",
 			"pagination": map[string]any{
-				"type":        "offset",
-				"offsetParam": "offset",
-				"limitParam":  "limit",
-				"limit":       float64(2),
-				"totalField":  "total",
+				"type":       "offset",
+				"param":      "offset",
+				"limitParam": "limit",
+				"limit":      float64(2),
+				"totalField": "total",
 			},
 		}),
 	}
@@ -702,7 +702,7 @@ func TestHTTPPolling_Fetch_CursorBasedPagination(t *testing.T) {
 			"dataField": "results",
 			"pagination": map[string]any{
 				"type":            "cursor",
-				"cursorParam":     "cursor",
+				"param":           "cursor",
 				"nextCursorField": "next_cursor",
 			},
 		}),
@@ -991,7 +991,7 @@ func TestHTTPPolling_Fetch_DeterministicPaginationOrder(t *testing.T) {
 			"dataField": "data",
 			"pagination": map[string]any{
 				"type":            "page",
-				"pageParam":       "page",
+				"param":           "page",
 				"totalPagesField": "total_pages",
 			},
 		}),
@@ -1196,7 +1196,7 @@ func TestHTTPPolling_IntegrationWithPaginatedData(t *testing.T) {
 			"dataField": "users",
 			"pagination": map[string]any{
 				"type":            "page",
-				"pageParam":       "page",
+				"param":           "page",
 				"totalPagesField": "total_pages",
 			},
 		}),

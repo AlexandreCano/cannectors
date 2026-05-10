@@ -228,7 +228,7 @@ filters:
 
   # Remove multiple fields
   - type: remove
-    targets:
+    target:
       - password
       - metadata.internal
       - items[0].secret

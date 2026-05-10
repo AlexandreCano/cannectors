@@ -222,9 +222,10 @@ type CredentialsBasic struct {
 }
 
 // CredentialsOAuth2 holds credentials for OAuth2 client credentials.
+// Scope follows RFC 6749 §3.3: a space-separated string of scope values.
 type CredentialsOAuth2 struct {
-	TokenURL     string   `json:"tokenUrl"`
-	ClientID     string   `json:"clientId"`
-	ClientSecret string   `json:"clientSecret"`
-	Scopes       []string `json:"scopes,omitempty"`
+	TokenURL     string `json:"tokenUrl"`
+	ClientID     string `json:"clientId"`
+	ClientSecret string `json:"clientSecret"`
+	Scope        string `json:"scope,omitempty"`
 }

@@ -12,7 +12,7 @@
 			"properties": {
 				"type": {
 					"type": "string",
-					"description": "Filter type. Canonical: mapping, condition, set, remove, script, http_call, sql_call.",
+					"description": "Filter type. Canonical: mapping, condition, drop, set, remove, script, http_call, sql_call.",
 					"minLength": 1
 				}
 			},
@@ -56,12 +56,18 @@
 								{ "properties": { "type": { "const": "set" } }, "required": [ "type" ] }
 							]
 						},
-						{
-							"allOf": [
-								{ "$ref": "#/$defs/removeFilterConfig" },
-								{ "properties": { "type": { "const": "remove" } }, "required": [ "type" ] }
-							]
-						}
+					{
+						"allOf": [
+							{ "$ref": "#/$defs/removeFilterConfig" },
+							{ "properties": { "type": { "const": "remove" } }, "required": [ "type" ] }
+						]
+					},
+					{
+						"allOf": [
+							{ "$ref": "#/$defs/dropFilterConfig" },
+							{ "properties": { "type": { "const": "drop" } }, "required": [ "type" ] }
+						]
+					}
 					]
 				}
 			]
@@ -83,39 +89,13 @@
 
 		"conditionFilterConfig": {
 			"type": "object",
-			"description": "Condition filter module configuration. Conditionally processes records based on expressions.",
+			"description": "Condition filter module. Routes records based on an expression evaluated against each record. Records matching the expression go through the 'then' branch; others go through 'else'. An absent branch keeps the record unchanged. To drop records use the explicit 'drop' filter inside a branch.",
 			"required": [ "expression" ],
 			"properties": {
-				"lang": {
-					"type": "string",
-					"description": "Expression language for conditions.",
-					"enum": [
-						"cel",
-						"jsonata",
-						"jmespath",
-						"simple"
-					],
-					"default": "simple"
-				},
 				"expression": {
 					"type": "string",
-					"description": "Condition expression."
-				},
-				"onTrue": {
-					"type": "string",
-					"enum": [
-						"continue",
-						"skip"
-					],
-					"default": "continue"
-				},
-				"onFalse": {
-					"type": "string",
-					"enum": [
-						"continue",
-						"skip"
-					],
-					"default": "skip"
+					"minLength": 1,
+					"description": "Boolean expression evaluated against each record."
 				},
 				"then": {
 					"type": "array",
@@ -132,6 +112,11 @@
 					}
 				}
 			}
+		},
+
+		"dropFilterConfig": {
+			"type": "object",
+			"description": "Drop filter module. Removes every record it receives from the stream. Typically placed inside a condition branch to filter records out explicitly."
 		},
 
 		"setFilterConfig": {
@@ -153,26 +138,20 @@
 		"removeFilterConfig": {
 			"type": "object",
 			"description": "Remove filter module configuration. Removes one or more fields from each record.",
+			"required": [ "target" ],
 			"properties": {
 				"target": {
-					"type": "string",
-					"minLength": 1,
-					"description": "Single field path to remove (e.g. id, user.email). Use 'targets' for multiple fields."
-				},
-				"targets": {
-					"type": "array",
-					"items": {
-						"type": "string",
-						"minLength": 1
-					},
-					"minItems": 1,
-					"description": "List of field paths to remove. Supports dot notation for nested paths."
+					"description": "Field path(s) to remove. Either a single non-empty string or a non-empty array of non-empty strings. Supports dot notation for nested paths.",
+					"oneOf": [
+						{ "type": "string", "minLength": 1 },
+						{
+							"type": "array",
+							"items": { "type": "string", "minLength": 1 },
+							"minItems": 1
+						}
+					]
 				}
-			},
-			"anyOf": [
-				{ "required": [ "target" ] },
-				{ "required": [ "targets" ] }
-			]
+			}
 		},
 
 		"scriptFilterConfig": {
@@ -181,28 +160,18 @@
 			"properties": {
 				"script": {
 					"type": "string",
+					"minLength": 1,
 					"description": "Inline JavaScript source code containing a transform(record) function."
 				},
 				"scriptFile": {
 					"type": "string",
+					"minLength": 1,
 					"description": "Path to JavaScript file containing the transform(record) function."
 				}
 			},
-			"allOf": [
-				{
-					"oneOf": [
-						{ "required": [ "script" ] },
-						{ "required": [ "scriptFile" ] }
-					]
-				},
-				{
-					"not": {
-						"required": [
-							"script",
-							"scriptFile"
-						]
-					}
-				}
+			"oneOf": [
+				{ "required": [ "script" ], "not": { "required": [ "scriptFile" ] } },
+				{ "required": [ "scriptFile" ], "not": { "required": [ "script" ] } }
 			]
 		},
 
@@ -237,9 +206,8 @@
 							"type": "string",
 							"description": "Field to extract from HTTP response."
 						},
-						"bodyTemplateFile": {
-							"type": "string",
-							"description": "Path to body template file (for POST/PUT requests)."
+						"retry": {
+							"$ref": "common-schema.json#/$defs/retryConfig"
 						}
 					}
 				}
@@ -250,7 +218,17 @@
 			"type": "object",
 			"description": "SQL call filter module configuration. Executes SQL queries for record enrichment.",
 			"allOf": [
-				{ "$ref": "common-schema.json#/$defs/sqlRequestBase" }
+				{ "$ref": "common-schema.json#/$defs/sqlRequestBase" },
+				{
+					"if": {
+						"properties": { "mergeStrategy": { "const": "append" } },
+						"required": ["mergeStrategy"]
+					},
+					"then": { "required": ["resultKey"] }
+				},
+				{
+					"not": { "required": ["retry"] }
+				}
 			],
 			"properties": {
 				"mergeStrategy": {
@@ -265,6 +243,7 @@
 				},
 				"resultKey": {
 					"type": "string",
+					"minLength": 1,
 					"description": "Key for storing result in append mode."
 				},
 				"cache": {
@@ -288,14 +267,15 @@
 					"minimum": 1,
 					"default": 1000
 				},
-				"defaultTTL": {
+				"ttlSeconds": {
 					"type": "integer",
 					"description": "Cache entry TTL in seconds.",
-					"minimum": 0,
+					"minimum": 1,
 					"default": 300
 				},
 				"key": {
 					"type": "string",
+					"minLength": 1,
 					"description": "Cache key template using {{record.field}} syntax."
 				}
 			},
@@ -314,6 +294,7 @@
 				},
 				"target": {
 					"type": "string",
+					"minLength": 1,
 					"description": "Target field path."
 				},
 				"transforms": {
@@ -333,19 +314,27 @@
 					],
 					"default": "setNull"
 				}
-			}
+			},
+			"additionalProperties": false,
+			"allOf": [
+				{
+					"if": {
+						"properties": { "onMissing": { "const": "useDefault" } },
+						"required": ["onMissing"]
+					},
+					"then": { "required": ["defaultValue"] }
+				}
+			]
 		},
 
 		"transformOp": {
 			"type": "object",
-			"required": [
-				"op"
-			],
+			"required": [ "op" ],
 			"properties": {
 				"op": {
 					"type": "string",
 					"description": "Operation name.",
-					"examples": [
+					"enum": [
 						"trim",
 						"lowercase",
 						"uppercase",
@@ -367,6 +356,7 @@
 				},
 				"pattern": {
 					"type": "string",
+					"minLength": 1,
 					"description": "Regex pattern for replace/match operations."
 				},
 				"replacement": {
@@ -377,7 +367,17 @@
 					"type": "string",
 					"description": "Separator for split/join operations."
 				}
-			}
+			},
+			"additionalProperties": false,
+			"allOf": [
+				{
+					"if": {
+						"properties": { "op": { "const": "replace" } },
+						"required": ["op"]
+					},
+					"then": { "required": ["pattern"] }
+				}
+			]
 		}
 	}
 }

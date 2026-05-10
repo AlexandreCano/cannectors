@@ -16,7 +16,7 @@ input:
   pagination:
     type: limit-offset
     limit: 500
-    offsetParam: offset
+    param: offset
 filters:
   - type: set
     target: sync_source

@@ -11,7 +11,7 @@ input:
   dataField: tasks
 filters:
   - type: remove
-    targets:
+    target:
       - internal
       - debug
 output:

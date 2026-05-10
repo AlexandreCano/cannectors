@@ -50,12 +50,19 @@ func (m *HTTPCallModule) deepMerge(a, b map[string]any) map[string]any {
 	return result
 }
 
-// GetCacheStats returns the current cache statistics.
+// GetCacheStats returns the current cache statistics. When the cache is
+// disabled it returns the zero-valued Stats.
 func (m *HTTPCallModule) GetCacheStats() cache.Stats {
+	if !m.cacheEnabled {
+		return cache.Stats{}
+	}
 	return m.cache.Stats()
 }
 
-// ClearCache clears all entries from the cache.
+// ClearCache clears all entries from the cache. No-op when caching is disabled.
 func (m *HTTPCallModule) ClearCache() {
+	if !m.cacheEnabled {
+		return
+	}
 	m.cache.Clear()
 }

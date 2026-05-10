@@ -35,12 +35,8 @@
 				},
 				"onError": {
 					"type": "string",
-					"description": "Default error action.",
-					"enum": [
-						"fail",
-						"skip",
-						"log"
-					],
+					"description": "Default error action. Case-insensitive; normalized to lowercase by the runtime.",
+					"pattern": "^(?i)(fail|skip|log)$",
 					"default": "fail"
 				}
 			}
@@ -61,12 +57,8 @@
 				},
 				"onError": {
 					"type": "string",
-					"enum": [
-						"fail",
-						"skip",
-						"log"
-					],
-					"description": "Default error handling strategy for all modules."
+					"description": "Default error handling strategy. Case-insensitive; normalized to lowercase by the runtime.",
+					"pattern": "^(?i)(fail|skip|log)$"
 				}
 			},
 			"additionalProperties": false
@@ -134,14 +126,9 @@
 
 		"httpMethod": {
 			"type": "string",
-			"enum": [
-				"GET",
-				"POST",
-				"PUT",
-				"PATCH",
-				"DELETE"
-			],
-			"default": "GET"
+			"description": "HTTP method. Any RFC 7230 token is accepted (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS, custom verbs, etc.). The runtime normalizes to upper-case and rejects malformed tokens.",
+			"pattern": "^[!#$%&'*+\\-.^_`|~0-9A-Za-z]+$",
+			"minLength": 1
 		},
 
 		"httpHeaders": {
@@ -163,7 +150,8 @@
 			"properties": {
 				"field": {
 					"type": "string",
-					"description": "Dot-notation path to extract value from record (e.g., 'customer.id')."
+					"description": "Dot-notation path to extract value from record (e.g., 'customer.id').",
+					"minLength": 1
 				},
 				"paramType": {
 					"type": "string",
@@ -176,7 +164,8 @@
 				},
 				"paramName": {
 					"type": "string",
-					"description": "Parameter name (path placeholder, query param, or header name)."
+					"description": "Parameter name (path placeholder, query param, or header name).",
+					"minLength": 1
 				}
 			}
 		},
@@ -188,8 +177,8 @@
 			"properties": {
 				"endpoint": {
 					"type": "string",
-					"description": "HTTP endpoint URL.",
-					"format": "uri"
+					"description": "HTTP endpoint URL. Templates are accepted; the final URL is validated at runtime after template resolution.",
+					"minLength": 1
 				},
 				"method": {
 					"$ref": "#/$defs/httpMethod"
@@ -204,14 +193,22 @@
 						"type": "string"
 					}
 				},
+				"body": {
+					"type": "string",
+					"description": "Inline request body. Templates ({{record.field}}) are evaluated at runtime. The body is sent regardless of the HTTP method."
+				},
+				"bodyTemplateFile": {
+					"type": "string",
+					"description": "Path to an external template file used as the request body. Mutually exclusive with `body` is not enforced; if both are set, the inline body wins.",
+					"minLength": 1
+				},
 				"authentication": {
 					"$ref": "auth-schema.json#/$defs/auth"
 				},
 				"timeoutMs": {
 					"type": "integer",
-					"description": "Request timeout in milliseconds.",
-					"minimum": 0,
-					"default": 30000
+					"description": "Request timeout in milliseconds. When omitted, each module applies its own runtime default.",
+					"minimum": 1
 				}
 			}
 		},
@@ -220,70 +217,53 @@
 			"type": "object",
 			"description": "Pagination configuration for HTTP polling.",
 			"unevaluatedProperties": false,
+			"required": ["type", "param"],
 			"properties": {
 				"type": {
 					"type": "string",
 					"description": "Pagination type.",
 					"enum": ["cursor", "offset", "page"]
 				},
+				"param": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Canonical query parameter name carrying the cursor, offset, or page value."
+				},
 				"limitParam": {
 					"type": "string",
-					"description": "Query parameter name for limit."
+					"minLength": 1,
+					"description": "Query parameter name for the page size (when applicable)."
 				},
 				"limit": {
 					"type": "integer",
 					"minimum": 1,
-					"default": 100,
-					"description": "Number of items per page."
-				},
-				"cursorParam": {
-					"type": "string",
-					"description": "Query parameter name for cursor."
+					"description": "Number of items per page. When omitted, the runtime applies its default."
 				},
 				"nextCursorField": {
 					"type": "string",
-					"description": "Field containing next cursor value."
-				},
-				"pageParam": {
-					"type": "string",
-					"description": "Query parameter name for page number."
+					"description": "Field containing the next cursor value (cursor pagination)."
 				},
 				"totalPagesField": {
 					"type": "string",
-					"description": "Field containing total pages count."
-				},
-				"offsetParam": {
-					"type": "string",
-					"description": "Query parameter name for offset."
+					"description": "Field containing the total pages count (page pagination)."
 				},
 				"totalField": {
 					"type": "string",
-					"description": "Field containing total items count."
+					"description": "Field containing the total items count (offset pagination)."
 				}
 			},
-			"allOf": [
+			"oneOf": [
 				{
-					"required": ["type", "limit", "limitParam"],
-					"oneOf": [
-						{
-							"allOf": [
-								{ "properties": { "type": { "const": "cursor" } } },
-								{ "required": ["cursorParam", "nextCursorField"] }
-							]
-						},
-						{
-							"allOf": [
-								{ "properties": { "type": { "const": "page" } } },
-								{ "required": ["pageParam", "totalPagesField"] }
-							]
-						},
-						{
-							"allOf": [
-								{ "properties": { "type": { "const": "offset" } } },
-								{ "required": ["offsetParam", "totalField"] }
-							]
-						}
-					]
+					"properties": { "type": { "const": "cursor" } },
+					"required": ["nextCursorField"]
+				},
+				{
+					"properties": { "type": { "const": "page" } },
+					"required": ["totalPagesField"]
+				},
+				{
+					"properties": { "type": { "const": "offset" } },
+					"required": ["limitParam", "totalField"]
 				}
 			]
 		},
@@ -294,6 +274,7 @@
 			"properties": {
 				"connectionString": {
 					"type": "string",
+					"minLength": 1,
 					"description": "Database connection string (DSN). Avoid in production - use connectionStringRef instead.",
 					"examples": [
 						"postgres://user:pass@host:5432/db?sslmode=require",
@@ -328,25 +309,25 @@
 				"maxIdleConns": {
 					"type": "integer",
 					"description": "Maximum number of idle connections in the pool.",
-					"minimum": 0,
+					"minimum": 1,
 					"default": 5
 				},
 				"connMaxLifetimeSeconds": {
 					"type": "integer",
 					"description": "Maximum lifetime of a connection in seconds.",
-					"minimum": 0,
+					"minimum": 1,
 					"default": 1800
 				},
 				"connMaxIdleTimeSeconds": {
 					"type": "integer",
 					"description": "Maximum idle time for a connection in seconds.",
-					"minimum": 0,
+					"minimum": 1,
 					"default": 300
 				},
 				"timeoutMs": {
 					"type": "integer",
 					"description": "Query timeout in milliseconds.",
-					"minimum": 0,
+					"minimum": 1,
 					"default": 30000
 				}
 			},
@@ -362,10 +343,12 @@
 			"properties": {
 				"query": {
 					"type": "string",
+					"minLength": 1,
 					"description": "SQL query. Supports module-specific placeholders (e.g. {{record.field}}, {{lastRunTimestamp}})."
 				},
 				"queryFile": {
 					"type": "string",
+					"minLength": 1,
 					"description": "Path to SQL file. Supports module-specific placeholders."
 				}
 			},
@@ -390,7 +373,7 @@
 
 		"databasePaginationConfig": {
 			"type": "object",
-			"description": "Pagination configuration for database queries.",
+			"description": "Pagination configuration for database queries. Uses canonical 'param' field for both cursor and limit-offset placeholders.",
 			"unevaluatedProperties": false,
 			"properties": {
 				"type": {
@@ -400,37 +383,34 @@
 				},
 				"limit": {
 					"type": "integer",
-					"description": "Number of records per page.",
-					"minimum": 1,
-					"default": 1000
+					"description": "Number of records per page. Optional; runtime applies default when omitted.",
+					"minimum": 1
 				},
-				"offsetParam": {
+				"param": {
 					"type": "string",
-					"description": "Parameter name for offset (limit-offset pagination)."
+					"minLength": 1,
+					"description": "Named placeholder used in the SQL query to inject the cursor or offset value (e.g. ':cursor' / ':offset')."
 				},
 				"cursorField": {
 					"type": "string",
-					"description": "Field to use for cursor value (cursor pagination)."
-				},
-				"cursorParam": {
-					"type": "string",
-					"description": "Parameter name for cursor value (cursor pagination)."
+					"minLength": 1,
+					"description": "Field of the previous page's last record used as the next cursor value (cursor pagination only)."
 				}
 			},
 			"allOf": [
+				{ "required": ["type"] },
 				{
-					"required": ["type", "limit"],
 					"oneOf": [
 						{
 							"allOf": [
 								{ "properties": { "type": { "const": "limit-offset" } } },
-								{ "required": ["offsetParam"] }
+								{ "required": ["param"] }
 							]
 						},
 						{
 							"allOf": [
 								{ "properties": { "type": { "const": "cursor" } } },
-								{ "required": ["cursorField", "cursorParam"] }
+								{ "required": ["cursorField", "param"] }
 							]
 						}
 					]

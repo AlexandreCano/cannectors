@@ -45,7 +45,7 @@ connector:
     # Pagination for large result sets
     pagination:
       type: cursor
-      cursorParam: cursor
+      param: cursor
       cursorPath: next_cursor
 
     dataField: transactions
@@ -53,8 +53,6 @@ connector:
   filters:
     - type: condition
       expression: "status != 'pending'"
-      onTrue: continue
-      onFalse: skip
 
     - type: mapping
       mappings:

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/cannectors/runtime/internal/auth"
@@ -14,9 +15,26 @@ import (
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
-// buildRequest creates and configures the HTTP GET request.
+// buildRequest creates and configures the HTTP request using the configured
+// method and (optional) body. The final endpoint URL is validated after
+// template resolution; invalid headers cause an error rather than a silent
+// skip.
 func (h *HTTPPolling) buildRequest(ctx context.Context, endpoint string) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err := httpclient.ValidateAbsoluteURL(endpoint); err != nil {
+		logger.Error("invalid request URL",
+			"module_type", "httpPolling",
+			"endpoint", httpclient.SanitizeURL(endpoint),
+			"error", err.Error(),
+		)
+		return nil, err
+	}
+
+	var body io.Reader
+	if h.bodyTemplate != "" {
+		body = strings.NewReader(h.bodyTemplate)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, h.method, endpoint, body)
 	if err != nil {
 		logger.Error("http request creation failed",
 			"module_type", "httpPolling",
@@ -29,7 +47,9 @@ func (h *HTTPPolling) buildRequest(ctx context.Context, endpoint string) (*http.
 	req.Header.Set("User-Agent", defaultUserAgent)
 	validated := make(map[string]string, len(h.headers))
 	for key, value := range h.headers {
-		httpclient.TryAddValidHeader(validated, key, value)
+		if err := httpclient.AddValidatedHeader(validated, key, value); err != nil {
+			return nil, fmt.Errorf("invalid header for httpPolling: %w", err)
+		}
 	}
 	for key, value := range validated {
 		req.Header.Set(key, value)
@@ -139,7 +159,7 @@ func (h *HTTPPolling) doRequestWithRetry(ctx context.Context, endpoint string) (
 	logger.Debug("http request completed",
 		"module_type", "httpPolling",
 		"endpoint", httpclient.SanitizeURL(endpoint),
-		"method", http.MethodGet,
+		"method", h.method,
 		"status_code", resp.StatusCode,
 		"response_size", len(body),
 	)

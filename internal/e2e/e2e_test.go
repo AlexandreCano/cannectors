@@ -214,6 +214,7 @@ func TestExampleHTTPPipelines(t *testing.T) {
 	t.Run("09-filters-condition HTTP polling condition to HTTP request", func(t *testing.T) {
 		condition, err := filter.NewConditionFromConfig(filter.ConditionConfig{
 			Expression: `status == "active"`,
+			Else:       []*filter.NestedModuleConfig{{Type: "drop"}},
 		}, nil)
 		if err != nil {
 			t.Fatalf("create condition filter: %v", err)
@@ -290,7 +291,7 @@ func TestExampleCursorPaginationPipeline(t *testing.T) {
 		"dataField": "results",
 		"pagination": map[string]any{
 			"type":            "cursor",
-			"cursorParam":     "cursor",
+			"param":           "cursor",
 			"nextCursorField": "next_cursor",
 		},
 	}))
@@ -468,7 +469,7 @@ func TestExamplePagePaginationPipeline(t *testing.T) {
 		"dataField": "users",
 		"pagination": map[string]any{
 			"type":            "page",
-			"pageParam":       "page",
+			"param":           "page",
 			"totalPagesField": "total_pages",
 		},
 	}))
@@ -556,11 +557,11 @@ func TestExampleOffsetPaginationPipeline(t *testing.T) {
 		"timeoutMs": 1000,
 		"dataField": "items",
 		"pagination": map[string]any{
-			"type":        "offset",
-			"offsetParam": "offset",
-			"limitParam":  "limit",
-			"limit":       2,
-			"totalField":  "total",
+			"type":       "offset",
+			"param":      "offset",
+			"limitParam": "limit",
+			"limit":      2,
+			"totalField": "total",
 		},
 	}))
 	if err != nil {

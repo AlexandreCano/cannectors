@@ -77,7 +77,7 @@ func newPipeline() *connector.Pipeline {
 	}
 }
 
-// extractPipelineMetadata extracts name, version, description, and id.
+// extractPipelineMetadata extracts name, version, description, id, enabled, dryRunOptions.
 func extractPipelineMetadata(p *connector.Pipeline, data map[string]any) error {
 	name, ok := data["name"].(string)
 	if !ok {
@@ -96,6 +96,18 @@ func extractPipelineMetadata(p *connector.Pipeline, data map[string]any) error {
 
 	if id, ok := data["id"].(string); ok {
 		p.ID = id
+	}
+
+	if enabled, ok := data["enabled"].(bool); ok {
+		p.Enabled = enabled
+	}
+
+	if opts, ok := data["dryRunOptions"].(map[string]any); ok {
+		dro := &connector.DryRunOptions{}
+		if v, ok := opts["showCredentials"].(bool); ok {
+			dro.ShowCredentials = v
+		}
+		p.DryRunOptions = dro
 	}
 
 	return nil
@@ -282,13 +294,23 @@ func getIntSliceFromMap(m map[string]any, key string) ([]int, bool) {
 	return result, len(result) > 0
 }
 
+// httpRetryEligibleTypes lists the only module types that participate in
+// defaults.retry inheritance (Story 24.3 AC10).
+var httpRetryEligibleTypes = map[string]struct{}{
+	"httpPolling": {},
+	"http_call":   {},
+	"httpRequest": {},
+}
+
 // applyDefaults resolves retry/onError/timeoutMs per module (module > defaults)
 // and injects resolved values into each module's raw map before serialization.
 func applyDefaults(builders []*moduleBuilder, defaults *connector.ModuleDefaults) {
 	for _, b := range builders {
 		resolveOnErrorInheritance(b.rawMap, defaults)
 		resolveTimeout(b.rawMap, defaults)
-		resolveRetry(b.rawMap, defaults)
+		if _, ok := httpRetryEligibleTypes[b.mc.Type]; ok {
+			resolveRetry(b.rawMap, defaults)
+		}
 	}
 }
 

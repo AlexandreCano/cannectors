@@ -124,6 +124,10 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 		OnAttemptFailure: func(_ int, resp *http.Response, _ error) bool {
 			return h.handleOAuth2Unauthorized(resp, &oauth2RetryCount)
 		},
+		// Story 24.12 AC8/AC9: when success is configured (status codes
+		// and/or expression), responses must be allowed to flow through to
+		// the caller for success evaluation, including 4xx/5xx codes.
+		IsSuccessStatus: h.statusAllowedAsSuccess,
 	}
 
 	resp, err := h.client.DoWithRetry(ctx, req, h.retry, hooks)
@@ -146,8 +150,18 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 		return h.recordRetryFailure(err, delaysMs, startTime, endpoint)
 	}
 
-	if !h.isSuccessStatusCode(resp.StatusCode) {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
+	respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
+	if readErr != nil {
+		return h.recordRetryFailure(
+			fmt.Errorf("reading response body: %w", readErr),
+			delaysMs, startTime, endpoint,
+		)
+	}
+	success, successErr := h.isResponseSuccess(resp.StatusCode, resp.Header, respBody)
+	if successErr != nil {
+		return h.recordRetryFailure(successErr, delaysMs, startTime, endpoint)
+	}
+	if !success {
 		bodySnippet := string(respBody)
 		if len(bodySnippet) > 500 {
 			bodySnippet = bodySnippet[:500] + "..."
@@ -189,6 +203,9 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 // buildHTTPRequest creates the *http.Request with headers and authentication
 // attached. It does not perform the network call.
 func (h *HTTPRequestModule) buildHTTPRequest(ctx context.Context, endpoint string, body []byte, recordHeaders map[string]string) (*http.Request, error) {
+	if err := httpclient.ValidateAbsoluteURL(endpoint); err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequestWithContext(ctx, h.method, endpoint, bytes.NewReader(body))
 	if err != nil {
 		logger.Error("failed to create http request",
@@ -200,7 +217,11 @@ func (h *HTTPRequestModule) buildHTTPRequest(ctx context.Context, endpoint strin
 		return nil, fmt.Errorf("creating http request: %w", err)
 	}
 
-	for key, value := range h.buildBaseHeadersMap(recordHeaders) {
+	baseHeaders, err := h.buildBaseHeadersMap(recordHeaders)
+	if err != nil {
+		return nil, err
+	}
+	for key, value := range baseHeaders {
 		req.Header.Set(key, value)
 	}
 
@@ -272,12 +293,44 @@ func (h *HTTPRequestModule) applyAuthentication(ctx context.Context, req *http.R
 	return h.authHandler.ApplyAuth(ctx, req)
 }
 
-// isSuccessStatusCode checks if a status code is considered success.
-func (h *HTTPRequestModule) isSuccessStatusCode(statusCode int) bool {
+// statusAllowedAsSuccess returns true when the configured success contract
+// can plausibly accept the status code as success. The actual decision is
+// finalized by isResponseSuccess after evaluating the expression on the
+// body. This hook only widens the >=400 default of httpclient.DoWithRetry
+// so that 4xx/5xx codes listed in success.statusCodes (or covered by
+// success.expression alone) flow through to the caller.
+func (h *HTTPRequestModule) statusAllowedAsSuccess(statusCode int) bool {
+	// Expression-only success: any status flows through; expression decides.
+	if h.successCodes == nil {
+		return true
+	}
 	for _, code := range h.successCodes {
 		if statusCode == code {
 			return true
 		}
 	}
-	return false
+	// Fall back to default behavior (status<400 = success, >=400 = error).
+	return statusCode < 400
+}
+
+// isResponseSuccess returns true when the response satisfies both the
+// configured status codes (if any) AND the configured success.expression
+// (if any). When neither is configured, defaults from defaultSuccessCodes
+// apply via successCodes. Story 24.12 AC8/AC9/AC10/AC11.
+func (h *HTTPRequestModule) isResponseSuccess(statusCode int, headers map[string][]string, body []byte) (bool, error) {
+	statusOK := true
+	if h.successCodes != nil {
+		statusOK = false
+		for _, code := range h.successCodes {
+			if statusCode == code {
+				statusOK = true
+				break
+			}
+		}
+	}
+	exprOK, err := h.evaluateSuccessExpression(statusCode, headers, body)
+	if err != nil {
+		return false, err
+	}
+	return statusOK && exprOK, nil
 }

@@ -156,15 +156,15 @@ func TestDatabaseInput_Pagination(t *testing.T) {
 			name: "cursor",
 			cfg: DatabaseInputConfig{
 				SQLRequestBase: moduleconfig.SQLRequestBase{Query: "SELECT id, name FROM records WHERE id > COALESCE(:after_id, 0) ORDER BY id"},
-				Pagination:     &moduleconfig.DatabasePaginationConfig{Type: "cursor", Limit: 2, CursorField: "id", CursorParam: "after_id"},
+				Pagination:     &moduleconfig.DatabasePaginationConfig{Type: "cursor", Limit: 2, CursorField: "id", Param: "after_id"},
 			},
 			want: []string{"old", "middle", "new", "newer"},
 		},
 		{
-			name: "limit offset with offsetParam",
+			name: "limit offset with param",
 			cfg: DatabaseInputConfig{
 				SQLRequestBase: moduleconfig.SQLRequestBase{Query: "SELECT id, name FROM records WHERE id > :offset ORDER BY id"},
-				Pagination:     &moduleconfig.DatabasePaginationConfig{Type: "limit-offset", Limit: 2, OffsetParam: "offset"},
+				Pagination:     &moduleconfig.DatabasePaginationConfig{Type: "limit-offset", Limit: 2, Param: "offset"},
 			},
 			want: []string{"old", "middle", "new", "newer"},
 		},

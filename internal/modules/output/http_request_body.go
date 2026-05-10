@@ -25,6 +25,10 @@ func (h *HTTPRequestModule) buildBodyForRecord(record map[string]any, recordInde
 		}
 		return body, nil
 	}
+	if h.defaultBodyDisabled {
+		// AC5: methods outside POST/PUT/PATCH default to no body.
+		return nil, nil
+	}
 	// Strip metadata before serialization
 	recordForBody := metadata.StripFromRecord(record, metadata.DefaultFieldName)
 	body, err := json.Marshal(recordForBody)

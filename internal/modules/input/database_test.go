@@ -2,6 +2,8 @@ package input
 
 import (
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/cannectors/runtime/internal/moduleconfig"
@@ -71,9 +73,9 @@ func TestParseDatabaseInputConfig(t *testing.T) {
 				"connectionString": "postgres://localhost/db",
 				"query":            "SELECT * FROM items",
 				"pagination": map[string]any{
-					"type":        "limit-offset",
-					"limit":       float64(500),
-					"offsetParam": "offset",
+					"type":  "limit-offset",
+					"limit": float64(500),
+					"param": "offset",
 				},
 			},
 			check: func(t *testing.T, config DatabaseInputConfig) {
@@ -170,9 +172,9 @@ func TestParseDatabasePaginationConfig(t *testing.T) {
 		{
 			name: "limit-offset pagination",
 			cfg: map[string]any{
-				"type":        "limit-offset",
-				"limit":       float64(100),
-				"offsetParam": "offset",
+				"type":  "limit-offset",
+				"limit": float64(100),
+				"param": "offset",
 			},
 			check: func(t *testing.T, config *moduleconfig.DatabasePaginationConfig) {
 				if config.Type != "limit-offset" {
@@ -181,8 +183,8 @@ func TestParseDatabasePaginationConfig(t *testing.T) {
 				if config.Limit != 100 {
 					t.Errorf("Limit = %d, want 100", config.Limit)
 				}
-				if config.OffsetParam != "offset" {
-					t.Errorf("OffsetParam = %q, want offset", config.OffsetParam)
+				if config.Param != "offset" {
+					t.Errorf("Param = %q, want offset", config.Param)
 				}
 			},
 		},
@@ -192,7 +194,7 @@ func TestParseDatabasePaginationConfig(t *testing.T) {
 				"type":        "cursor",
 				"limit":       float64(50),
 				"cursorField": "id",
-				"cursorParam": "after_id",
+				"param":       "after_id",
 			},
 			check: func(t *testing.T, config *moduleconfig.DatabasePaginationConfig) {
 				if config.Type != "cursor" {
@@ -201,8 +203,8 @@ func TestParseDatabasePaginationConfig(t *testing.T) {
 				if config.CursorField != "id" {
 					t.Errorf("CursorField = %q, want id", config.CursorField)
 				}
-				if config.CursorParam != "after_id" {
-					t.Errorf("CursorParam = %q, want after_id", config.CursorParam)
+				if config.Param != "after_id" {
+					t.Errorf("Param = %q, want after_id", config.Param)
 				}
 			},
 		},
@@ -296,14 +298,15 @@ func TestNewDatabaseInputFromConfig_Validation(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		cfg     *connector.ModuleConfig
-		wantErr error
+		name       string
+		cfg        *connector.ModuleConfig
+		wantErrIs  error  // for errors checked with errors.Is
+		wantErrSub string // for errors checked via substring
 	}{
 		{
-			name:    "nil config",
-			cfg:     nil,
-			wantErr: ErrDatabaseNilConfig,
+			name:      "nil config",
+			cfg:       nil,
+			wantErrIs: ErrDatabaseNilConfig,
 		},
 		{
 			name: "missing query",
@@ -313,7 +316,7 @@ func TestNewDatabaseInputFromConfig_Validation(t *testing.T) {
 					"connectionString": "postgres://localhost/db",
 				}),
 			},
-			wantErr: ErrDatabaseMissingQuery,
+			wantErrSub: "query or queryFile is required",
 		},
 		{
 			name: "missing connection string",
@@ -323,7 +326,73 @@ func TestNewDatabaseInputFromConfig_Validation(t *testing.T) {
 					"query": "SELECT * FROM users",
 				}),
 			},
-			wantErr: ErrDatabaseMissingConnStr,
+			wantErrSub: "connectionString or connectionStringRef is required",
+		},
+		{
+			name: "both connection fields",
+			cfg: &connector.ModuleConfig{
+				Type: "database",
+				Raw: mustJSON(map[string]any{
+					"connectionString":    "postgres://localhost/db",
+					"connectionStringRef": "${DB_URL}",
+					"query":               "SELECT 1",
+				}),
+			},
+			wantErrSub: "mutually exclusive",
+		},
+		{
+			name: "both query fields",
+			cfg: &connector.ModuleConfig{
+				Type: "database",
+				Raw: mustJSON(map[string]any{
+					"connectionString": "postgres://localhost/db",
+					"query":            "SELECT 1",
+					"queryFile":        "/tmp/q.sql",
+				}),
+			},
+			wantErrSub: "query and queryFile are mutually exclusive",
+		},
+		{
+			name: "invalid connectionStringRef",
+			cfg: &connector.ModuleConfig{
+				Type: "database",
+				Raw: mustJSON(map[string]any{
+					"connectionStringRef": "DATABASE_URL",
+					"query":               "SELECT 1",
+				}),
+			},
+			wantErrSub: "${ENV_VAR_NAME}",
+		},
+		{
+			name: "unknown pagination type",
+			cfg: &connector.ModuleConfig{
+				Type: "database",
+				Raw: mustJSON(map[string]any{
+					"connectionString": "postgres://localhost/db",
+					"query":            "SELECT 1",
+					"pagination": map[string]any{
+						"type":  "weird",
+						"limit": 10,
+					},
+				}),
+			},
+			wantErrSub: "unknown pagination.type",
+		},
+		{
+			name: "cursor pagination missing cursorField",
+			cfg: &connector.ModuleConfig{
+				Type: "database",
+				Raw: mustJSON(map[string]any{
+					"connectionString": "postgres://localhost/db",
+					"query":            "SELECT 1",
+					"pagination": map[string]any{
+						"type":  "cursor",
+						"limit": 10,
+						"param": "after_id",
+					},
+				}),
+			},
+			wantErrSub: "cursorField is required",
 		},
 	}
 
@@ -331,11 +400,13 @@ func TestNewDatabaseInputFromConfig_Validation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := NewDatabaseInputFromConfig(tt.cfg)
 			if err == nil {
-				t.Error("expected error, got nil")
-				return
+				t.Fatal("expected error, got nil")
 			}
-			if err != tt.wantErr {
-				t.Errorf("error = %v, want %v", err, tt.wantErr)
+			if tt.wantErrIs != nil && !errors.Is(err, tt.wantErrIs) {
+				t.Errorf("error = %v, want errors.Is %v", err, tt.wantErrIs)
+			}
+			if tt.wantErrSub != "" && !strings.Contains(err.Error(), tt.wantErrSub) {
+				t.Errorf("error = %v, want substring %q", err, tt.wantErrSub)
 			}
 		})
 	}

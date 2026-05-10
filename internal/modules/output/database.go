@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cannectors/runtime/internal/database"
+	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/pathutil"
@@ -33,9 +34,7 @@ const (
 
 // Error types for database output module
 var (
-	ErrDatabaseOutputNilConfig      = errors.New("database output configuration is nil")
-	ErrDatabaseOutputMissingConnStr = errors.New("connection string is required for database output")
-	ErrDatabaseOutputMissingQuery   = errors.New("query or queryFile is required for database output")
+	ErrDatabaseOutputNilConfig = errors.New("database output configuration is nil")
 )
 
 // DatabaseOutputConfig holds configuration for the database output module.
@@ -66,13 +65,12 @@ func NewDatabaseOutputFromConfig(cfg *connector.ModuleConfig) (*DatabaseOutput, 
 		return nil, err
 	}
 
-	// Validate required fields
-	if config.ConnectionString == "" && config.ConnectionStringRef == "" {
-		return nil, ErrDatabaseOutputMissingConnStr
+	if validateErr := config.Validate(); validateErr != nil {
+		return nil, fmt.Errorf("database output: %w", validateErr)
 	}
 
 	// Load query from file if queryFile is specified
-	if config.QueryFile != "" && config.Query == "" {
+	if config.QueryFile != "" {
 		if validateErr := pathutil.ValidateFilePath(config.QueryFile); validateErr != nil {
 			return nil, fmt.Errorf("query file path: %w", validateErr)
 		}
@@ -81,11 +79,9 @@ func NewDatabaseOutputFromConfig(cfg *connector.ModuleConfig) (*DatabaseOutput, 
 			return nil, fmt.Errorf("reading query file %s: %w", config.QueryFile, readErr)
 		}
 		config.Query = string(queryBytes)
-	}
-
-	// Validate query is present
-	if config.Query == "" {
-		return nil, ErrDatabaseOutputMissingQuery
+		if config.Query == "" {
+			return nil, fmt.Errorf("query file %s is empty", config.QueryFile)
+		}
 	}
 
 	// Validate template syntax in query
@@ -96,9 +92,11 @@ func NewDatabaseOutputFromConfig(cfg *connector.ModuleConfig) (*DatabaseOutput, 
 	// Set defaults
 	timeout := connector.GetTimeoutDuration(config.TimeoutMs, defaultDatabaseOutputTimeout)
 
-	if config.OnError == "" {
-		config.OnError = "fail"
+	strategy, err := errhandling.ParseOnErrorStrategy(config.OnError)
+	if err != nil {
+		return nil, err
 	}
+	config.OnError = string(strategy)
 
 	// Create database config
 	dbConfig := database.Config{

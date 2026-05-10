@@ -14,7 +14,7 @@ connector:
     dataField: events
     pagination:
       type: cursor
-      cursorParam: after
+      param: after
       cursorPath: pagination.next_cursor
     authentication:
       type: bearer

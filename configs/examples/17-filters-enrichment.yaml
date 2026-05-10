@@ -54,7 +54,7 @@ connector:
       # Multiple orders with the same customerId will only trigger one API call
       cache:
         maxSize: 1000      # Maximum number of cached entries
-        defaultTTL: 300    # Cache entries expire after 5 minutes (300 seconds)
+        ttlSeconds: 300    # Cache entries expire after 5 minutes (300 seconds)
         # key: "$.customerId"  # Optional: Custom cache key (JSON path or static string)
                                 # If not specified, uses: endpoint + "::" + keyValue
 
@@ -91,7 +91,7 @@ connector:
     #       paramName: sku
     #   cache:
     #     maxSize: 500
-    #     defaultTTL: 600    # 10 minutes
+    #     ttlSeconds: 600    # 10 minutes
 
     # Alternative: Header parameter example
     # - type: http_call

@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/pkg/connector"
@@ -29,7 +30,7 @@ import (
 // Default configuration values for webhook
 const (
 	defaultListenAddress   = "0.0.0.0:8080"
-	defaultSignatureHeader = "X-Webhook-Signature"
+	defaultSignatureHeader = "X-Hub-Signature-256"
 	defaultReadTimeout     = 15 * time.Second
 	defaultWriteTimeout    = 15 * time.Second
 	defaultShutdownTimeout = 5 * time.Second
@@ -39,17 +40,13 @@ const (
 
 // Webhook-specific error types
 var (
-	ErrWebhookServerClosed    = errors.New("webhook server closed")
 	ErrInvalidSignature       = errors.New("invalid webhook signature")
 	ErrMissingSignature       = errors.New("missing required signature header")
-	ErrEmptyRequestBody       = errors.New("request body is empty")
 	ErrInvalidJSONPayload     = errors.New("invalid JSON payload")
 	ErrMissingSignatureSecret = errors.New("signature validation requires secret")
 	ErrUnsupportedSignature   = errors.New("unsupported signature type")
 	ErrMissingSignatureType   = errors.New("signature type is required")
 	ErrMissingPath            = errors.New("path is required")
-	ErrRateLimited            = errors.New("rate limit exceeded")
-	ErrQueueFull              = errors.New("webhook queue is full")
 	ErrInvalidQueueSize       = errors.New("queueSize must be >= 0")
 	ErrInvalidMaxConcurrent   = errors.New("maxConcurrent must be >= 0")
 )
@@ -121,14 +118,15 @@ type Webhook struct {
 
 // WebhookInputConfig holds the parsed configuration for the webhook input module.
 type WebhookInputConfig struct {
-	Path          string           `json:"path,omitempty"`
-	ListenAddress string           `json:"listenAddress,omitempty"`
-	DataField     string           `json:"dataField,omitempty"`
-	TimeoutMs     int              `json:"timeoutMs,omitempty"`
-	Signature     *SignatureConfig `json:"signature,omitempty"`
-	QueueSize     int              `json:"queueSize,omitempty"`
-	MaxConcurrent int              `json:"maxConcurrent,omitempty"`
-	RateLimit     *RateLimitConfig `json:"rateLimit,omitempty"`
+	connector.ModuleBase
+	Path             string           `json:"path,omitempty"`
+	ListenAddress    string           `json:"listenAddress,omitempty"`
+	DataField        string           `json:"dataField,omitempty"`
+	RequestTimeoutMs int              `json:"requestTimeoutMs,omitempty"`
+	Signature        *SignatureConfig `json:"signature,omitempty"`
+	QueueSize        int              `json:"queueSize,omitempty"`
+	MaxConcurrent    int              `json:"maxConcurrent,omitempty"`
+	RateLimit        *RateLimitConfig `json:"rateLimit,omitempty"`
 }
 
 // NewWebhookFromConfig creates a new Webhook input module from configuration.
@@ -139,10 +137,10 @@ type WebhookInputConfig struct {
 // Optional config fields:
 //   - listenAddress: Server listen address (default: "0.0.0.0:8080")
 //   - dataField: JSON field containing the array of records (for nested payloads)
-//   - timeoutMs: Request timeout in milliseconds (default: 15000)
+//   - requestTimeoutMs: Per-request HTTP read/write timeout in milliseconds (default: 15000)
 //   - signature: Signature validation configuration
 //   - type: "hmac-sha256"
-//   - header: Header name for signature (default: "X-Webhook-Signature")
+//   - header: Header name for signature (default: "X-Hub-Signature-256")
 //   - secret: Secret key for validation
 func NewWebhookFromConfig(config *connector.ModuleConfig) (*Webhook, error) {
 	if config == nil {
@@ -158,6 +156,10 @@ func NewWebhookFromConfig(config *connector.ModuleConfig) (*Webhook, error) {
 		return nil, ErrMissingPath
 	}
 	endpoint := cfg.Path
+
+	if _, err := errhandling.ParseOnErrorStrategy(cfg.OnError); err != nil {
+		return nil, err
+	}
 
 	if cfg.Signature != nil {
 		if cfg.Signature.Header == "" {
@@ -185,7 +187,7 @@ func NewWebhookFromConfig(config *connector.ModuleConfig) (*Webhook, error) {
 		listenAddress = defaultListenAddress
 	}
 
-	timeout := connector.GetTimeoutDuration(cfg.TimeoutMs, defaultReadTimeout)
+	timeout := connector.GetTimeoutDuration(cfg.RequestTimeoutMs, defaultReadTimeout)
 
 	if cfg.RateLimit != nil && cfg.RateLimit.RequestsPerSecond > 0 && cfg.RateLimit.Burst <= 0 {
 		cfg.RateLimit.Burst = cfg.RateLimit.RequestsPerSecond

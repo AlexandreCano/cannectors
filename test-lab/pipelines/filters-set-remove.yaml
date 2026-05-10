@@ -17,7 +17,7 @@ filters:
     target: meta.processed
     value: true
   - type: remove
-    targets:
+    target:
       - card.cvv
       - card.number
       - deprecatedField

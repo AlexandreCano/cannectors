@@ -204,6 +204,24 @@ development_status:
   23-4-add-test-lab-ci-workflow: ready-for-dev
   epic-23-retrospective: optional
 
+  # Epic 24: Schema/Runtime Product Contract Alignment
+  # Aligne les schemas JSON, la conversion config et le runtime sur les decisions produit validees
+  # Source: schema/runtime drift review and product decision session
+  epic-24: in-progress
+  24-1-enforce-schema-validation-before-pipeline-execution: ready-for-dev
+  24-2-align-root-pipeline-and-modulebase-contracts: ready-for-dev
+  24-3-align-common-http-contract: ready-for-dev
+  24-4-align-common-sql-contract-and-database-modules: ready-for-dev
+  24-5-align-authentication-config-contract: ready-for-dev
+  24-6-align-http-polling-schedule-and-pagination: ready-for-dev
+  24-7-align-webhook-input-contract: ready-for-dev
+  24-8-align-mapping-filter-contract: ready-for-dev
+  24-9-simplify-condition-branching-and-add-drop-filter: ready-for-dev
+  24-10-align-script-set-remove-filter-contracts: ready-for-dev
+  24-11-align-http-call-filter-contract: ready-for-dev
+  24-12-align-http-request-output-success-and-request-contract: ready-for-dev
+  epic-24-retrospective: optional
+
   # Epic 4: Advanced Runtime Features (remaining stories - after Epic 14)
   4-5-create-cli-commands-interface: backlog
   4-6-support-cross-platform-cli-windows-mac-linux: backlog

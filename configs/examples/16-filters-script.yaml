@@ -57,8 +57,6 @@ connector:
     # Second filter: Apply condition to filter out small orders
     - type: condition
       expression: "total >= 100"
-      onTrue: continue
-      onFalse: skip
 
     # Third filter: Map to destination format
     - type: mapping

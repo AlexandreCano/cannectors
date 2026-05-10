@@ -12,8 +12,6 @@ input:
 filters:
   - type: condition
     expression: id != nil
-    onTrue: continue
-    onFalse: skip
 output:
   type: httpRequest
   endpoint: https://destination.example.com/api/shipments

@@ -19,7 +19,7 @@ filters:
     cache:
       enabled: true
       maxSize: 1000
-      defaultTTL: 300
+      ttlSeconds: 300
       key: "customer:{{record.id}}"
 output:
   type: httpRequest

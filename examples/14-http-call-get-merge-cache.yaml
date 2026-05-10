@@ -22,7 +22,7 @@ filters:
     cache:
       enabled: true
       maxSize: 10000
-      defaultTTL: 900
+      ttlSeconds: 900
       key: customer.id
 output:
   type: httpRequest

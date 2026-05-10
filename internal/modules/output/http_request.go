@@ -111,7 +111,7 @@ type SuccessConditionConfig struct {
 const defaultHTTPMethod = "POST"
 
 // Default success status codes (Story 24.12 AC13).
-var defaultSuccessCodes = []int{201, 202, 203, 204}
+var defaultSuccessCodes = []int{200, 201, 202, 203, 204}
 
 // Methods that, in the absence of an explicit body, default to sending the
 // record as JSON (Story 24.12 AC4). Other methods (GET, DELETE, HEAD, ...)

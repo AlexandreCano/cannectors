@@ -12,7 +12,7 @@ input:
   dataField: data
   pagination:
     type: cursor
-    cursorParam: cursor
+    param: cursor
     limitParam: page_size
     limit: 2
     nextCursorField: next_cursor

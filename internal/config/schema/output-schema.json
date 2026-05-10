@@ -73,7 +73,7 @@
 
 		"successCondition": {
 			"type": "object",
-			"description": "Determines when an HTTP response is considered successful. When omitted, success defaults to status codes [201, 202, 203, 204]. When `expression` and `statusCodes` are both provided, both must be true. When only `expression` is provided, it alone determines success.",
+			"description": "Determines when an HTTP response is considered successful. When omitted, success defaults to status codes [200, 201, 202, 203, 204]. When `expression` and `statusCodes` are both provided, both must be true. When only `expression` is provided, it alone determines success.",
 			"additionalProperties": false,
 			"anyOf": [
 				{ "required": [ "expression" ] },
@@ -96,6 +96,7 @@
 					"minItems": 1,
 					"uniqueItems": true,
 					"default": [
+						200,
 						201,
 						202,
 						203,

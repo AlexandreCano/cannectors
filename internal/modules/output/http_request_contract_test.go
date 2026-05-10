@@ -117,7 +117,7 @@ func TestHTTPRequest_DefaultSuccessCodes(t *testing.T) {
 		status   int
 		wantSent bool
 	}{
-		{200, false},
+		{200, true},
 		{201, true},
 		{202, true},
 		{203, true},

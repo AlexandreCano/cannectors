@@ -60,7 +60,7 @@ afin que les integrations HTTP de destination soient fiables.
 
 13. **Given** `success` absent
     **When** une reponse HTTP arrive
-    **Then** les status codes par defaut de succes sont `201`, `202`, `203`, `204`.
+    **Then** les status codes par defaut de succes sont `200`, `201`, `202`, `203`, `204`.
 
 14. **Given** `success.statusCodes` fourni
     **When** la liste est vide, contient un doublon ou un code hors `100..599`
@@ -95,7 +95,7 @@ afin que les integrations HTTP de destination soient fiables.
   - [ ] Erreurs claires pour expression invalide ou body non exploitable
 
 - [ ] Task 3 : Valider `success.statusCodes`
-  - [ ] Default `201..204`
+  - [ ] Default `200..204`
   - [ ] `minItems: 1`
   - [ ] `uniqueItems: true`
   - [ ] Runtime strict `100..599`

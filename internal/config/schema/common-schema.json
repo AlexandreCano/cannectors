@@ -217,70 +217,53 @@
 			"type": "object",
 			"description": "Pagination configuration for HTTP polling.",
 			"unevaluatedProperties": false,
+			"required": ["type", "param"],
 			"properties": {
 				"type": {
 					"type": "string",
 					"description": "Pagination type.",
 					"enum": ["cursor", "offset", "page"]
 				},
+				"param": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Canonical query parameter name carrying the cursor, offset, or page value."
+				},
 				"limitParam": {
 					"type": "string",
-					"description": "Query parameter name for limit."
+					"minLength": 1,
+					"description": "Query parameter name for the page size (when applicable)."
 				},
 				"limit": {
 					"type": "integer",
 					"minimum": 1,
-					"default": 100,
-					"description": "Number of items per page."
-				},
-				"cursorParam": {
-					"type": "string",
-					"description": "Query parameter name for cursor."
+					"description": "Number of items per page. When omitted, the runtime applies its default."
 				},
 				"nextCursorField": {
 					"type": "string",
-					"description": "Field containing next cursor value."
-				},
-				"pageParam": {
-					"type": "string",
-					"description": "Query parameter name for page number."
+					"description": "Field containing the next cursor value (cursor pagination)."
 				},
 				"totalPagesField": {
 					"type": "string",
-					"description": "Field containing total pages count."
-				},
-				"offsetParam": {
-					"type": "string",
-					"description": "Query parameter name for offset."
+					"description": "Field containing the total pages count (page pagination)."
 				},
 				"totalField": {
 					"type": "string",
-					"description": "Field containing total items count."
+					"description": "Field containing the total items count (offset pagination)."
 				}
 			},
-			"allOf": [
+			"oneOf": [
 				{
-					"required": ["type", "limit", "limitParam"],
-					"oneOf": [
-						{
-							"allOf": [
-								{ "properties": { "type": { "const": "cursor" } } },
-								{ "required": ["cursorParam", "nextCursorField"] }
-							]
-						},
-						{
-							"allOf": [
-								{ "properties": { "type": { "const": "page" } } },
-								{ "required": ["pageParam", "totalPagesField"] }
-							]
-						},
-						{
-							"allOf": [
-								{ "properties": { "type": { "const": "offset" } } },
-								{ "required": ["offsetParam", "totalField"] }
-							]
-						}
-					]
+					"properties": { "type": { "const": "cursor" } },
+					"required": ["nextCursorField"]
+				},
+				{
+					"properties": { "type": { "const": "page" } },
+					"required": ["totalPagesField"]
+				},
+				{
+					"properties": { "type": { "const": "offset" } },
+					"required": ["limitParam", "totalField"]
 				}
 			]
 		},

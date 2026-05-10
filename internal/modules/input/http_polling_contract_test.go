@@ -108,3 +108,23 @@ func TestHTTPPolling_InvalidURL(t *testing.T) {
 		t.Fatal("expected error for non-http(s) URL")
 	}
 }
+
+// TestHTTPPolling_RejectsUnknownPaginationType locks Story 24.6 AC9: an unknown
+// pagination type fails at module instantiation (not at Fetch time).
+func TestHTTPPolling_RejectsUnknownPaginationType(t *testing.T) {
+	config := &connector.ModuleConfig{
+		Type: "httpPolling",
+		Raw: mustJSON(map[string]any{
+			"endpoint": "https://example.com",
+			"pagination": map[string]any{
+				"type":  "weird",
+				"param": "x",
+			},
+		}),
+	}
+	if _, err := NewHTTPPollingFromConfig(config); err == nil {
+		t.Fatal("expected error for unknown pagination type")
+	} else if !strings.Contains(err.Error(), "unknown pagination.type") {
+		t.Errorf("error = %v, want substring 'unknown pagination.type'", err)
+	}
+}

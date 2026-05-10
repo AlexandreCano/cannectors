@@ -468,7 +468,7 @@ func TestExamplePagePaginationPipeline(t *testing.T) {
 		"dataField": "users",
 		"pagination": map[string]any{
 			"type":            "page",
-			"pageParam":       "page",
+			"param":           "page",
 			"totalPagesField": "total_pages",
 		},
 	}))

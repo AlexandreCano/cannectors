@@ -120,6 +120,10 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 		return nil, parseErr
 	}
 
+	if vErr := cfg.Pagination.Validate(); vErr != nil {
+		return nil, fmt.Errorf("httpPolling pagination invalid: %w", vErr)
+	}
+
 	method, err := httpclient.NormalizeAndValidateMethod(cfg.Method)
 	if err != nil {
 		return nil, err

@@ -24,7 +24,7 @@
       "dataField": "orders",
       "pagination": {
         "type": "page",
-        "pageParam": "page",
+        "param": "page",
         "totalPagesField": "meta.total_pages"
       },
       "authentication": {

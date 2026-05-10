@@ -11,7 +11,7 @@
       "dataField": "items",
       "pagination": {
         "type": "offset",
-        "offsetParam": "offset",
+        "param": "offset",
         "limitParam": "limit",
         "limit": 100,
         "totalField": "total"

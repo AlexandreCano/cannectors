@@ -31,12 +31,11 @@
 				{ "$ref": "common-schema.json#/$defs/httpRequestBase" },
 				{
 					"type": "object",
-					"description": "HTTP polling input module configuration. Polls an HTTP endpoint on a schedule.",
-					"required": [ "schedule" ],
+					"description": "HTTP polling input module configuration. Without 'schedule', runs once. With 'schedule', registered with the CRON scheduler.",
 					"properties": {
 						"schedule": {
 							"type": "string",
-							"description": "CRON expression for polling. Validated at runtime.",
+							"description": "Optional CRON expression for polling. Validated at runtime.",
 							"minLength": 9
 						},
 						"pagination": {

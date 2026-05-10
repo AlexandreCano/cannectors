@@ -69,16 +69,58 @@ func (s SQLRequestBase) Validate() error {
 }
 
 // PaginationConfig mirrors common-schema.json#/$defs/pagination.
+// Param is the canonical query parameter name used to inject the page,
+// offset, or cursor value into the URL (depends on Type).
 type PaginationConfig struct {
 	Type            string `json:"type,omitempty"`
-	PageParam       string `json:"pageParam,omitempty"`
-	TotalPagesField string `json:"totalPagesField,omitempty"`
-	OffsetParam     string `json:"offsetParam,omitempty"`
+	Param           string `json:"param,omitempty"`
 	LimitParam      string `json:"limitParam,omitempty"`
 	Limit           int    `json:"limit,omitempty"`
+	TotalPagesField string `json:"totalPagesField,omitempty"`
 	TotalField      string `json:"totalField,omitempty"`
-	CursorParam     string `json:"cursorParam,omitempty"`
 	NextCursorField string `json:"nextCursorField,omitempty"`
+}
+
+// Validate enforces the runtime contract for HTTP pagination: pagination.type
+// must be one of the supported strategies and the strategy-specific required
+// fields must be present.
+func (p *PaginationConfig) Validate() error {
+	if p == nil {
+		return nil
+	}
+	switch p.Type {
+	case "":
+		return fmt.Errorf("pagination.type is required (expected 'cursor', 'page' or 'offset')")
+	case "cursor":
+		if p.Param == "" {
+			return fmt.Errorf("pagination.param is required when pagination.type is %q", p.Type)
+		}
+		if p.NextCursorField == "" {
+			return fmt.Errorf("pagination.nextCursorField is required when pagination.type is %q", p.Type)
+		}
+		return nil
+	case "page":
+		if p.Param == "" {
+			return fmt.Errorf("pagination.param is required when pagination.type is %q", p.Type)
+		}
+		if p.TotalPagesField == "" {
+			return fmt.Errorf("pagination.totalPagesField is required when pagination.type is %q", p.Type)
+		}
+		return nil
+	case "offset":
+		if p.Param == "" {
+			return fmt.Errorf("pagination.param is required when pagination.type is %q", p.Type)
+		}
+		if p.LimitParam == "" {
+			return fmt.Errorf("pagination.limitParam is required when pagination.type is %q", p.Type)
+		}
+		if p.TotalField == "" {
+			return fmt.Errorf("pagination.totalField is required when pagination.type is %q", p.Type)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unknown pagination.type %q (expected 'cursor', 'page' or 'offset')", p.Type)
+	}
 }
 
 // DatabasePaginationConfig mirrors common-schema.json#/$defs/databasePaginationConfig.

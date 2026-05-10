@@ -11,7 +11,7 @@ input:
   dataField: data
   pagination:
     type: page
-    pageParam: page
+    param: page
     limitParam: per_page
     limit: 100
     totalPagesField: total_pages

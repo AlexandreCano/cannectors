@@ -26,7 +26,7 @@ func (h *HTTPPolling) fetchWithPagination(ctx context.Context) ([]map[string]any
 	case "cursor":
 		return h.fetchCursorBased(ctx, baseEndpoint)
 	default:
-		return h.fetchSingle(ctx, baseEndpoint)
+		return nil, fmt.Errorf("unknown pagination type %q (expected 'cursor', 'page' or 'offset')", h.pagination.Type)
 	}
 }
 
@@ -38,11 +38,11 @@ func (h *HTTPPolling) fetchPageBased(ctx context.Context, baseEndpoint string) (
 	logger.Debug(logMsgPaginationStarted,
 		"module_type", "httpPolling",
 		"pagination_type", "page",
-		"page_param", h.pagination.PageParam,
+		"page_param", h.pagination.Param,
 	)
 
 	for page <= maxPaginationPages {
-		pageURL, err := h.buildPaginatedURLFrom(baseEndpoint, h.pagination.PageParam, strconv.Itoa(page))
+		pageURL, err := h.buildPaginatedURLFrom(baseEndpoint, h.pagination.Param, strconv.Itoa(page))
 		if err != nil {
 			return nil, err
 		}
@@ -92,7 +92,7 @@ func (h *HTTPPolling) fetchOffsetBased(ctx context.Context, baseEndpoint string)
 	logger.Debug(logMsgPaginationStarted,
 		"module_type", "httpPolling",
 		"pagination_type", "offset",
-		"offset_param", h.pagination.OffsetParam,
+		"offset_param", h.pagination.Param,
 		"limit_param", h.pagination.LimitParam,
 		"limit", limit,
 	)
@@ -100,8 +100,8 @@ func (h *HTTPPolling) fetchOffsetBased(ctx context.Context, baseEndpoint string)
 	for offset < maxPaginationPages*limit {
 		pageNum++
 		offsetURL, err := h.buildPaginatedURLMultiFrom(baseEndpoint, map[string]string{
-			h.pagination.OffsetParam: strconv.Itoa(offset),
-			h.pagination.LimitParam:  strconv.Itoa(limit),
+			h.pagination.Param:      strconv.Itoa(offset),
+			h.pagination.LimitParam: strconv.Itoa(limit),
 		})
 		if err != nil {
 			return nil, err
@@ -148,7 +148,7 @@ func (h *HTTPPolling) fetchCursorBased(ctx context.Context, baseEndpoint string)
 	logger.Debug(logMsgPaginationStarted,
 		"module_type", "httpPolling",
 		"pagination_type", "cursor",
-		"cursor_param", h.pagination.CursorParam,
+		"cursor_param", h.pagination.Param,
 	)
 
 	for iterationsFetched < maxPaginationPages {
@@ -157,7 +157,7 @@ func (h *HTTPPolling) fetchCursorBased(ctx context.Context, baseEndpoint string)
 		if cursor == "" {
 			fetchURL = baseEndpoint
 		} else {
-			fetchURL, err = h.buildPaginatedURLFrom(baseEndpoint, h.pagination.CursorParam, cursor)
+			fetchURL, err = h.buildPaginatedURLFrom(baseEndpoint, h.pagination.Param, cursor)
 			if err != nil {
 				return nil, err
 			}

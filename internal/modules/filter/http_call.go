@@ -97,6 +97,7 @@ type HTTPCallModule struct {
 	retry             connector.RetryConfig
 	retryHintProgram  *vm.Program // Compiled retryHintFromBody expression (may be nil).
 	cache             cache.Cache
+	cacheEnabled      bool
 	mergeStrategy     string
 	dataField         string
 	onError           errhandling.OnErrorStrategy
@@ -176,7 +177,7 @@ func newHTTPCallError(code, message string, recordIdx int, endpoint string, stat
 // Optional config fields:
 //   - method: HTTP method (GET, POST, PUT). Defaults to GET.
 //   - auth: Authentication configuration
-//   - cache: Cache configuration (maxSize, defaultTTL)
+//   - cache: Cache configuration (enabled, maxSize, ttlSeconds, key)
 //   - mergeStrategy: How to merge data ("merge", "replace", "append")
 //   - dataField: JSON field containing the data array
 //   - onError: Error handling mode ("fail", "skip", "log")
@@ -198,9 +199,16 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 		if keyErr := validateKeysConfig(config.Keys); keyErr != nil {
 			return nil, keyErr
 		}
+	} else if len(config.Keys) > 0 {
+		if keyErr := validateKeyEntries(config.Keys); keyErr != nil {
+			return nil, keyErr
+		}
 	}
 
-	mergeStrategy := normalizeHTTPCallMergeStrategy(config.MergeStrategy)
+	mergeStrategy, err := normalizeHTTPCallMergeStrategy(config.MergeStrategy)
+	if err != nil {
+		return nil, err
+	}
 	onError, err := errhandling.ParseOnErrorStrategy(config.OnError)
 	if err != nil {
 		return nil, err
@@ -229,7 +237,7 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 		return nil, err
 	}
 
-	lruCache, cacheTTL := buildHTTPCallCache(config.Cache.MaxSize, config.Cache.TTLSeconds)
+	lruCache, cacheTTL, cacheEnabled := buildHTTPCallCache(config.Cache)
 
 	bodyTemplateRaw := config.Body
 	if bodyTemplateRaw == "" {
@@ -245,16 +253,13 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 	if err := validateHTTPCallTemplates(config.Endpoint, config.Headers); err != nil {
 		return nil, err
 	}
+	if config.Cache.Key != "" {
+		if cacheKeyErr := template.ValidateSyntax(config.Cache.Key); cacheKeyErr != nil {
+			return nil, fmt.Errorf("invalid template syntax in http_call cache key: %w", cacheKeyErr)
+		}
+	}
 
 	hasTemplating := httpCallHasTemplating(config.Endpoint, config.Headers, bodyTemplateRaw != "")
-	cacheMaxSize := config.Cache.MaxSize
-	if cacheMaxSize <= 0 {
-		cacheMaxSize = defaultCacheMaxSize
-	}
-	cacheTTLSeconds := config.Cache.TTLSeconds
-	if cacheTTLSeconds <= 0 {
-		cacheTTLSeconds = defaultCacheTTLSeconds
-	}
 
 	logger.Debug("http_call module initialized",
 		slog.String("endpoint", httpclient.SanitizeURL(config.Endpoint)),
@@ -262,9 +267,7 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 		slog.Int("keys_count", len(config.Keys)),
 		slog.String("merge_strategy", mergeStrategy),
 		slog.String("on_error", string(onError)),
-		slog.Int("cache_max_size", cacheMaxSize),
-		slog.Int("cache_ttl_seconds", cacheTTLSeconds),
-		slog.String("cache_key", config.Cache.Key),
+		slog.Bool("cache_enabled", cacheEnabled),
 		slog.Bool("has_auth", authHandler != nil),
 		slog.Bool("has_templating", hasTemplating),
 		slog.String("body_template_file", config.BodyTemplateFile),
@@ -282,6 +285,7 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 		retry:             retryConfig,
 		retryHintProgram:  retryHintProgram,
 		cache:             lruCache,
+		cacheEnabled:      cacheEnabled,
 		mergeStrategy:     mergeStrategy,
 		dataField:         config.DataField,
 		onError:           onError,
@@ -394,18 +398,21 @@ func (m *HTTPCallModule) processRecord(ctx context.Context, record map[string]an
 		}
 	}
 
-	// Check cache first
-	cacheKey := m.buildCacheKey(keyValues, record)
-	if cachedData, found := m.cache.Get(cacheKey); found {
-		responseData, ok := cachedData.(map[string]any)
-		if ok {
-			logger.Debug("http_call cache hit",
-				slog.String("module_type", "http_call"),
-				slog.Int("record_index", recordIdx),
-				slog.Any("key_values", keyValues),
-			)
-			enrichedRecord := m.mergeData(record, responseData)
-			return enrichedRecord, true, nil
+	// Check cache first (only if enabled).
+	var cacheKey string
+	if m.cacheEnabled {
+		cacheKey = m.buildCacheKey(keyValues, record)
+		if cachedData, found := m.cache.Get(cacheKey); found {
+			responseData, ok := cachedData.(map[string]any)
+			if ok {
+				logger.Debug("http_call cache hit",
+					slog.String("module_type", "http_call"),
+					slog.Int("record_index", recordIdx),
+					slog.Any("key_values", keyValues),
+				)
+				enrichedRecord := m.mergeData(record, responseData)
+				return enrichedRecord, true, nil
+			}
 		}
 	}
 
@@ -417,14 +424,16 @@ func (m *HTTPCallModule) processRecord(ctx context.Context, record map[string]an
 
 	// Cache successful response (don't cache errors)
 	// Rebuild cache key in case it depends on record values
-	cacheKey = m.buildCacheKey(keyValues, record)
-	m.cache.Set(cacheKey, responseData, m.cacheTTL)
+	if m.cacheEnabled {
+		cacheKey = m.buildCacheKey(keyValues, record)
+		m.cache.Set(cacheKey, responseData, m.cacheTTL)
 
-	logger.Debug("http_call cache miss (fetched and cached)",
-		slog.String("module_type", "http_call"),
-		slog.Int("record_index", recordIdx),
-		slog.Any("key_values", keyValues),
-	)
+		logger.Debug("http_call cache miss (fetched and cached)",
+			slog.String("module_type", "http_call"),
+			slog.Int("record_index", recordIdx),
+			slog.Any("key_values", keyValues),
+		)
+	}
 
 	// Merge data into record
 	enrichedRecord := m.mergeData(record, responseData)
@@ -472,17 +481,12 @@ func (m *HTTPCallModule) extractKeyValues(record map[string]any, recordIdx int) 
 }
 
 // buildCacheKey creates a unique cache key from the key values and record.
-// If cacheKey is configured, it can be:
-//   - A static string: used as-is
-//   - A dot notation path: "customerId" or "user.profile.id" (extracts value from record)
-//
+// If cacheKey is configured, it is evaluated as a template against the record
+// (e.g. "{{record.customerId}}"). Static strings are used as-is.
 // If cacheKey is not configured, uses default: endpoint + "::" + joined key values (in config order)
 func (m *HTTPCallModule) buildCacheKey(keyValues map[string]string, record map[string]any) string {
 	if m.cacheKey != "" {
-		if value, found := recordpath.Get(record, m.cacheKey); found {
-			return fmt.Sprintf("%v", value)
-		}
-		return m.cacheKey
+		return m.templateEvaluator.Evaluate(m.cacheKey, record)
 	}
 
 	return m.endpoint + "::" + m.compositeKeyString(keyValues)

@@ -129,6 +129,7 @@ func TestNewHTTPCallFromConfig(t *testing.T) {
 				ParamName: "id",
 			}},
 			Cache: moduleconfig.CacheConfig{
+				Enabled:    true,
 				MaxSize:    500,
 				TTLSeconds: 60,
 			},
@@ -255,6 +256,7 @@ func TestHTTPCallModule_Process(t *testing.T) {
 				ParamType: "query",
 				ParamName: "id",
 			}},
+			Cache: moduleconfig.CacheConfig{Enabled: true},
 		}
 
 		module, err := NewHTTPCallFromConfig(config)
@@ -1099,6 +1101,7 @@ func TestHTTPCallModule_ClearCache(t *testing.T) {
 				ParamType: "query",
 				ParamName: "id",
 			}},
+			Cache: moduleconfig.CacheConfig{Enabled: true},
 		}
 
 		module, _ := NewHTTPCallFromConfig(config)
@@ -1359,6 +1362,7 @@ func TestHTTPCallModule_CacheTTLExpiration(t *testing.T) {
 				ParamName: "id",
 			}},
 			Cache: moduleconfig.CacheConfig{
+				Enabled:    true,
 				MaxSize:    100,
 				TTLSeconds: 1, // 1 second TTL for testing
 			},
@@ -1431,6 +1435,7 @@ func TestHTTPCallModule_CacheSizeLimitAndLRU(t *testing.T) {
 				ParamName: "id",
 			}},
 			Cache: moduleconfig.CacheConfig{
+				Enabled:    true,
 				MaxSize:    3, // Small cache size for testing
 				TTLSeconds: 300,
 			},
@@ -1516,6 +1521,7 @@ func TestHTTPCallModule_CacheKeyCollision(t *testing.T) {
 				ParamName: "id",
 			}},
 			Cache: moduleconfig.CacheConfig{
+				Enabled:    true,
 				MaxSize:    10,
 				TTLSeconds: 300,
 			},
@@ -1597,6 +1603,7 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 				ParamName: "id",
 			}},
 			Cache: moduleconfig.CacheConfig{
+				Enabled:    true,
 				MaxSize:    10,
 				TTLSeconds: 300,
 				Key:        "static-cache-key",
@@ -1655,6 +1662,7 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 				ParamName: "id",
 			}},
 			Cache: moduleconfig.CacheConfig{
+				Enabled:    true,
 				MaxSize:    10,
 				TTLSeconds: 300,
 				Key:        "user.profile.id",
@@ -1730,6 +1738,7 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 				ParamName: "id",
 			}},
 			Cache: moduleconfig.CacheConfig{
+				Enabled:    true,
 				MaxSize:    10,
 				TTLSeconds: 300,
 				Key:        "metadata.nonexistent",

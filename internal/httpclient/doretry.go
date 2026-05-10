@@ -49,6 +49,14 @@ type RetryHooks struct {
 	// token invalidation). The hook also receives the attempt index so
 	// that callers can bound the override (one-shot OAuth2 retry).
 	OnAttemptFailure func(attempt int, resp *http.Response, err error) (forceRetry bool)
+
+	// IsSuccessStatus, when non-nil, lets the caller decide which status
+	// codes should be considered successful. When it returns true, the
+	// response is returned to the caller without triggering an HTTP-error
+	// classification, even for status >= 400. This is used by output
+	// modules that expose a `success.statusCodes` contract (Story 24.12)
+	// where non-2xx codes can legitimately mean success.
+	IsSuccessStatus func(statusCode int) bool
 }
 
 // DoWithRetry executes req using the retry policy described by cfg. The
@@ -110,6 +118,26 @@ func (c *Client) DoWithRetry(ctx context.Context, req *http.Request, cfg errhand
 		}
 		resp.Body = io.NopCloser(bytes.NewReader(body))
 		lastResp = resp
+
+		// IsSuccessStatus lets the caller (e.g. httpRequest output with a
+		// custom success.statusCodes) override the default >=400-is-error
+		// classification. When the hook accepts the status code, treat the
+		// response as success; the caller will perform the final
+		// success-check (status + expression).
+		if hooks.IsSuccessStatus != nil && hooks.IsSuccessStatus(resp.StatusCode) {
+			if hooks.ShouldRetryBody != nil {
+				if retry, hinted := hooks.ShouldRetryBody(body); hinted && retry {
+					synth := &errhandling.ClassifiedError{
+						Category:   errhandling.CategoryServer,
+						Retryable:  true,
+						StatusCode: resp.StatusCode,
+						Message:    "retry forced by retryHintFromBody",
+					}
+					return resp, synth
+				}
+			}
+			return resp, nil
+		}
 
 		if resp.StatusCode >= 400 {
 			classified := errhandling.ClassifyHTTPStatus(resp.StatusCode, resp.Status)

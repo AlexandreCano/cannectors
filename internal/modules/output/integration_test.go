@@ -52,7 +52,7 @@ func newCaptureServer() *captureServer {
 			Body:    body,
 		})
 
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte(`{"success": true}`))
 	}))
 

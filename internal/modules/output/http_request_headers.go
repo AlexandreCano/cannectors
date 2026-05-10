@@ -28,11 +28,12 @@ func (h *HTTPRequestModule) extractHeadersFromRecord(record map[string]any) (map
 
 	for _, k := range h.request.Keys {
 		if k.paramType == "header" {
-			value := getRecordFieldString(record, k.field)
-			if value != "" {
-				if err := httpclient.AddValidatedHeader(headers, k.paramName, value); err != nil {
-					return nil, fmt.Errorf("invalid key header %q: %w", k.paramName, err)
-				}
+			value, err := requireRecordFieldString(record, k.field)
+			if err != nil {
+				return nil, fmt.Errorf("header key %q: %w", k.paramName, err)
+			}
+			if err := httpclient.AddValidatedHeader(headers, k.paramName, value); err != nil {
+				return nil, fmt.Errorf("invalid key header %q: %w", k.paramName, err)
 			}
 		}
 	}

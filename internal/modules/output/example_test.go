@@ -19,7 +19,7 @@ func Example() {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var records []map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&records) // Example code - error handling omitted for clarity
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"status":  "success",
 			"message": fmt.Sprintf("Received %d records", len(records)),

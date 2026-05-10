@@ -73,18 +73,17 @@
 
 		"successCondition": {
 			"type": "object",
+			"description": "Determines when an HTTP response is considered successful. When omitted, success defaults to status codes [201, 202, 203, 204]. When `expression` and `statusCodes` are both provided, both must be true. When only `expression` is provided, it alone determines success.",
+			"additionalProperties": false,
+			"anyOf": [
+				{ "required": [ "expression" ] },
+				{ "required": [ "statusCodes" ] }
+			],
 			"properties": {
-				"lang": {
-					"type": "string",
-					"enum": [
-						"cel",
-						"jsonata",
-						"simple"
-					],
-					"default": "simple"
-				},
 				"expression": {
-					"type": "string"
+					"type": "string",
+					"description": "expr expression evaluated against the response. Available variables: `statusCode` (int), `headers` (map[string][]string), `body` (parsed JSON when applicable). Must return a boolean.",
+					"minLength": 1
 				},
 				"statusCodes": {
 					"type": "array",
@@ -94,10 +93,12 @@
 						"minimum": 100,
 						"maximum": 599
 					},
+					"minItems": 1,
+					"uniqueItems": true,
 					"default": [
-						200,
 						201,
 						202,
+						203,
 						204
 					]
 				}

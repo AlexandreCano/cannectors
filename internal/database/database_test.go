@@ -1,6 +1,7 @@
 package database
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -352,7 +353,7 @@ func TestResolveConnectionString(t *testing.T) {
 
 	t.Run("error when no connection string", func(t *testing.T) {
 		_, err := ResolveConnectionString("", "")
-		if err != ErrMissingConnectionString {
+		if !errors.Is(err, ErrMissingConnectionString) {
 			t.Errorf("got error %v, want ErrMissingConnectionString", err)
 		}
 	})

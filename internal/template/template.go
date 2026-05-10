@@ -19,10 +19,6 @@ const (
 	TemplatePrefix = "{{"
 	// TemplateSuffix is the closing delimiter for template variables
 	TemplateSuffix = "}}"
-	// DefaultValueSeparator separates variable path from default value
-	DefaultValueSeparator = "|"
-	// DefaultKeyword indicates a default value follows
-	DefaultKeyword = "default:"
 )
 
 // Error messages for template evaluation
@@ -35,7 +31,7 @@ const (
 // Group 1: variable path (e.g., "record.user.id")
 // Group 2: optional default value clause including quotes (supports both "value" and \"value\" forms)
 // Group 3: the default value itself (may be empty string)
-var templateVarRegex = regexp.MustCompile(`\{\{\s*([^|}]+?)(\s*\|\s*default:\s*(?:\\?")([^"]*)(?:\\?"))?\s*\}\}`)
+var templateVarRegex = regexp.MustCompile(`{{\s*([^|}]+?)(\s*\|\s*default:\s*\\?"([^"]*)\\?")?\s*}}`)
 
 // Variable represents a parsed template variable
 type Variable struct {
@@ -263,7 +259,7 @@ func ValidateSyntax(template string) error {
 	// Check each template variable has content and that all {{/}} form valid expressions
 	if openCount > 0 {
 		// First check for completely empty braces: {{}} or {{ }}
-		emptyBracesRegex := regexp.MustCompile(`\{\{\s*\}\}`)
+		emptyBracesRegex := regexp.MustCompile(`{{\s*}}`)
 		if emptyBracesRegex.MatchString(template) {
 			return fmt.Errorf("%s: %s", ErrMsgInvalidTemplateSyntax, ErrMsgEmptyVariablePath)
 		}

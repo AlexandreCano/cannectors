@@ -42,20 +42,6 @@ func assertNoSecretLeak(t *testing.T, body string) {
 	}
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // TestSanitizeURL_StripsCredentials guards the helper that everything else
 // relies on. If this regresses, every other log site is at risk.
 func TestSanitizeURL_StripsCredentials(t *testing.T) {

@@ -665,7 +665,7 @@ func TestScriptModuleProcess_ContextCancellation(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error from canceled context")
 	}
-	if err != context.Canceled {
+	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled error, got: %v", err)
 	}
 }

@@ -68,7 +68,7 @@ func TestClassifiedError(t *testing.T) {
 			OriginalErr: original,
 		}
 
-		if err.Unwrap() != original {
+		if !errors.Is(err.Unwrap(), original) {
 			t.Errorf("Unwrap() = %v, want %v", err.Unwrap(), original)
 		}
 	})
@@ -239,7 +239,7 @@ func TestClassifyError(t *testing.T) {
 
 		result := ClassifyError(classified)
 
-		if result != classified {
+		if !errors.Is(result, classified) {
 			t.Error("Already classified error should be returned as-is")
 		}
 	})

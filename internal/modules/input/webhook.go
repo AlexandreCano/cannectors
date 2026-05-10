@@ -32,10 +32,7 @@ const (
 	defaultListenAddress   = "0.0.0.0:8080"
 	defaultSignatureHeader = "X-Hub-Signature-256"
 	defaultReadTimeout     = 15 * time.Second
-	defaultWriteTimeout    = 15 * time.Second
 	defaultShutdownTimeout = 5 * time.Second
-	defaultQueueSize       = 0
-	defaultMaxConcurrent   = 0
 )
 
 // Webhook-specific error types
@@ -393,7 +390,7 @@ func (w *Webhook) Start(ctx context.Context, handler WebhookHandler) error {
 	// Start server in goroutine
 	serverErr := make(chan error, 1)
 	go func() {
-		if err := w.server.Serve(listener); err != nil && err != http.ErrServerClosed {
+		if err := w.server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 		}
 		close(serverErr)
@@ -694,7 +691,7 @@ func (w *Webhook) parsePayload(body []byte) ([]map[string]any, error) {
 	// Try parsing as object
 	var objectResult map[string]any
 	if err := json.Unmarshal(body, &objectResult); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidJSONPayload, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidJSONPayload, err)
 	}
 
 	// If dataField is specified, extract array from that field

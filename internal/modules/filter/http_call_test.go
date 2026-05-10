@@ -3,6 +3,7 @@ package filter
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -810,8 +811,8 @@ func TestHTTPCallModule_ErrorHandling(t *testing.T) {
 			t.Error("expected error for missing key field")
 		}
 
-		enrichErr, ok := err.(*HTTPCallError)
-		if !ok {
+		var enrichErr *HTTPCallError
+		if !errors.As(err, &enrichErr) {
 			t.Fatalf("expected HTTPCallError, got %T", err)
 		}
 		if enrichErr.Code != ErrCodeHTTPCallKeyExtract {
@@ -880,8 +881,8 @@ func TestHTTPCallModule_ErrorHandling(t *testing.T) {
 			t.Error("expected error for invalid JSON")
 		}
 
-		enrichErr, ok := err.(*HTTPCallError)
-		if !ok {
+		var enrichErr *HTTPCallError
+		if !errors.As(err, &enrichErr) {
 			t.Fatalf("expected HTTPCallError, got %T", err)
 		}
 		if enrichErr.Code != ErrCodeHTTPCallJSONParse {

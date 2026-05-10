@@ -28,7 +28,7 @@ type RemoveConfig struct {
 	Target any `json:"target"`
 	// targetList is the normalized internal representation populated by
 	// UnmarshalJSON / ParseRemoveConfig.
-	targetList []string `json:"-"`
+	targetList []string
 }
 
 // UnmarshalJSON normalizes the polymorphic Target field into targetList.

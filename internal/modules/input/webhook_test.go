@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -67,7 +68,7 @@ func TestNewWebhookFromConfig_NilConfig(t *testing.T) {
 	if err == nil {
 		t.Fatal("NewWebhookFromConfig(nil) error = nil, want error")
 	}
-	if err != ErrNilConfig {
+	if !errors.Is(err, ErrNilConfig) {
 		t.Errorf("NewWebhookFromConfig(nil) error = %v, want %v", err, ErrNilConfig)
 	}
 }
@@ -84,7 +85,7 @@ func TestNewWebhookFromConfig_MissingPath(t *testing.T) {
 	if err == nil {
 		t.Fatal("NewWebhookFromConfig() with missing path error = nil, want error")
 	}
-	if err != ErrMissingPath {
+	if !errors.Is(err, ErrMissingPath) {
 		t.Errorf("NewWebhookFromConfig() error = %v, want %v", err, ErrMissingPath)
 	}
 }
@@ -137,7 +138,7 @@ func TestNewWebhookFromConfig_SignatureMissingType(t *testing.T) {
 	}
 
 	_, err := NewWebhookFromConfig(config)
-	if err != ErrMissingSignatureType {
+	if !errors.Is(err, ErrMissingSignatureType) {
 		t.Errorf("NewWebhookFromConfig() error = %v, want %v", err, ErrMissingSignatureType)
 	}
 }
@@ -155,7 +156,7 @@ func TestNewWebhookFromConfig_SignatureUnsupportedType(t *testing.T) {
 	}
 
 	_, err := NewWebhookFromConfig(config)
-	if err != ErrUnsupportedSignature {
+	if !errors.Is(err, ErrUnsupportedSignature) {
 		t.Errorf("NewWebhookFromConfig() error = %v, want %v", err, ErrUnsupportedSignature)
 	}
 }
@@ -194,7 +195,7 @@ func TestWebhook_Start_StartsServer(t *testing.T) {
 	// Wait for shutdown
 	select {
 	case err := <-errChan:
-		if err != nil && err != context.Canceled && err != http.ErrServerClosed {
+		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Webhook.Start() returned error = %v", err)
 		}
 	case <-time.After(2 * time.Second):
@@ -274,7 +275,7 @@ func TestWebhook_GracefulShutdown(t *testing.T) {
 	// Wait for shutdown
 	select {
 	case err := <-errChan:
-		if err != nil && err != context.Canceled && err != http.ErrServerClosed {
+		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Webhook.Start() returned error = %v", err)
 		}
 	case <-time.After(5 * time.Second):
@@ -323,7 +324,7 @@ func TestWebhook_Stop_StopsServer(t *testing.T) {
 	// Wait for server to actually stop
 	select {
 	case err := <-errChan:
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Webhook.Start() returned unexpected error = %v", err)
 		}
 	case <-time.After(2 * time.Second):
@@ -1336,7 +1337,7 @@ func TestWebhook_Fetch_NotImplemented(t *testing.T) {
 
 	// Webhooks are push-based, Fetch() should return an error or empty result
 	data, err := w.Fetch(context.Background())
-	if err != ErrNotImplemented {
+	if !errors.Is(err, ErrNotImplemented) {
 		t.Errorf("Webhook.Fetch() error = %v, want %v (webhooks use callback pattern)", err, ErrNotImplemented)
 	}
 	if data != nil {

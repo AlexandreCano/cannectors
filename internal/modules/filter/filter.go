@@ -4,11 +4,7 @@ package filter
 
 import (
 	"context"
-	"errors"
 )
-
-// ErrNotImplemented is returned when a feature is not yet implemented.
-var ErrNotImplemented = errors.New("not implemented")
 
 // Module represents a filter module that transforms data between input and output stages.
 //

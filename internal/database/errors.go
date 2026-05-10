@@ -1,19 +1,16 @@
 package database
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 )
 
 // Error categories for database operations
 const (
-	CategoryConnection  = "connection"
-	CategoryQuery       = "query"
-	CategoryConstraint  = "constraint"
-	CategoryTransaction = "transaction"
-	CategoryTimeout     = "timeout"
-	CategoryUnknown     = "unknown"
+	CategoryConnection = "connection"
+	CategoryQuery      = "query"
+	CategoryConstraint = "constraint"
+	CategoryTimeout    = "timeout"
 )
 
 // DatabaseError represents a categorized database error with context.
@@ -84,11 +81,6 @@ func NewQueryError(operation, message, query string, paramCount int, originalErr
 // NewConstraintError creates a constraint violation error (not retryable).
 func NewConstraintError(operation, message string, originalErr error) *DatabaseError {
 	return NewDatabaseError(CategoryConstraint, operation, message, originalErr, false)
-}
-
-// NewTransactionError creates a transaction error.
-func NewTransactionError(message string, originalErr error, retryable bool) *DatabaseError {
-	return NewDatabaseError(CategoryTransaction, "transaction", message, originalErr, retryable)
 }
 
 // NewTimeoutError creates a timeout error (retryable).
@@ -331,35 +323,4 @@ func sanitizeQuery(query string) string {
 	}
 
 	return query
-}
-
-// IsDatabaseError checks if the error is a DatabaseError.
-func IsDatabaseError(err error) bool {
-	var dbErr *DatabaseError
-	return errors.As(err, &dbErr)
-}
-
-// GetDatabaseError extracts the DatabaseError from an error chain.
-func GetDatabaseError(err error) *DatabaseError {
-	var dbErr *DatabaseError
-	if errors.As(err, &dbErr) {
-		return dbErr
-	}
-	return nil
-}
-
-// IsRetryableError checks if a database error is retryable.
-func IsRetryableError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	dbErr := GetDatabaseError(err)
-	if dbErr != nil {
-		return dbErr.Retryable
-	}
-
-	// Check for known transient error patterns in raw errors
-	errMsg := strings.ToLower(err.Error())
-	return isTimeoutError(errMsg) || isConnectionError(errMsg) || isDeadlockError(errMsg, "")
 }

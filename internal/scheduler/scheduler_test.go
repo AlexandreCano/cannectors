@@ -4,6 +4,7 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1301,7 +1302,7 @@ func TestScheduler_QueueFullDoesNotBlock(t *testing.T) {
 	err = s.Stop(stopCtx)
 	stopDuration := time.Since(startStop)
 
-	if err != nil && err != context.DeadlineExceeded {
+	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("Stop() should not error (or timeout), got: %v", err)
 	}
 

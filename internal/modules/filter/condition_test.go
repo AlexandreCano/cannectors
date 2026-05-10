@@ -1284,8 +1284,8 @@ func TestConditionErrorDetails(t *testing.T) {
 	}
 
 	// Check if it's a ConditionError
-	condErr, ok := err.(*ConditionError)
-	if !ok {
+	var condErr *ConditionError
+	if !errors.As(err, &condErr) {
 		t.Fatalf("expected ConditionError, got %T", err)
 	}
 

@@ -11,47 +11,11 @@ import (
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
-// knownNonCompliantExamples lists example configs that are known to drift from
-// the JSON schema and/or the runtime today. Each entry is the file's basename
-// (relative to configs/examples/). The intent is to keep the compliance test
-// honest as a regression guard while making the existing technical debt
-// visible: removing a name from this list means the file now passes — and the
-// test will permanently lock that in.
-//
-// New examples must NOT be added here. Each entry is a follow-up bug to fix
-// in the relevant example or schema (most often: the example uses fields the
-// schema rejects, or the YAML still carries `id`/`enabled` at the pipeline
-// root which the schema does not allow).
-var knownNonCompliantExamples = map[string]string{
-	"05-pagination.json":                   "pagination shape predates the current page-pagination schema",
-	"05-pagination.yaml":                   "pagination shape predates the current page-pagination schema",
-	"07-pagination-cursor.json":            "cursor-pagination schema mismatch (missing required fields)",
-	"07-pagination-cursor.yaml":            "cursor-pagination schema mismatch (missing required fields)",
-	"10-complete.json":                     "demonstrates fields not yet in schema",
-	"10-complete.yaml":                     "demonstrates fields not yet in schema",
-	"16-filters-script.yaml":               "script filter schema not finalized",
-	"17-filters-enrichment.yaml":           "http-enrichment filter schema not finalized",
-	"20-timestamp-and-id-persistence.yaml": "statePersistence shape predates current schema",
-	"21-output-templating.yaml":            "template fields not in current schema",
-	"22-output-templating-batch.yaml":      "template fields not in current schema",
-	"23-output-templating-soap.yaml":       "soap output not in current schema",
-	"24-enrichment-templating.yaml":        "enrichment + templating mix not in current schema",
-	"25-record-metadata-storage.yaml":      "metadata schema not finalized",
-	"27-database-input.yaml":               "database input schema not finalized",
-	"28-database-incremental.yaml":         "database incremental schema not finalized",
-	"29-sql-call-enrichment.yaml":          "sql_call filter schema not finalized",
-	"30-database-output-insert.yaml":       "database output schema not finalized",
-	"31-database-output-upsert.yaml":       "database output schema not finalized",
-	"32-database-custom-query.yaml":        "database output schema not finalized",
-	"35-filters-set.json":                  "set filter schema not finalized",
-	"36-filters-remove.json":               "remove filter schema not finalized",
-}
-
 // TestExampleConfigsAreSchemaCompliant walks every shipped example under
-// configs/examples and checks that it can be: (1) parsed, (2) validated
+// examples and checks that it can be: (1) parsed, (2) validated
 // against the JSON schema, (3) converted to a Pipeline, and (4) instantiated
 // by the factory. A failure on any step is the canary that keeps the schema,
-// the converter and the runtime in sync (Story 17.7).
+// the converter, and the runtime in sync.
 //
 // The test runs each example as a sub-test (t.Run) so failures point at the
 // exact file. Modules that require external infrastructure (e.g. a live
@@ -65,22 +29,30 @@ func TestExampleConfigsAreSchemaCompliant(t *testing.T) {
 	envStubs := map[string]string{
 		"API_KEY": "stub", "API_PASSWORD": "stub", "API_TOKEN": "stub",
 		"API_USERNAME": "stub", "CRM_API_KEY": "stub", "CRM_API_TOKEN": "stub",
-		"DATABASE_URL": "postgres://stub:stub@localhost:5432/stub?sslmode=disable",
-		"DEST_API_KEY": "stub", "DEST_API_TOKEN": "stub", "DEST_BEARER_TOKEN": "stub",
+		"CRM_DATABASE_URL": "postgres://stub:stub@localhost:5432/stub?sslmode=disable",
+		"DATABASE_URL":     "postgres://stub:stub@localhost:5432/stub?sslmode=disable",
+		"DEST_API_KEY":     "stub", "DEST_API_TOKEN": "stub", "DEST_BEARER_TOKEN": "stub",
 		"DEST_CLIENT_ID": "stub", "DEST_CLIENT_SECRET": "stub",
 		"DEST_PASSWORD": "stub", "DEST_USERNAME": "stub",
+		"DESTINATION_API_KEY": "stub", "DIRECTORY_PASSWORD": "stub", "DIRECTORY_USERNAME": "stub",
 		"EVENTS_API_KEY": "stub", "LOOKUP_API_KEY": "stub",
 		"OAUTH_CLIENT_ID": "stub", "OAUTH_CLIENT_SECRET": "stub",
-		"ORDERS_API_TOKEN": "stub", "SOURCE_API_KEY": "stub",
-		"SOURCE_API_TOKEN": "stub", "SOURCE_CLIENT_ID": "stub",
-		"SOURCE_CLIENT_SECRET": "stub", "TARGET_API_TOKEN": "stub",
-		"WAREHOUSE_API_TOKEN": "stub",
+		"REFERENCE_DATABASE_URL": "postgres://stub:stub@localhost:5432/stub?sslmode=disable",
+		"ORDERS_API_TOKEN":       "stub", "SOURCE_API_KEY": "stub",
+		"SOURCE_BEARER_TOKEN": "stub",
+		"SOURCE_API_TOKEN":    "stub", "SOURCE_CLIENT_ID": "stub",
+		"SOURCE_CLIENT_SECRET":   "stub",
+		"SOURCE_DATABASE_URL":    "postgres://stub:stub@localhost:5432/stub?sslmode=disable",
+		"TARGET_API_TOKEN":       "stub",
+		"WAREHOUSE_API_TOKEN":    "stub",
+		"WAREHOUSE_DATABASE_URL": "postgres://stub:stub@localhost:5432/stub?sslmode=disable",
+		"WEBHOOK_SECRET":         "stub",
 	}
 	for k, v := range envStubs {
 		t.Setenv(k, v)
 	}
 
-	matches, err := filepath.Glob(filepath.Join("..", "..", "configs", "examples", "*"))
+	matches, err := filepath.Glob(filepath.Join("..", "..", "examples", "*"))
 	if err != nil {
 		t.Fatalf("glob examples: %v", err)
 	}
@@ -96,9 +68,6 @@ func TestExampleConfigsAreSchemaCompliant(t *testing.T) {
 		base := filepath.Base(path)
 		t.Run(base, func(t *testing.T) {
 			t.Parallel()
-			if reason, skip := knownNonCompliantExamples[base]; skip {
-				t.Skipf("known non-compliant example (tracked debt): %s", reason)
-			}
 			assertExampleCompliant(t, path)
 		})
 	}
@@ -118,6 +87,7 @@ func assertExampleCompliant(t *testing.T, path string) {
 	if len(result.ValidationErrors) > 0 {
 		t.Fatalf("schema validation errors: %+v", result.ValidationErrors)
 	}
+	normalizeExampleAssetPaths(t, result.Data)
 
 	pipeline, err := config.ConvertToPipeline(result.Data)
 	if err != nil {
@@ -126,6 +96,36 @@ func assertExampleCompliant(t *testing.T, path string) {
 
 	closer := instantiate(t, pipeline)
 	closer()
+}
+
+// normalizeExampleAssetPaths makes example asset references work when this test
+// runs from the internal/config package directory instead of the repository
+// root. The example files intentionally keep repo-root-relative paths because
+// that is how users run them from the CLI.
+func normalizeExampleAssetPaths(t *testing.T, value any) {
+	t.Helper()
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			if pathValue, ok := child.(string); ok && isExampleAssetPathKey(key) && strings.HasPrefix(pathValue, "examples/assets/") {
+				abs, err := filepath.Abs(filepath.Join("..", "..", pathValue))
+				if err != nil {
+					t.Fatalf("resolve example asset path %q: %v", pathValue, err)
+				}
+				typed[key] = abs
+				continue
+			}
+			normalizeExampleAssetPaths(t, child)
+		}
+	case []any:
+		for _, child := range typed {
+			normalizeExampleAssetPaths(t, child)
+		}
+	}
+}
+
+func isExampleAssetPathKey(key string) bool {
+	return key == "scriptFile" || key == "queryFile" || key == "bodyTemplateFile"
 }
 
 // instantiate creates every module described by the pipeline via the public
@@ -212,6 +212,10 @@ func isInfraError(err error) bool {
 	msg := err.Error()
 	switch {
 	case strings.Contains(msg, "creating database connection"),
+		strings.Contains(msg, "creating database output connection"),
+		strings.Contains(msg, "creating sql_call database connection"),
+		strings.Contains(msg, "database connection failed"),
+		strings.Contains(msg, "unknown driver"),
 		strings.Contains(msg, "connection refused"),
 		strings.Contains(msg, "no such host"),
 		strings.Contains(msg, "dial tcp"):

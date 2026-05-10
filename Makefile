@@ -76,6 +76,15 @@ test-race: ## Run tests with race detector
 	@echo "Running tests with race detector..."
 	$(GOTEST) -v -race ./...
 
+.PHONY: validate-examples
+validate-examples: build ## Validate every maintained example pipeline
+	@echo "Validating maintained examples..."
+	@set -e; \
+	for file in examples/*.yaml; do \
+		echo "  $$file"; \
+		$(BIN_DIR)/$(BINARY_NAME) validate "$$file" >/dev/null; \
+	done
+
 ##@ Local Test Lab
 
 .PHONY: test-lab-up

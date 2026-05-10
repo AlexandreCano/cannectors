@@ -1,6 +1,9 @@
 package moduleconfig
 
 import (
+	"fmt"
+	"regexp"
+
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
@@ -32,6 +35,39 @@ type SQLRequestBase struct {
 	QueryFile              string `json:"queryFile,omitempty"`
 }
 
+// connectionStringRefPattern matches ${ENV_VAR_NAME} format used by
+// connectionStringRef. It mirrors the pattern declared in common-schema.json.
+var connectionStringRefPattern = regexp.MustCompile(`^\$\{[A-Z_][A-Z0-9_]*\}$`)
+
+// Validate enforces the SQL contract defined in common-schema.json#/$defs/sqlRequestBase.
+// It is meant to be called by module constructors so that runtime instantiation
+// surfaces the same errors as the schema validator (defense in depth, since
+// some callers in tests build configs directly without going through schema
+// validation).
+func (s SQLRequestBase) Validate() error {
+	hasConn := s.ConnectionString != ""
+	hasConnRef := s.ConnectionStringRef != ""
+	switch {
+	case hasConn && hasConnRef:
+		return fmt.Errorf("connectionString and connectionStringRef are mutually exclusive; provide exactly one")
+	case !hasConn && !hasConnRef:
+		return fmt.Errorf("connectionString or connectionStringRef is required")
+	}
+	if hasConnRef && !connectionStringRefPattern.MatchString(s.ConnectionStringRef) {
+		return fmt.Errorf("connectionStringRef %q does not match required format ${ENV_VAR_NAME}", s.ConnectionStringRef)
+	}
+
+	hasQuery := s.Query != ""
+	hasQueryFile := s.QueryFile != ""
+	switch {
+	case hasQuery && hasQueryFile:
+		return fmt.Errorf("query and queryFile are mutually exclusive; provide exactly one")
+	case !hasQuery && !hasQueryFile:
+		return fmt.Errorf("query or queryFile is required")
+	}
+	return nil
+}
+
 // PaginationConfig mirrors common-schema.json#/$defs/pagination.
 type PaginationConfig struct {
 	Type            string `json:"type,omitempty"`
@@ -46,12 +82,34 @@ type PaginationConfig struct {
 }
 
 // DatabasePaginationConfig mirrors common-schema.json#/$defs/databasePaginationConfig.
+// Param is the canonical SQL placeholder name used to inject either the cursor
+// or the offset value into the query (e.g. ':offset' or ':cursor').
 type DatabasePaginationConfig struct {
 	Type        string `json:"type"`
-	Limit       int    `json:"limit"`
-	OffsetParam string `json:"offsetParam"`
-	CursorField string `json:"cursorField"`
-	CursorParam string `json:"cursorParam"`
+	Limit       int    `json:"limit,omitempty"`
+	Param       string `json:"param,omitempty"`
+	CursorField string `json:"cursorField,omitempty"`
+}
+
+// Validate enforces the runtime contract: pagination.type must be one of
+// the supported strategies. cursor pagination additionally requires cursorField.
+func (p *DatabasePaginationConfig) Validate() error {
+	if p == nil {
+		return nil
+	}
+	switch p.Type {
+	case "limit-offset":
+		return nil
+	case "cursor":
+		if p.CursorField == "" {
+			return fmt.Errorf("pagination.cursorField is required when pagination.type is %q", p.Type)
+		}
+		return nil
+	case "":
+		return fmt.Errorf("pagination.type is required (expected 'limit-offset' or 'cursor')")
+	default:
+		return fmt.Errorf("unknown pagination.type %q (expected 'limit-offset' or 'cursor')", p.Type)
+	}
 }
 
 // KeyConfig mirrors common-schema.json#/$defs/httpCallKeyConfig.
@@ -65,6 +123,6 @@ type KeyConfig struct {
 type CacheConfig struct {
 	Enabled    bool   `json:"enabled"`
 	MaxSize    int    `json:"maxSize"`
-	DefaultTTL int    `json:"defaultTTL"`
+	TTLSeconds int    `json:"ttlSeconds"`
 	Key        string `json:"key"`
 }

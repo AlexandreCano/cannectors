@@ -34,9 +34,7 @@ const (
 
 // Error types for database input module
 var (
-	ErrDatabaseNilConfig      = errors.New("database input configuration is nil")
-	ErrDatabaseMissingQuery   = errors.New("query is required for database input")
-	ErrDatabaseMissingConnStr = errors.New("connection string is required for database input")
+	ErrDatabaseNilConfig = errors.New("database input configuration is nil")
 )
 
 // DatabaseInputConfig holds configuration for the database input module.
@@ -91,8 +89,16 @@ func NewDatabaseInputFromConfig(cfg *connector.ModuleConfig) (*DatabaseInput, er
 		return nil, err
 	}
 
+	if validateErr := config.Validate(); validateErr != nil {
+		return nil, fmt.Errorf("database input: %w", validateErr)
+	}
+
+	if validateErr := config.Pagination.Validate(); validateErr != nil {
+		return nil, fmt.Errorf("database input: %w", validateErr)
+	}
+
 	// Load query from file if queryFile is specified
-	if config.QueryFile != "" && config.Query == "" {
+	if config.QueryFile != "" {
 		if validateErr := pathutil.ValidateFilePath(config.QueryFile); validateErr != nil {
 			return nil, fmt.Errorf("query file path: %w", validateErr)
 		}
@@ -101,14 +107,9 @@ func NewDatabaseInputFromConfig(cfg *connector.ModuleConfig) (*DatabaseInput, er
 			return nil, fmt.Errorf("reading query file %s: %w", config.QueryFile, readErr)
 		}
 		config.Query = string(queryBytes)
-	}
-
-	// Validate required fields
-	if config.Query == "" {
-		return nil, ErrDatabaseMissingQuery
-	}
-	if config.ConnectionString == "" && config.ConnectionStringRef == "" {
-		return nil, ErrDatabaseMissingConnStr
+		if config.Query == "" {
+			return nil, fmt.Errorf("query file %s is empty", config.QueryFile)
+		}
 	}
 
 	if _, parseErr := errhandling.ParseOnErrorStrategy(config.OnError); parseErr != nil {
@@ -387,7 +388,7 @@ func (d *DatabaseInput) fetchWithPagination(ctx context.Context, query string, a
 	case "cursor":
 		return d.fetchCursor(ctx, query, args)
 	default:
-		return d.fetchSingle(ctx, query, args)
+		return nil, fmt.Errorf("database input: unknown pagination type %q (expected 'limit-offset' or 'cursor')", d.config.Pagination.Type)
 	}
 }
 
@@ -400,8 +401,8 @@ func (d *DatabaseInput) fetchLimitOffset(ctx context.Context, query string, args
 		limit = defaultQueryLimit
 	}
 
-	// Check if query uses offsetParam placeholder
-	offsetParam := d.config.Pagination.OffsetParam
+	// Check if query uses the canonical pagination param placeholder
+	offsetParam := d.config.Pagination.Param
 	usesOffsetParam := offsetParam != "" && strings.Contains(query, ":"+offsetParam)
 
 	for {
@@ -458,7 +459,7 @@ func (d *DatabaseInput) fetchCursor(ctx context.Context, query string, args []an
 	}
 
 	cursorField := d.config.Pagination.CursorField
-	cursorParam := d.config.Pagination.CursorParam
+	cursorParam := d.config.Pagination.Param
 
 	for {
 		cursorQuery := query

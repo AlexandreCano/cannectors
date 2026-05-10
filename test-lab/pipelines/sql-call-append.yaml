@@ -23,7 +23,7 @@ filters:
     cache:
       enabled: true
       maxSize: 100
-      defaultTTL: 60
+      ttlSeconds: 60
       key: "sku:{{record.sku}}"
 output:
   type: httpRequest

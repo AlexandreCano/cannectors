@@ -21,7 +21,7 @@ filters:
     cache:
       enabled: true
       maxSize: 5000
-      defaultTTL: 86400
+      ttlSeconds: 86400
       key: address.hash
 output:
   type: httpRequest

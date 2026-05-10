@@ -229,7 +229,7 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 		return nil, err
 	}
 
-	lruCache, cacheTTL := buildHTTPCallCache(config.Cache.MaxSize, config.Cache.DefaultTTL)
+	lruCache, cacheTTL := buildHTTPCallCache(config.Cache.MaxSize, config.Cache.TTLSeconds)
 
 	bodyTemplateRaw := config.Body
 	if bodyTemplateRaw == "" {
@@ -251,7 +251,7 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 	if cacheMaxSize <= 0 {
 		cacheMaxSize = defaultCacheMaxSize
 	}
-	cacheTTLSeconds := config.Cache.DefaultTTL
+	cacheTTLSeconds := config.Cache.TTLSeconds
 	if cacheTTLSeconds <= 0 {
 		cacheTTLSeconds = defaultCacheTTLSeconds
 	}

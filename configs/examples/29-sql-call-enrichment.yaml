@@ -33,7 +33,7 @@ connector:
       cache:
         enabled: true
         maxSize: 1000
-        defaultTTL: 300  # 5 minutes
+        ttlSeconds: 300  # 5 minutes
         key: "{{record.customer_id}}"  # Cache key template
 
       # Error handling

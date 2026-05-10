@@ -41,8 +41,7 @@ const (
 
 // Error types for sql_call module
 var (
-	ErrSQLCallMissingConnection = errors.New("sql_call connection configuration is required")
-	ErrSQLCallMissingQuery      = errors.New("sql_call query is required")
+	ErrSQLCallNilConfig = errors.New("sql_call configuration is nil")
 )
 
 // SQLCallConfig represents the configuration for a sql_call filter module.
@@ -76,27 +75,34 @@ type SQLCallModule struct {
 
 // NewSQLCallFromConfig creates a new sql_call filter module from configuration.
 func NewSQLCallFromConfig(config SQLCallConfig) (*SQLCallModule, error) {
-	if err := validateSQLCallConfig(config); err != nil {
-		return nil, err
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("sql_call: %w", err)
 	}
 
 	if err := loadQueryFromFile(&config); err != nil {
 		return nil, err
 	}
 
+	mergeStrategy, err := resolveMergeStrategy(config.MergeStrategy)
+	if err != nil {
+		return nil, err
+	}
+	if mergeStrategy == "append" && config.ResultKey == "" {
+		return nil, fmt.Errorf("sql_call: resultKey is required when mergeStrategy is 'append'")
+	}
+
 	// Validate template syntax in query
-	if err := template.ValidateSyntax(config.Query); err != nil {
-		return nil, fmt.Errorf("invalid template syntax in sql_call query: %w", err)
+	if tplErr := template.ValidateSyntax(config.Query); tplErr != nil {
+		return nil, fmt.Errorf("invalid template syntax in sql_call query: %w", tplErr)
 	}
 
 	// Validate cache key template syntax if configured
 	if config.Cache.Key != "" {
-		if err := template.ValidateSyntax(config.Cache.Key); err != nil {
-			return nil, fmt.Errorf("invalid template syntax in sql_call cache key: %w", err)
+		if cacheKeyErr := template.ValidateSyntax(config.Cache.Key); cacheKeyErr != nil {
+			return nil, fmt.Errorf("invalid template syntax in sql_call cache key: %w", cacheKeyErr)
 		}
 	}
 
-	mergeStrategy := resolveMergeStrategy(config.MergeStrategy)
 	onError, err := errhandling.ParseOnErrorStrategy(config.OnError)
 	if err != nil {
 		return nil, err
@@ -130,20 +136,10 @@ func NewSQLCallFromConfig(config SQLCallConfig) (*SQLCallModule, error) {
 	return module, nil
 }
 
-// validateSQLCallConfig validates that required configuration fields are present.
-func validateSQLCallConfig(config SQLCallConfig) error {
-	if config.ConnectionString == "" && config.ConnectionStringRef == "" {
-		return ErrSQLCallMissingConnection
-	}
-	if config.Query == "" && config.QueryFile == "" {
-		return ErrSQLCallMissingQuery
-	}
-	return nil
-}
-
 // loadQueryFromFile loads the query from a file if queryFile is specified.
+// Validate() must have been called first to guarantee the exclusive query/queryFile contract.
 func loadQueryFromFile(config *SQLCallConfig) error {
-	if config.QueryFile == "" || config.Query != "" {
+	if config.QueryFile == "" {
 		return nil
 	}
 
@@ -156,16 +152,28 @@ func loadQueryFromFile(config *SQLCallConfig) error {
 		return fmt.Errorf("reading query file %s: %w", config.QueryFile, err)
 	}
 
+	if len(queryBytes) == 0 {
+		return fmt.Errorf("query file %s is empty", config.QueryFile)
+	}
+
 	config.Query = string(queryBytes)
 	return nil
 }
 
 // resolveMergeStrategy returns the merge strategy with default if empty.
-func resolveMergeStrategy(strategy string) string {
-	if strategy == "" {
-		return defaultSQLCallStrategy
+// Returns an error if the value is not one of the canonical strategies
+// (merge|replace|append). This enforces the schema contract at runtime so
+// constructors built from raw configs (tests, in-process) fail fast instead
+// of silently falling back to merge.
+func resolveMergeStrategy(strategy string) (string, error) {
+	switch strategy {
+	case "":
+		return defaultSQLCallStrategy, nil
+	case "merge", "replace", "append":
+		return strategy, nil
+	default:
+		return "", fmt.Errorf("sql_call: invalid mergeStrategy %q (expected one of: merge, replace, append)", strategy)
 	}
-	return strategy
 }
 
 // createDatabaseConnection creates and opens a database connection.
@@ -200,7 +208,7 @@ func setupCache(config SQLCallConfig) (cache.Cache, time.Duration, bool) {
 		cacheSize = defaultSQLCallCacheSize
 	}
 
-	cacheTTLSeconds := config.Cache.DefaultTTL
+	cacheTTLSeconds := config.Cache.TTLSeconds
 	if cacheTTLSeconds <= 0 {
 		cacheTTLSeconds = defaultSQLCallCacheTTL
 	}
@@ -569,14 +577,12 @@ func (m *SQLCallModule) mergeData(record, result map[string]any) map[string]any 
 		for k, v := range record {
 			merged[k] = v
 		}
-		key := m.resultKey
-		if key == "" {
-			key = "_sql_result"
-		}
-		merged[key] = result
+		merged[m.resultKey] = result
 		return merged
 	default:
-		return deepMerge(record, result)
+		// Construction validates mergeStrategy strictly; reaching this branch
+		// means the strategy was mutated after construction.
+		panic(fmt.Sprintf("sql_call: unreachable mergeStrategy %q", m.mergeStrategy))
 	}
 }
 

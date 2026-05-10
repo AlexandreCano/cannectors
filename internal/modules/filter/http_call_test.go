@@ -130,7 +130,7 @@ func TestNewHTTPCallFromConfig(t *testing.T) {
 			}},
 			Cache: moduleconfig.CacheConfig{
 				MaxSize:    500,
-				DefaultTTL: 60,
+				TTLSeconds: 60,
 			},
 		}
 
@@ -1360,7 +1360,7 @@ func TestHTTPCallModule_CacheTTLExpiration(t *testing.T) {
 			}},
 			Cache: moduleconfig.CacheConfig{
 				MaxSize:    100,
-				DefaultTTL: 1, // 1 second TTL for testing
+				TTLSeconds: 1, // 1 second TTL for testing
 			},
 		}
 
@@ -1432,7 +1432,7 @@ func TestHTTPCallModule_CacheSizeLimitAndLRU(t *testing.T) {
 			}},
 			Cache: moduleconfig.CacheConfig{
 				MaxSize:    3, // Small cache size for testing
-				DefaultTTL: 300,
+				TTLSeconds: 300,
 			},
 		}
 
@@ -1517,7 +1517,7 @@ func TestHTTPCallModule_CacheKeyCollision(t *testing.T) {
 			}},
 			Cache: moduleconfig.CacheConfig{
 				MaxSize:    10,
-				DefaultTTL: 300,
+				TTLSeconds: 300,
 			},
 		}
 
@@ -1598,7 +1598,7 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 			}},
 			Cache: moduleconfig.CacheConfig{
 				MaxSize:    10,
-				DefaultTTL: 300,
+				TTLSeconds: 300,
 				Key:        "static-cache-key",
 			},
 		}
@@ -1656,7 +1656,7 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 			}},
 			Cache: moduleconfig.CacheConfig{
 				MaxSize:    10,
-				DefaultTTL: 300,
+				TTLSeconds: 300,
 				Key:        "user.profile.id",
 			},
 		}
@@ -1731,7 +1731,7 @@ func TestHTTPCallModule_ConfigurableCacheKey(t *testing.T) {
 			}},
 			Cache: moduleconfig.CacheConfig{
 				MaxSize:    10,
-				DefaultTTL: 300,
+				TTLSeconds: 300,
 				Key:        "metadata.nonexistent",
 			},
 		}

@@ -19,7 +19,7 @@ input:
     type: cursor
     limit: 200
     cursorField: id
-    cursorParam: last_id
+    param: last_id
   incremental:
     enabled: true
     timestampField: updated_at

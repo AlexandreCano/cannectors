@@ -2,6 +2,8 @@ package output
 
 import (
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/cannectors/runtime/pkg/connector"
@@ -151,14 +153,15 @@ func TestNewDatabaseOutputFromConfig_Validation(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		cfg     *connector.ModuleConfig
-		wantErr error
+		name       string
+		cfg        *connector.ModuleConfig
+		wantErrIs  error
+		wantErrSub string
 	}{
 		{
-			name:    "nil config",
-			cfg:     nil,
-			wantErr: ErrDatabaseOutputNilConfig,
+			name:      "nil config",
+			cfg:       nil,
+			wantErrIs: ErrDatabaseOutputNilConfig,
 		},
 		{
 			name: "missing connection string",
@@ -168,7 +171,7 @@ func TestNewDatabaseOutputFromConfig_Validation(t *testing.T) {
 					"query": "INSERT INTO users (name) VALUES ({{record.name}})",
 				}),
 			},
-			wantErr: ErrDatabaseOutputMissingConnStr,
+			wantErrSub: "connectionString or connectionStringRef is required",
 		},
 		{
 			name: "missing query",
@@ -178,7 +181,31 @@ func TestNewDatabaseOutputFromConfig_Validation(t *testing.T) {
 					"connectionString": "postgres://localhost/db",
 				}),
 			},
-			wantErr: ErrDatabaseOutputMissingQuery,
+			wantErrSub: "query or queryFile is required",
+		},
+		{
+			name: "both query fields",
+			cfg: &connector.ModuleConfig{
+				Type: "database",
+				Raw: mustJSON(map[string]any{
+					"connectionString": "postgres://localhost/db",
+					"query":            "INSERT INTO t VALUES (1)",
+					"queryFile":        "/tmp/q.sql",
+				}),
+			},
+			wantErrSub: "query and queryFile are mutually exclusive",
+		},
+		{
+			name: "both connection fields",
+			cfg: &connector.ModuleConfig{
+				Type: "database",
+				Raw: mustJSON(map[string]any{
+					"connectionString":    "postgres://localhost/db",
+					"connectionStringRef": "${DB_URL}",
+					"query":               "INSERT INTO t VALUES (1)",
+				}),
+			},
+			wantErrSub: "mutually exclusive",
 		},
 	}
 
@@ -186,11 +213,13 @@ func TestNewDatabaseOutputFromConfig_Validation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := NewDatabaseOutputFromConfig(tt.cfg)
 			if err == nil {
-				t.Error("expected error, got nil")
-				return
+				t.Fatal("expected error, got nil")
 			}
-			if err != tt.wantErr {
-				t.Errorf("error = %v, want %v", err, tt.wantErr)
+			if tt.wantErrIs != nil && !errors.Is(err, tt.wantErrIs) {
+				t.Errorf("error = %v, want errors.Is %v", err, tt.wantErrIs)
+			}
+			if tt.wantErrSub != "" && !strings.Contains(err.Error(), tt.wantErrSub) {
+				t.Errorf("error = %v, want substring %q", err, tt.wantErrSub)
 			}
 		})
 	}

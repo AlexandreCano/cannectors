@@ -290,7 +290,7 @@ func TestExampleCursorPaginationPipeline(t *testing.T) {
 		"dataField": "results",
 		"pagination": map[string]any{
 			"type":            "cursor",
-			"cursorParam":     "cursor",
+			"param":           "cursor",
 			"nextCursorField": "next_cursor",
 		},
 	}))
@@ -556,11 +556,11 @@ func TestExampleOffsetPaginationPipeline(t *testing.T) {
 		"timeoutMs": 1000,
 		"dataField": "items",
 		"pagination": map[string]any{
-			"type":        "offset",
-			"offsetParam": "offset",
-			"limitParam":  "limit",
-			"limit":       2,
-			"totalField":  "total",
+			"type":       "offset",
+			"param":      "offset",
+			"limitParam": "limit",
+			"limit":      2,
+			"totalField": "total",
 		},
 	}))
 	if err != nil {

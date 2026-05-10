@@ -249,7 +249,17 @@
 			"type": "object",
 			"description": "SQL call filter module configuration. Executes SQL queries for record enrichment.",
 			"allOf": [
-				{ "$ref": "common-schema.json#/$defs/sqlRequestBase" }
+				{ "$ref": "common-schema.json#/$defs/sqlRequestBase" },
+				{
+					"if": {
+						"properties": { "mergeStrategy": { "const": "append" } },
+						"required": ["mergeStrategy"]
+					},
+					"then": { "required": ["resultKey"] }
+				},
+				{
+					"not": { "required": ["retry"] }
+				}
 			],
 			"properties": {
 				"mergeStrategy": {
@@ -264,6 +274,7 @@
 				},
 				"resultKey": {
 					"type": "string",
+					"minLength": 1,
 					"description": "Key for storing result in append mode."
 				},
 				"cache": {
@@ -287,14 +298,15 @@
 					"minimum": 1,
 					"default": 1000
 				},
-				"defaultTTL": {
+				"ttlSeconds": {
 					"type": "integer",
 					"description": "Cache entry TTL in seconds.",
-					"minimum": 0,
+					"minimum": 1,
 					"default": 300
 				},
 				"key": {
 					"type": "string",
+					"minLength": 1,
 					"description": "Cache key template using {{record.field}} syntax."
 				}
 			},

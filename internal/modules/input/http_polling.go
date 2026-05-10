@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/expr-lang/expr/vm"
@@ -60,11 +61,15 @@ type HTTPPollingInputConfig struct {
 }
 
 // HTTPPolling implements polling-based HTTP data fetching.
-// It supports HTTP GET requests with authentication, pagination, and retry logic.
-// State persistence can be configured to track last timestamp and/or last ID
-// for reliable resumption after restarts.
+// It supports any HTTP method with optional request body, authentication,
+// pagination, and retry logic. State persistence can be configured to track
+// last timestamp and/or last ID for reliable resumption after restarts.
 type HTTPPolling struct {
 	endpoint         string
+	method           string
+	body             string
+	bodyTemplateFile string
+	bodyTemplate     string
 	headers          map[string]string
 	timeout          time.Duration
 	dataField        string
@@ -115,8 +120,25 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 		return nil, parseErr
 	}
 
+	method, err := httpclient.NormalizeAndValidateMethod(cfg.Method)
+	if err != nil {
+		return nil, err
+	}
+
+	bodyTemplate := cfg.Body
+	if bodyTemplate == "" && cfg.BodyTemplateFile != "" {
+		raw, readErr := os.ReadFile(cfg.BodyTemplateFile)
+		if readErr != nil {
+			return nil, fmt.Errorf("loading body template file %q: %w", cfg.BodyTemplateFile, readErr)
+		}
+		bodyTemplate = string(raw)
+	}
+
 	timeout := connector.GetTimeoutDuration(cfg.TimeoutMs, defaultTimeout)
 	retryConfig := moduleconfig.ToRetryConfig(cfg.Retry)
+	if vErr := retryConfig.Validate(); vErr != nil {
+		return nil, fmt.Errorf("httpPolling retry config invalid: %w", vErr)
+	}
 
 	client := httpclient.NewClient(timeout)
 	authHandler, err := auth.NewHandler(cfg.Authentication, client.Client)
@@ -131,6 +153,10 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 
 	h := &HTTPPolling{
 		endpoint:          cfg.Endpoint,
+		method:            method,
+		body:              cfg.Body,
+		bodyTemplateFile:  cfg.BodyTemplateFile,
+		bodyTemplate:      bodyTemplate,
 		headers:           cfg.Headers,
 		timeout:           timeout,
 		dataField:         cfg.DataField,

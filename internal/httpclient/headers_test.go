@@ -69,28 +69,36 @@ func TestValidateHeaderValue(t *testing.T) {
 	}
 }
 
-func TestTryAddValidHeader(t *testing.T) {
+func TestAddValidatedHeader(t *testing.T) {
 	tests := []struct {
-		name  string
-		key   string
-		value string
-		added bool
+		name    string
+		key     string
+		value   string
+		wantErr bool
 	}{
-		{"valid", "X-Foo", "bar", true},
-		{"invalid name", "X Foo", "bar", false},
-		{"invalid value", "X-Foo", "bar\r\nX-Injected: yes", false},
-		{"empty name", "", "bar", false},
+		{"valid", "X-Foo", "bar", false},
+		{"invalid name", "X Foo", "bar", true},
+		{"invalid value", "X-Foo", "bar\r\nX-Injected: yes", true},
+		{"empty name", "", "bar", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			headers := map[string]string{}
-			TryAddValidHeader(headers, tc.key, tc.value)
-			_, present := headers[tc.key]
-			if tc.added && !present {
-				t.Errorf("expected header %q to be added", tc.key)
+			err := AddValidatedHeader(headers, tc.key, tc.value)
+			if tc.wantErr {
+				if err == nil {
+					t.Errorf("expected error for %q, got nil", tc.key)
+				}
+				if _, present := headers[tc.key]; present {
+					t.Errorf("header %q was added despite invalid input", tc.key)
+				}
+				return
 			}
-			if !tc.added && present {
-				t.Errorf("header %q was added despite invalid input", tc.key)
+			if err != nil {
+				t.Errorf("unexpected error for %q: %v", tc.key, err)
+			}
+			if _, present := headers[tc.key]; !present {
+				t.Errorf("expected header %q to be added", tc.key)
 			}
 		})
 	}

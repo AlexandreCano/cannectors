@@ -237,9 +237,8 @@
 							"type": "string",
 							"description": "Field to extract from HTTP response."
 						},
-						"bodyTemplateFile": {
-							"type": "string",
-							"description": "Path to body template file (for POST/PUT requests)."
+						"retry": {
+							"$ref": "common-schema.json#/$defs/retryConfig"
 						}
 					}
 				}

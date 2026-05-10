@@ -126,14 +126,9 @@
 
 		"httpMethod": {
 			"type": "string",
-			"enum": [
-				"GET",
-				"POST",
-				"PUT",
-				"PATCH",
-				"DELETE"
-			],
-			"default": "GET"
+			"description": "HTTP method. Any RFC 7230 token is accepted (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS, custom verbs, etc.). The runtime normalizes to upper-case and rejects malformed tokens.",
+			"pattern": "^[!#$%&'*+\\-.^_`|~0-9A-Za-z]+$",
+			"minLength": 1
 		},
 
 		"httpHeaders": {
@@ -155,7 +150,8 @@
 			"properties": {
 				"field": {
 					"type": "string",
-					"description": "Dot-notation path to extract value from record (e.g., 'customer.id')."
+					"description": "Dot-notation path to extract value from record (e.g., 'customer.id').",
+					"minLength": 1
 				},
 				"paramType": {
 					"type": "string",
@@ -168,7 +164,8 @@
 				},
 				"paramName": {
 					"type": "string",
-					"description": "Parameter name (path placeholder, query param, or header name)."
+					"description": "Parameter name (path placeholder, query param, or header name).",
+					"minLength": 1
 				}
 			}
 		},
@@ -180,8 +177,8 @@
 			"properties": {
 				"endpoint": {
 					"type": "string",
-					"description": "HTTP endpoint URL.",
-					"format": "uri"
+					"description": "HTTP endpoint URL. Templates are accepted; the final URL is validated at runtime after template resolution.",
+					"minLength": 1
 				},
 				"method": {
 					"$ref": "#/$defs/httpMethod"
@@ -196,14 +193,22 @@
 						"type": "string"
 					}
 				},
+				"body": {
+					"type": "string",
+					"description": "Inline request body. Templates ({{record.field}}) are evaluated at runtime. The body is sent regardless of the HTTP method."
+				},
+				"bodyTemplateFile": {
+					"type": "string",
+					"description": "Path to an external template file used as the request body. Mutually exclusive with `body` is not enforced; if both are set, the inline body wins.",
+					"minLength": 1
+				},
 				"authentication": {
 					"$ref": "auth-schema.json#/$defs/auth"
 				},
 				"timeoutMs": {
 					"type": "integer",
-					"description": "Request timeout in milliseconds.",
-					"minimum": 0,
-					"default": 30000
+					"description": "Request timeout in milliseconds. When omitted, each module applies its own runtime default.",
+					"minimum": 1
 				}
 			}
 		},

@@ -189,6 +189,9 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 // buildHTTPRequest creates the *http.Request with headers and authentication
 // attached. It does not perform the network call.
 func (h *HTTPRequestModule) buildHTTPRequest(ctx context.Context, endpoint string, body []byte, recordHeaders map[string]string) (*http.Request, error) {
+	if err := httpclient.ValidateAbsoluteURL(endpoint); err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequestWithContext(ctx, h.method, endpoint, bytes.NewReader(body))
 	if err != nil {
 		logger.Error("failed to create http request",
@@ -200,7 +203,11 @@ func (h *HTTPRequestModule) buildHTTPRequest(ctx context.Context, endpoint strin
 		return nil, fmt.Errorf("creating http request: %w", err)
 	}
 
-	for key, value := range h.buildBaseHeadersMap(recordHeaders) {
+	baseHeaders, err := h.buildBaseHeadersMap(recordHeaders)
+	if err != nil {
+		return nil, err
+	}
+	for key, value := range baseHeaders {
 		req.Header.Set(key, value)
 	}
 

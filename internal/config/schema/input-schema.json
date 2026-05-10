@@ -48,6 +48,9 @@
 						"dataField": {
 							"type": "string",
 							"description": "JSON field path containing the array of records to extract from the response."
+						},
+						"retry": {
+							"$ref": "common-schema.json#/$defs/retryConfig"
 						}
 					}
 				}

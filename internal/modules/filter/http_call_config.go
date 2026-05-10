@@ -5,28 +5,21 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/cannectors/runtime/internal/auth"
 	"github.com/cannectors/runtime/internal/cache"
+	"github.com/cannectors/runtime/internal/httpclient"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/template"
 	"github.com/cannectors/runtime/pkg/connector"
 )
 
-// normalizeHTTPCallMethod uppercases and validates the configured HTTP
-// method. GET is used when empty.
+// normalizeHTTPCallMethod uppercases the configured method and validates that
+// it is a well-formed RFC 7230 token. GET is used when empty.
 func normalizeHTTPCallMethod(method string) (string, error) {
-	m := strings.ToUpper(method)
-	if m == "" {
-		m = http.MethodGet
-	}
-	if m != http.MethodGet && m != http.MethodPost && m != http.MethodPut {
-		return "", fmt.Errorf("http_call method must be GET, POST, or PUT, got: %s", method)
-	}
-	return m, nil
+	return httpclient.NormalizeAndValidateMethod(method)
 }
 
 // normalizeHTTPCallMergeStrategy falls back to the default strategy on empty

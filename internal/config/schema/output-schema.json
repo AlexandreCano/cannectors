@@ -50,10 +50,6 @@
 							"description": "Request mode: 'batch' (all records in one request, default) or 'single' (one request per record).",
 							"enum": [ "batch", "single" ],
 							"default": "batch"
-						},
-						"bodyTemplateFile": {
-							"type": "string",
-							"description": "Path to external template file for request body. Supports {{record.field}} placeholders."
 						}
 					}
 				}

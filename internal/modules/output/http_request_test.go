@@ -139,12 +139,12 @@ func TestNewHTTPRequestFromConfig_MissingMethod(t *testing.T) {
 func TestNewHTTPRequestFromConfig_InvalidMethod(t *testing.T) {
 	config := newModuleConfig(map[string]any{
 		"endpoint": "https://api.example.com/data",
-		"method":   "INVALID",
+		"method":   "BAD METHOD",
 	})
 
 	_, err := NewHTTPRequestFromConfig(config)
 	if err == nil {
-		t.Fatal("expected error for invalid method")
+		t.Fatal("expected error for invalid method (non-RFC 7230 token)")
 	}
 }
 
@@ -173,7 +173,7 @@ func TestNewHTTPRequestFromConfig_RetryHintFromBody_TooLong(t *testing.T) {
 }
 
 func TestNewHTTPRequestFromConfig_SupportedMethods(t *testing.T) {
-	methods := []string{"POST", "PUT", "PATCH"}
+	methods := []string{"POST", "PUT", "PATCH", "DELETE", "GET", "HEAD", "OPTIONS"}
 
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {

@@ -294,13 +294,23 @@ func getIntSliceFromMap(m map[string]any, key string) ([]int, bool) {
 	return result, len(result) > 0
 }
 
+// httpRetryEligibleTypes lists the only module types that participate in
+// defaults.retry inheritance (Story 24.3 AC10).
+var httpRetryEligibleTypes = map[string]struct{}{
+	"httpPolling": {},
+	"http_call":   {},
+	"httpRequest": {},
+}
+
 // applyDefaults resolves retry/onError/timeoutMs per module (module > defaults)
 // and injects resolved values into each module's raw map before serialization.
 func applyDefaults(builders []*moduleBuilder, defaults *connector.ModuleDefaults) {
 	for _, b := range builders {
 		resolveOnErrorInheritance(b.rawMap, defaults)
 		resolveTimeout(b.rawMap, defaults)
-		resolveRetry(b.rawMap, defaults)
+		if _, ok := httpRetryEligibleTypes[b.mc.Type]; ok {
+			resolveRetry(b.rawMap, defaults)
+		}
 	}
 }
 

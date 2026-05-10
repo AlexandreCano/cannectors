@@ -7,12 +7,14 @@ import (
 // HTTPRequestBase mirrors common-schema.json#/$defs/httpRequestBase.
 // Embedded by all HTTP module configs (httpPolling, httpRequest, http_call).
 type HTTPRequestBase struct {
-	Endpoint       string                `json:"endpoint"`
-	Method         string                `json:"method,omitempty"`
-	Headers        map[string]string     `json:"headers,omitempty"`
-	QueryParams    map[string]string     `json:"queryParams,omitempty"`
-	Authentication *connector.AuthConfig `json:"authentication,omitempty"`
-	TimeoutMs      int                   `json:"timeoutMs,omitempty"`
+	Endpoint         string                `json:"endpoint"`
+	Method           string                `json:"method,omitempty"`
+	Headers          map[string]string     `json:"headers,omitempty"`
+	QueryParams      map[string]string     `json:"queryParams,omitempty"`
+	Body             string                `json:"body,omitempty"`
+	BodyTemplateFile string                `json:"bodyTemplateFile,omitempty"`
+	Authentication   *connector.AuthConfig `json:"authentication,omitempty"`
+	TimeoutMs        int                   `json:"timeoutMs,omitempty"`
 }
 
 // SQLRequestBase mirrors common-schema.json#/$defs/sqlRequestBase.

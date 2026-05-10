@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/expr-lang/expr/vm"
+
 	"github.com/cannectors/runtime/internal/auth"
 	"github.com/cannectors/runtime/internal/cache"
 	"github.com/cannectors/runtime/internal/errhandling"
@@ -62,13 +64,11 @@ type HTTPCallConfig struct {
 	connector.ModuleBase
 	moduleconfig.HTTPRequestBase
 
-	// Body template configuration
-	BodyTemplateFile string `json:"bodyTemplateFile,omitempty"`
-
 	// Data extraction configuration
 	DataField string `json:"dataField,omitempty"`
 
-	// Keys defines how to extract values from records and use them in requests (required for GET, optional for POST/PUT with template)
+	// Keys defines how to extract values from records and use them in requests
+	// (required when no body is configured).
 	Keys []moduleconfig.KeyConfig `json:"keys"`
 	// Cache defines cache behavior (optional, uses defaults if not specified)
 	Cache moduleconfig.CacheConfig `json:"cache"`
@@ -90,11 +90,12 @@ type HTTPCallConfig struct {
 //   - onError mode controls behavior: fail (stop pipeline), skip (drop record), log (continue)
 type HTTPCallModule struct {
 	endpoint          string
-	method            string                   // HTTP method (GET, POST, PUT)
+	method            string                   // HTTP method (any RFC 7230 token)
 	keys              []moduleconfig.KeyConfig // key configurations for request building
 	authHandler       auth.Handler
 	httpClient        *httpclient.Client
 	retry             connector.RetryConfig
+	retryHintProgram  *vm.Program // Compiled retryHintFromBody expression (may be nil).
 	cache             cache.Cache
 	mergeStrategy     string
 	dataField         string
@@ -102,7 +103,7 @@ type HTTPCallModule struct {
 	headers           map[string]string
 	cacheTTL          time.Duration
 	cacheKey          string              // Cache key configuration (optional)
-	bodyTemplateRaw   string              // Loaded body template content (for POST/PUT)
+	bodyTemplateRaw   string              // Loaded body template content
 	templateEvaluator *template.Evaluator // Template evaluator for dynamic content
 }
 
@@ -192,7 +193,7 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 		return nil, err
 	}
 
-	keyRequired := method == http.MethodGet || config.BodyTemplateFile == ""
+	keyRequired := config.Body == "" && config.BodyTemplateFile == ""
 	if keyRequired {
 		if keyErr := validateKeysConfig(config.Keys); keyErr != nil {
 			return nil, keyErr
@@ -218,20 +219,34 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 	var retryConfig connector.RetryConfig
 	if config.Retry != nil {
 		retryConfig = moduleconfig.ToRetryConfig(config.Retry)
+		if vErr := retryConfig.Validate(); vErr != nil {
+			return nil, fmt.Errorf("http_call retry config invalid: %w", vErr)
+		}
+	}
+
+	retryHintProgram, err := httpclient.CompileRetryHint(retryConfig.RetryHintFromBody)
+	if err != nil {
+		return nil, err
 	}
 
 	lruCache, cacheTTL := buildHTTPCallCache(config.Cache.MaxSize, config.Cache.DefaultTTL)
 
-	bodyTemplateRaw, err := loadHTTPCallBodyTemplate(config.BodyTemplateFile)
-	if err != nil {
-		return nil, err
+	bodyTemplateRaw := config.Body
+	if bodyTemplateRaw == "" {
+		var bodyErr error
+		bodyTemplateRaw, bodyErr = loadHTTPCallBodyTemplate(config.BodyTemplateFile)
+		if bodyErr != nil {
+			return nil, bodyErr
+		}
+	} else if tplErr := template.ValidateSyntax(bodyTemplateRaw); tplErr != nil {
+		return nil, fmt.Errorf("invalid template syntax in http_call body: %w", tplErr)
 	}
 
 	if err := validateHTTPCallTemplates(config.Endpoint, config.Headers); err != nil {
 		return nil, err
 	}
 
-	hasTemplating := httpCallHasTemplating(config.Endpoint, config.Headers, config.BodyTemplateFile != "")
+	hasTemplating := httpCallHasTemplating(config.Endpoint, config.Headers, bodyTemplateRaw != "")
 	cacheMaxSize := config.Cache.MaxSize
 	if cacheMaxSize <= 0 {
 		cacheMaxSize = defaultCacheMaxSize
@@ -265,6 +280,7 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 		authHandler:       authHandler,
 		httpClient:        httpClient,
 		retry:             retryConfig,
+		retryHintProgram:  retryHintProgram,
 		cache:             lruCache,
 		mergeStrategy:     mergeStrategy,
 		dataField:         config.DataField,
@@ -527,6 +543,9 @@ func (m *HTTPCallModule) executeHTTPRequest(ctx context.Context, keyValues map[s
 				)
 			}
 		},
+		ShouldRetryBody: func(body []byte) (bool, bool) {
+			return httpclient.EvalRetryHint(m.retryHintProgram, body)
+		},
 	}
 
 	resp, err := m.httpClient.DoWithRetry(ctx, req, m.retry, hooks)
@@ -582,17 +601,20 @@ func (m *HTTPCallModule) executeHTTPRequest(ctx context.Context, keyValues map[s
 
 // buildHTTPRequest creates and configures an HTTP request with headers and authentication.
 func (m *HTTPCallModule) buildHTTPRequest(ctx context.Context, requestURL string, keyValues map[string]string, recordIdx int, record map[string]any) (*http.Request, error) {
-	// Build request body for POST/PUT
-	var bodyReader io.Reader
-	if m.method == http.MethodPost || m.method == http.MethodPut {
-		if m.bodyTemplateRaw != "" {
-			// Evaluate body template with record data
-			bodyContent := m.templateEvaluator.Evaluate(m.bodyTemplateRaw, record)
-			bodyReader = bytes.NewReader([]byte(bodyContent))
-		}
+	if err := httpclient.ValidateAbsoluteURL(requestURL); err != nil {
+		return nil, newHTTPCallError(
+			ErrCodeHTTPCallHTTPError,
+			fmt.Sprintf("http_call invalid request URL: %v", err),
+			recordIdx, m.endpoint, 0, m.compositeKeyString(keyValues),
+		)
 	}
 
-	// Create HTTP request
+	var bodyReader io.Reader
+	if m.bodyTemplateRaw != "" {
+		bodyContent := m.templateEvaluator.Evaluate(m.bodyTemplateRaw, record)
+		bodyReader = bytes.NewReader([]byte(bodyContent))
+	}
+
 	req, err := http.NewRequestWithContext(ctx, m.method, requestURL, bodyReader)
 	if err != nil {
 		return nil, newHTTPCallError(
@@ -602,29 +624,36 @@ func (m *HTTPCallModule) buildHTTPRequest(ctx context.Context, requestURL string
 		)
 	}
 
-	// Set default headers
 	req.Header.Set("User-Agent", "Cannectors-Runtime/1.0")
 	req.Header.Set("Accept", "application/json")
-
-	// Set Content-Type for POST/PUT
-	if m.method == http.MethodPost || m.method == http.MethodPut {
+	if m.bodyTemplateRaw != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	// Validate custom headers and key-based headers per RFC 7230 before
-	// attaching them to the request (mirrors the output module's safeguard).
 	validated := make(map[string]string, len(m.headers)+len(m.keys))
 	for key, value := range m.headers {
 		evaluatedValue := value
 		if template.HasVariables(value) {
 			evaluatedValue = m.templateEvaluator.Evaluate(value, record)
 		}
-		httpclient.TryAddValidHeader(validated, key, evaluatedValue)
+		if hErr := httpclient.AddValidatedHeader(validated, key, evaluatedValue); hErr != nil {
+			return nil, newHTTPCallError(
+				ErrCodeHTTPCallHTTPError,
+				fmt.Sprintf("http_call invalid header: %v", hErr),
+				recordIdx, m.endpoint, 0, m.compositeKeyString(keyValues),
+			)
+		}
 	}
 	for _, k := range m.keys {
 		if k.ParamType == "header" {
 			if v := keyValues[k.ParamName]; v != "" {
-				httpclient.TryAddValidHeader(validated, k.ParamName, v)
+				if hErr := httpclient.AddValidatedHeader(validated, k.ParamName, v); hErr != nil {
+					return nil, newHTTPCallError(
+						ErrCodeHTTPCallHTTPError,
+						fmt.Sprintf("http_call invalid key header: %v", hErr),
+						recordIdx, m.endpoint, 0, m.compositeKeyString(keyValues),
+					)
+				}
 			}
 		}
 	}
@@ -632,7 +661,6 @@ func (m *HTTPCallModule) buildHTTPRequest(ctx context.Context, requestURL string
 		req.Header.Set(key, value)
 	}
 
-	// Apply authentication
 	if m.authHandler != nil {
 		if authErr := m.authHandler.ApplyAuth(ctx, req); authErr != nil {
 			return nil, newHTTPCallError(

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/expr-lang/expr/vm"
@@ -44,19 +43,11 @@ const (
 	defaultAPIKeyHeader = "X-API-Key"
 )
 
-// Supported HTTP methods for output module
-var supportedMethods = map[string]bool{
-	"POST":  true,
-	"PUT":   true,
-	"PATCH": true,
-}
-
 // Error types for HTTP request output module
 var (
 	ErrNilConfig         = errors.New("module configuration is nil")
 	ErrMissingEndpoint   = errors.New("endpoint is required in module configuration")
 	ErrMissingMethod     = errors.New("method is required in module configuration")
-	ErrInvalidMethod     = errors.New("invalid HTTP method: must be POST, PUT, or PATCH")
 	ErrHTTPRequestFailed = errors.New("HTTP request failed")
 	ErrJSONMarshal       = errors.New("failed to marshal records to JSON")
 )
@@ -99,11 +90,10 @@ type HTTPRequestModule struct {
 type HTTPRequestOutputConfig struct {
 	connector.ModuleBase
 	moduleconfig.HTTPRequestBase
-	RequestMode      string                   `json:"requestMode,omitempty"`
-	Keys             []moduleconfig.KeyConfig `json:"keys,omitempty"`
-	BodyTemplateFile string                   `json:"bodyTemplateFile,omitempty"`
-	Success          *SuccessCodeConfig       `json:"success,omitempty"`
-	Retry            *connector.RetryConfig   `json:"retry,omitempty"`
+	RequestMode string                   `json:"requestMode,omitempty"`
+	Keys        []moduleconfig.KeyConfig `json:"keys,omitempty"`
+	Success     *SuccessCodeConfig       `json:"success,omitempty"`
+	Retry       *connector.RetryConfig   `json:"retry,omitempty"`
 }
 
 // SuccessCodeConfig holds success status codes configuration.
@@ -141,9 +131,9 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 	if cfg.Method == "" {
 		return nil, ErrMissingMethod
 	}
-	method := strings.ToUpper(cfg.Method)
-	if !supportedMethods[method] {
-		return nil, fmt.Errorf("%w: %s", ErrInvalidMethod, method)
+	method, err := httpclient.NormalizeAndValidateMethod(cfg.Method)
+	if err != nil {
+		return nil, err
 	}
 
 	timeout := connector.GetTimeoutDuration(cfg.TimeoutMs, defaultHTTPTimeout)
@@ -152,6 +142,7 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 		RequestMode:      cfg.RequestMode,
 		QueryParams:      cfg.QueryParams,
 		BodyTemplateFile: cfg.BodyTemplateFile,
+		bodyTemplateRaw:  cfg.Body,
 	}
 	if reqConfig.RequestMode == "" {
 		reqConfig.RequestMode = defaultRequestMode
@@ -174,6 +165,9 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 	}
 
 	retryConfig := moduleconfig.ToRetryConfig(cfg.Retry)
+	if vErr := retryConfig.Validate(); vErr != nil {
+		return nil, fmt.Errorf("httpRequest retry config invalid: %w", vErr)
+	}
 
 	client := httpclient.NewClient(timeout)
 
@@ -193,15 +187,17 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 		return nil, fmt.Errorf("validating template configuration: %w", err)
 	}
 
-	// Load body template file if configured
-	if reqConfig.BodyTemplateFile != "" {
+	if reqConfig.bodyTemplateRaw != "" {
+		if err := template.ValidateSyntax(reqConfig.bodyTemplateRaw); err != nil {
+			return nil, fmt.Errorf("invalid template syntax in body: %w", err)
+		}
+	} else if reqConfig.BodyTemplateFile != "" {
 		templateContent, err := os.ReadFile(reqConfig.BodyTemplateFile)
 		if err != nil {
 			return nil, fmt.Errorf("loading body template file %q: %w", reqConfig.BodyTemplateFile, err)
 		}
 		reqConfig.bodyTemplateRaw = string(templateContent)
 
-		// Validate template syntax in loaded file
 		if err := template.ValidateSyntax(reqConfig.bodyTemplateRaw); err != nil {
 			return nil, fmt.Errorf("invalid template syntax in %q: %w", reqConfig.BodyTemplateFile, err)
 		}
@@ -401,7 +397,10 @@ func (h *HTTPRequestModule) sendBatchMode(ctx context.Context, records []map[str
 	// Evaluate templated headers using first record in batch mode
 	var batchHeaders map[string]string
 	if len(records) > 0 {
-		batchHeaders = h.extractHeadersFromRecord(records[0])
+		batchHeaders, err = h.extractHeadersFromRecord(records[0])
+		if err != nil {
+			return 0, err
+		}
 	}
 
 	// Execute request with batch-resolved headers
@@ -453,7 +452,14 @@ func (h *HTTPRequestModule) sendSingleRecordMode(ctx context.Context, records []
 		}
 
 		endpoint := h.resolveEndpointForRecord(record)
-		recordHeaders := h.extractHeadersFromRecord(record)
+		recordHeaders, hdrErr := h.extractHeadersFromRecord(record)
+		if hdrErr != nil {
+			failed++
+			if h.onError == errhandling.OnErrorFail {
+				return sent, fmt.Errorf("at record %d: %w", i, hdrErr)
+			}
+			continue
+		}
 
 		ok, err := h.executeRequestAndLog(ctx, endpoint, body, recordHeaders, i, requestStart)
 		if !ok {

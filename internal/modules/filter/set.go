@@ -8,6 +8,7 @@ package filter
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -24,6 +25,29 @@ type SetConfig struct {
 	Target string `json:"target"`
 	// Value is the literal value to set
 	Value any `json:"value"`
+	// HasValue tracks whether the JSON `value` key was present (including
+	// explicit null) so the runtime can distinguish "absent" — which the
+	// schema rejects — from "present and null" — which the runtime accepts
+	// and stores as a real nil.
+	HasValue bool `json:"-"`
+}
+
+// UnmarshalJSON tracks whether the `value` key was provided. Without this
+// probe a payload like {"target":"x"} would be indistinguishable from
+// {"target":"x","value":null}, both leaving Value at its zero value (nil).
+func (c *SetConfig) UnmarshalJSON(data []byte) error {
+	type alias SetConfig
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	*c = SetConfig(a)
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return err
+	}
+	_, c.HasValue = probe["value"]
+	return nil
 }
 
 // SetModule implements the set filter that sets or modifies a single field on each record.
@@ -32,11 +56,13 @@ type SetModule struct {
 }
 
 // NewSetFromConfig creates a new set filter module from configuration.
-// It validates Target only; for full validation (including required value), use ParseSetConfig
-// which is used by the registry when building modules from pipeline config.
+// Validates Target and the explicit presence of Value (null is accepted).
 func NewSetFromConfig(config SetConfig) (*SetModule, error) {
 	if config.Target == "" {
 		return nil, errors.New("target field path is required")
+	}
+	if !config.HasValue {
+		return nil, errors.New("'value' is required (use null to set the field to null)")
 	}
 
 	if _, err := errhandling.ParseOnErrorStrategy(config.OnError); err != nil {
@@ -106,18 +132,18 @@ func (m *SetModule) processRecord(record map[string]any) (map[string]any, error)
 func ParseSetConfig(config map[string]any) (SetConfig, error) {
 	var cfg SetConfig
 
-	// Parse and validate target (required)
 	target, ok := config["target"].(string)
 	if !ok || target == "" {
 		return cfg, errors.New("'target' is required and must be a non-empty string")
 	}
 	cfg.Target = target
 
-	// Check if value key exists (including nil values)
-	if _, hasValue := config["value"]; !hasValue {
-		return cfg, errors.New("'value' is required")
+	value, hasValue := config["value"]
+	if !hasValue {
+		return cfg, errors.New("'value' is required (use null to set the field to null)")
 	}
-	cfg.Value = config["value"]
+	cfg.Value = value
+	cfg.HasValue = true
 
 	return cfg, nil
 }

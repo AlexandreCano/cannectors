@@ -22,7 +22,7 @@ filters:
         target: routing.bucket
         value: review
       - type: remove
-        targets:
+        target:
           - card.cvv
           - card.number
 output:

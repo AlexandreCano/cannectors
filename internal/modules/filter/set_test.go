@@ -76,15 +76,22 @@ func TestNewSetFromConfig_Validation(t *testing.T) {
 	}{
 		{
 			name:    "missing target",
-			config:  SetConfig{Value: "test"},
+			config:  SetConfig{Value: "test", HasValue: true},
 			wantErr: true,
 			errMsg:  "target field path is required",
 		},
 		{
+			name:    "missing value",
+			config:  SetConfig{Target: "id"},
+			wantErr: true,
+			errMsg:  "'value' is required",
+		},
+		{
 			name: "valid config",
 			config: SetConfig{
-				Target: "id",
-				Value:  "value",
+				Target:   "id",
+				Value:    "value",
+				HasValue: true,
 			},
 			wantErr: false,
 		},
@@ -117,7 +124,7 @@ func TestSetModule_Process_LiteralValue(t *testing.T) {
 	}{
 		{
 			name:   "set string literal on existing field (overwrite)",
-			config: SetConfig{Target: "id", Value: "new-id"},
+			config: SetConfig{Target: "id", Value: "new-id", HasValue: true},
 			input: []map[string]any{
 				{"id": "old-id", "name": "Alice"},
 			},
@@ -127,7 +134,7 @@ func TestSetModule_Process_LiteralValue(t *testing.T) {
 		},
 		{
 			name:   "set string literal on missing field (create)",
-			config: SetConfig{Target: "id", Value: "new-id"},
+			config: SetConfig{Target: "id", Value: "new-id", HasValue: true},
 			input: []map[string]any{
 				{"name": "Alice"},
 			},
@@ -137,7 +144,7 @@ func TestSetModule_Process_LiteralValue(t *testing.T) {
 		},
 		{
 			name:   "set integer literal",
-			config: SetConfig{Target: "version", Value: 42},
+			config: SetConfig{Target: "version", Value: 42, HasValue: true},
 			input: []map[string]any{
 				{"name": "Alice"},
 			},
@@ -147,7 +154,7 @@ func TestSetModule_Process_LiteralValue(t *testing.T) {
 		},
 		{
 			name:   "set boolean literal",
-			config: SetConfig{Target: "active", Value: true},
+			config: SetConfig{Target: "active", Value: true, HasValue: true},
 			input: []map[string]any{
 				{"name": "Alice"},
 			},
@@ -157,7 +164,7 @@ func TestSetModule_Process_LiteralValue(t *testing.T) {
 		},
 		{
 			name:   "set null literal",
-			config: SetConfig{Target: "deleted_at", Value: nil},
+			config: SetConfig{Target: "deleted_at", Value: nil, HasValue: true},
 			input: []map[string]any{
 				{"name": "Alice", "deleted_at": "2024-01-01"},
 			},
@@ -167,7 +174,7 @@ func TestSetModule_Process_LiteralValue(t *testing.T) {
 		},
 		{
 			name:   "set float literal",
-			config: SetConfig{Target: "score", Value: 3.14},
+			config: SetConfig{Target: "score", Value: 3.14, HasValue: true},
 			input: []map[string]any{
 				{"name": "Alice"},
 			},
@@ -177,7 +184,7 @@ func TestSetModule_Process_LiteralValue(t *testing.T) {
 		},
 		{
 			name:   "preserve other fields unchanged",
-			config: SetConfig{Target: "status", Value: "active"},
+			config: SetConfig{Target: "status", Value: "active", HasValue: true},
 			input: []map[string]any{
 				{"id": 1, "name": "Alice", "email": "alice@example.com"},
 			},
@@ -187,7 +194,7 @@ func TestSetModule_Process_LiteralValue(t *testing.T) {
 		},
 		{
 			name:   "process multiple records",
-			config: SetConfig{Target: "status", Value: "processed"},
+			config: SetConfig{Target: "status", Value: "processed", HasValue: true},
 			input: []map[string]any{
 				{"id": 1},
 				{"id": 2},
@@ -243,7 +250,7 @@ func TestSetModule_Process_NestedTargetPath(t *testing.T) {
 	}{
 		{
 			name:   "create nested path when intermediate keys missing",
-			config: SetConfig{Target: "metadata.version", Value: "1.0.0"},
+			config: SetConfig{Target: "metadata.version", Value: "1.0.0", HasValue: true},
 			input: []map[string]any{
 				{"id": 1},
 			},
@@ -253,7 +260,7 @@ func TestSetModule_Process_NestedTargetPath(t *testing.T) {
 		},
 		{
 			name:   "update existing nested path",
-			config: SetConfig{Target: "metadata.version", Value: "2.0.0"},
+			config: SetConfig{Target: "metadata.version", Value: "2.0.0", HasValue: true},
 			input: []map[string]any{
 				{"id": 1, "metadata": map[string]any{"version": "1.0.0", "author": "Alice"}},
 			},
@@ -263,7 +270,7 @@ func TestSetModule_Process_NestedTargetPath(t *testing.T) {
 		},
 		{
 			name:   "deeply nested path creation",
-			config: SetConfig{Target: "a.b.c.d", Value: "deep"},
+			config: SetConfig{Target: "a.b.c.d", Value: "deep", HasValue: true},
 			input: []map[string]any{
 				{"id": 1},
 			},
@@ -314,7 +321,7 @@ func TestSetModule_Process_NestedTargetPath(t *testing.T) {
 }
 
 func TestSetModule_Process_EmptyInput(t *testing.T) {
-	module, err := NewSetFromConfig(SetConfig{Target: "id", Value: "test"})
+	module, err := NewSetFromConfig(SetConfig{Target: "id", Value: "test", HasValue: true})
 	if err != nil {
 		t.Fatalf("failed to create module: %v", err)
 	}
@@ -330,7 +337,7 @@ func TestSetModule_Process_EmptyInput(t *testing.T) {
 }
 
 func TestSetModule_Process_ContextCancellation(t *testing.T) {
-	module, err := NewSetFromConfig(SetConfig{Target: "id", Value: "test"})
+	module, err := NewSetFromConfig(SetConfig{Target: "id", Value: "test", HasValue: true})
 	if err != nil {
 		t.Fatalf("failed to create module: %v", err)
 	}

@@ -107,8 +107,8 @@ func TestCreateFilterModules_ConditionNestedTopLevelModuleShape(t *testing.T) {
 				},
 				"else": []any{
 					map[string]any{
-						"type":    "remove",
-						"targets": []any{"card.number", "card.cvv"},
+						"type":   "remove",
+						"target": []any{"card.number", "card.cvv"},
 					},
 				},
 			}),

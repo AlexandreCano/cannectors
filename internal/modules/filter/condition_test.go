@@ -653,7 +653,7 @@ func TestNestedModuleConfigUnmarshalPreservesTopLevelFilterShape(t *testing.T) {
 			{"type": "mapping", "mappings": [{"source": "id", "target": "payment.id"}]}
 		],
 		"else": [
-			{"type": "remove", "targets": ["card.number", "card.cvv"]}
+			{"type": "remove", "target": ["card.number", "card.cvv"]}
 		]
 	}`)
 
@@ -672,9 +672,9 @@ func TestNestedModuleConfigUnmarshalPreservesTopLevelFilterShape(t *testing.T) {
 		t.Fatalf("expected nested mapping mappings to be preserved, got %d", len(cfg.Then[1].Mappings))
 	}
 
-	targets, ok := cfg.Else[0].Config["targets"].([]any)
+	targets, ok := cfg.Else[0].Config["target"].([]any)
 	if !ok {
-		t.Fatalf("expected nested remove targets in Config, got %T", cfg.Else[0].Config["targets"])
+		t.Fatalf("expected nested remove target list in Config, got %T", cfg.Else[0].Config["target"])
 	}
 	if len(targets) != 2 || targets[0] != "card.number" || targets[1] != "card.cvv" {
 		t.Fatalf("unexpected nested remove targets: %v", targets)
@@ -1708,8 +1708,9 @@ func TestConditionNestedDisabledModuleSkipped(t *testing.T) {
 	}, func(cfg *NestedModuleConfig, _ int) (Module, error) {
 		target, _ := cfg.Config["target"].(string)
 		return NewSetFromConfig(SetConfig{
-			Target: target,
-			Value:  cfg.Config["value"],
+			Target:   target,
+			Value:    cfg.Config["value"],
+			HasValue: true,
 		})
 	})
 	if err != nil {

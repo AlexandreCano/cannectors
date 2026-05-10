@@ -29,7 +29,7 @@ filters:
     target: metadata.source
     value: events-api
   - type: remove
-    targets:
+    target:
       - debug
       - internal.notes
 output:

@@ -138,26 +138,20 @@
 		"removeFilterConfig": {
 			"type": "object",
 			"description": "Remove filter module configuration. Removes one or more fields from each record.",
+			"required": [ "target" ],
 			"properties": {
 				"target": {
-					"type": "string",
-					"minLength": 1,
-					"description": "Single field path to remove (e.g. id, user.email). Use 'targets' for multiple fields."
-				},
-				"targets": {
-					"type": "array",
-					"items": {
-						"type": "string",
-						"minLength": 1
-					},
-					"minItems": 1,
-					"description": "List of field paths to remove. Supports dot notation for nested paths."
+					"description": "Field path(s) to remove. Either a single non-empty string or a non-empty array of non-empty strings. Supports dot notation for nested paths.",
+					"oneOf": [
+						{ "type": "string", "minLength": 1 },
+						{
+							"type": "array",
+							"items": { "type": "string", "minLength": 1 },
+							"minItems": 1
+						}
+					]
 				}
-			},
-			"anyOf": [
-				{ "required": [ "target" ] },
-				{ "required": [ "targets" ] }
-			]
+			}
 		},
 
 		"scriptFilterConfig": {
@@ -166,28 +160,18 @@
 			"properties": {
 				"script": {
 					"type": "string",
+					"minLength": 1,
 					"description": "Inline JavaScript source code containing a transform(record) function."
 				},
 				"scriptFile": {
 					"type": "string",
+					"minLength": 1,
 					"description": "Path to JavaScript file containing the transform(record) function."
 				}
 			},
-			"allOf": [
-				{
-					"oneOf": [
-						{ "required": [ "script" ] },
-						{ "required": [ "scriptFile" ] }
-					]
-				},
-				{
-					"not": {
-						"required": [
-							"script",
-							"scriptFile"
-						]
-					}
-				}
+			"oneOf": [
+				{ "required": [ "script" ], "not": { "required": [ "scriptFile" ] } },
+				{ "required": [ "scriptFile" ], "not": { "required": [ "script" ] } }
 			]
 		},
 

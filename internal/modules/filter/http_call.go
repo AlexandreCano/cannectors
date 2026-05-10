@@ -44,19 +44,11 @@ const (
 	ErrCodeHTTPCallKeyExtract      = "HTTP_CALL_KEY_EXTRACT"
 	ErrCodeHTTPCallHTTPError       = "HTTP_CALL_HTTP_ERROR"
 	ErrCodeHTTPCallJSONParse       = "HTTP_CALL_JSON_PARSE"
-	ErrCodeHTTPCallMerge           = "HTTP_CALL_MERGE"
 )
 
 // Error messages
 const (
 	errMsgParsingEndpointURL = "parsing endpoint URL: %w"
-)
-
-// Error types for http_call module
-var (
-	ErrHTTPCallEndpointMissing = fmt.Errorf("http_call endpoint is required")
-	ErrHTTPCallKeyMissing      = fmt.Errorf("http_call key configuration is required")
-	ErrHTTPCallKeyInvalid      = fmt.Errorf("http_call key paramType must be 'query', 'path', or 'header'")
 )
 
 // HTTPCallConfig represents the configuration for an http_call filter module.

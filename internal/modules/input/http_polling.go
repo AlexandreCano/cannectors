@@ -45,7 +45,6 @@ const (
 var (
 	ErrNilConfig        = errors.New("module configuration is nil")
 	ErrMissingEndpoint  = errors.New("endpoint is required in module configuration")
-	ErrHTTPRequest      = errors.New("http request failed")
 	ErrJSONParse        = errors.New("failed to parse JSON response")
 	ErrInvalidDataField = errors.New("dataField does not contain an array")
 )

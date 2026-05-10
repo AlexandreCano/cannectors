@@ -30,7 +30,6 @@ const (
 const (
 	StatusSuccess = "success"
 	StatusError   = "error"
-	StatusPartial = "partial"
 )
 
 // filterResult holds the result of filter module execution

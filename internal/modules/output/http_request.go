@@ -45,10 +45,9 @@ const (
 
 // Error types for HTTP request output module
 var (
-	ErrNilConfig         = errors.New("module configuration is nil")
-	ErrMissingEndpoint   = errors.New("endpoint is required in module configuration")
-	ErrHTTPRequestFailed = errors.New("HTTP request failed")
-	ErrJSONMarshal       = errors.New("failed to marshal records to JSON")
+	ErrNilConfig       = errors.New("module configuration is nil")
+	ErrMissingEndpoint = errors.New("endpoint is required in module configuration")
+	ErrJSONMarshal     = errors.New("failed to marshal records to JSON")
 )
 
 // keyEntry holds parsed key config for request building (internal use).

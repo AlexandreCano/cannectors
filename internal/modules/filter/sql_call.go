@@ -6,7 +6,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -37,11 +36,6 @@ const (
 const (
 	// RecordFieldPrefix is the prefix for record field access in templates
 	RecordFieldPrefix = "record."
-)
-
-// Error types for sql_call module
-var (
-	ErrSQLCallNilConfig = errors.New("sql_call configuration is nil")
 )
 
 // SQLCallConfig represents the configuration for a sql_call filter module.

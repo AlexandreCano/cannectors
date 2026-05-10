@@ -20,9 +20,7 @@ import (
 
 // Error codes for condition module
 const (
-	ErrCodeInvalidExpression = "INVALID_EXPRESSION"
-	ErrCodeEvaluationFailed  = "EVALUATION_FAILED"
-	ErrCodeExpressionTooLong = "EXPRESSION_TOO_LONG"
+	ErrCodeEvaluationFailed = "EVALUATION_FAILED"
 )
 
 // Security limits for expression validation
@@ -53,10 +51,7 @@ type NestedModuleCreator func(config *NestedModuleConfig, index int) (Module, er
 
 // Supported expression languages
 // Currently only the default expr-based language is supported. The schema no
-// longer exposes a `lang` field; this constant exists for log/debug context.
-const (
-	LangDefault = "expr"
-)
+// longer exposes a `lang` field.
 
 // ConditionConfig represents the configuration for a condition filter module.
 type ConditionConfig struct {

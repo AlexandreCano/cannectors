@@ -40,17 +40,13 @@ const (
 
 // Webhook-specific error types
 var (
-	ErrWebhookServerClosed    = errors.New("webhook server closed")
 	ErrInvalidSignature       = errors.New("invalid webhook signature")
 	ErrMissingSignature       = errors.New("missing required signature header")
-	ErrEmptyRequestBody       = errors.New("request body is empty")
 	ErrInvalidJSONPayload     = errors.New("invalid JSON payload")
 	ErrMissingSignatureSecret = errors.New("signature validation requires secret")
 	ErrUnsupportedSignature   = errors.New("unsupported signature type")
 	ErrMissingSignatureType   = errors.New("signature type is required")
 	ErrMissingPath            = errors.New("path is required")
-	ErrRateLimited            = errors.New("rate limit exceeded")
-	ErrQueueFull              = errors.New("webhook queue is full")
 	ErrInvalidQueueSize       = errors.New("queueSize must be >= 0")
 	ErrInvalidMaxConcurrent   = errors.New("maxConcurrent must be >= 0")
 )

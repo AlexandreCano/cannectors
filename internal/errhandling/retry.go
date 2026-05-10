@@ -13,11 +13,7 @@ import (
 
 // Default retry configuration values
 const (
-	DefaultMaxAttempts       = 3
-	DefaultDelayMs           = 1000
-	DefaultBackoffMultiplier = 2.0
-	DefaultMaxDelayMs        = 30000
-	DefaultTimeoutMs         = 30000
+	DefaultTimeoutMs = 30000
 )
 
 // OnErrorStrategy defines what action to take when an error occurs.

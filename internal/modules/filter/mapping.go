@@ -19,7 +19,6 @@ import (
 
 // Error codes for mapping module
 const (
-	ErrCodeInvalidMapping   = "INVALID_MAPPING"
 	ErrCodeMissingField     = "MISSING_FIELD"
 	ErrCodeTypeConversion   = "TYPE_CONVERSION"
 	ErrCodeTransformFailed  = "TRANSFORM_FAILED"

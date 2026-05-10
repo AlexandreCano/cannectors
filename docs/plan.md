@@ -389,7 +389,7 @@ internal/config/schema_compliance_test.go (nouveau)
 
 ### 6.3 Tests de non-régression
 
-Utiliser `configs/examples/` comme fixtures:
+Utiliser `examples/` comme fixtures:
 - Chaque exemple doit:
   1. Valider sans erreur
   2. Parser en Pipeline

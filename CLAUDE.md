@@ -152,7 +152,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 - **Schema requiert toujours `filters:`** au top-level, même vide (`filters: []`). Sans, validation échoue avec `missing required property "filters"`.
 - **`schedule` minLength = 9** : le format CRON 5 champs (`* * * * *`) ne passe pas. Utiliser le format 6 champs (`* * * * * *`).
-- **Les exemples sous `examples/` peuvent être stale** par rapport au schema actuel — toujours valider avec `./cannectors validate <file> --verbose` avant de partir d'un exemple.
+- **Les exemples maintenus vivent sous `examples/`** et doivent rester valides avec `./cannectors validate <file> --verbose`. Ne pas recréer d'exemples sous un ancien dossier legacy.
 - **Webhook input n'est pas utilisable via `cannectors run`** sans le branchement spécifique (`runWebhookPipeline`) ajouté en 22.7. Si tu écris un nouvel input callback-based (non-`Fetch`), il faut l'aiguillage dans `cmd/cannectors/main.go`.
 
 ### Outillage tooling agent

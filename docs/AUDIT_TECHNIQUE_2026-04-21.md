@@ -261,7 +261,7 @@ Sur ce que j'ai vu :
 
 #### P2.6 — Test de conformité schema/runtime automatique
 **Problème** : plan.md mentionne 8 champs où schéma et code divergent. Pas de garde-fou.
-**Solution** : fichier `internal/config/schema_compliance_test.go` qui charge chaque `configs/examples/*.yaml`, parse, convertit en Pipeline, instancie tous les modules sans exécuter. Échoue si un champ du schéma est ignoré.
+**Solution** : fichier `internal/config/schema_compliance_test.go` qui charge chaque `examples/*.yaml`, parse, convertit en Pipeline, instancie tous les modules sans exécuter. Échoue si un champ du schéma est ignoré.
 **Effort** : **moyen** (1 jour, à amortir).
 
 ### P3 — Nice-to-have
@@ -285,7 +285,7 @@ Sur ce que j'ai vu :
 2. Ajouter l'entrée dans `registry/builtins.go:49-144`.
 3. Ajouter le type dans `validInputTypes`/`validFilterTypes`/`validOutputTypes` de `config/validator.go:156-159`.
 4. Mettre à jour le JSON Schema (`internal/config/schema/filter-schema.json`).
-5. Ajouter un exemple dans `configs/examples/`.
+5. Ajouter un exemple dans `examples/`.
 
 **Simple et clean** — bon point.
 

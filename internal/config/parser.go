@@ -263,10 +263,10 @@ func ParseConfigString(content string, format string) *Result {
 }
 
 // unwrapConnectorRoot accepts both the canonical pipeline shape (top-level
-// `name`/`input`/`output`/`filters`) and the documentation-style shape used
-// by every file under `configs/examples/`, where the pipeline lives under a
-// single `connector` key. When the latter is detected, the inner object is
-// returned so the schema and converter see the canonical layout.
+// `name`/`input`/`output`/`filters`) and the legacy documentation-style shape
+// where the pipeline lives under a single `connector` key. When the latter is
+// detected, the inner object is returned so the schema and converter see the
+// canonical layout.
 func unwrapConnectorRoot(data map[string]any) map[string]any {
 	if len(data) != 1 {
 		return data

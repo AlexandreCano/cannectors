@@ -53,8 +53,6 @@ connector:
   filters:
     - type: condition
       expression: "status != 'pending'"
-      onTrue: continue
-      onFalse: skip
 
     - type: mapping
       mappings:

@@ -92,6 +92,28 @@ func (f *FieldMapping) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalJSON ensures defaultValue round-trips correctly: when the field was
+// explicitly set (including to null), it is emitted; otherwise it is omitted.
+// The default Go marshaller cannot express this because `omitempty` drops
+// nil interface values regardless of intent.
+func (f FieldMapping) MarshalJSON() ([]byte, error) {
+	out := make(map[string]any, 6)
+	if f.Source != nil {
+		out["source"] = *f.Source
+	}
+	out["target"] = f.Target
+	if f.HasDefaultValue {
+		out["defaultValue"] = f.DefaultValue
+	}
+	if f.OnMissing != "" {
+		out["onMissing"] = f.OnMissing
+	}
+	if len(f.Transforms) > 0 {
+		out["transforms"] = f.Transforms
+	}
+	return json.Marshal(out)
+}
+
 // MappingModuleConfig is the top-level config struct for the mapping filter module.
 // Used by moduleconfig.ParseModuleConfig to deserialize from JSON.
 type MappingModuleConfig struct {

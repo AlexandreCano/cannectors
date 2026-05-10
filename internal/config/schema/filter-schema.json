@@ -12,7 +12,7 @@
 			"properties": {
 				"type": {
 					"type": "string",
-					"description": "Filter type. Canonical: mapping, condition, set, remove, script, http_call, sql_call.",
+					"description": "Filter type. Canonical: mapping, condition, drop, set, remove, script, http_call, sql_call.",
 					"minLength": 1
 				}
 			},
@@ -56,12 +56,18 @@
 								{ "properties": { "type": { "const": "set" } }, "required": [ "type" ] }
 							]
 						},
-						{
-							"allOf": [
-								{ "$ref": "#/$defs/removeFilterConfig" },
-								{ "properties": { "type": { "const": "remove" } }, "required": [ "type" ] }
-							]
-						}
+					{
+						"allOf": [
+							{ "$ref": "#/$defs/removeFilterConfig" },
+							{ "properties": { "type": { "const": "remove" } }, "required": [ "type" ] }
+						]
+					},
+					{
+						"allOf": [
+							{ "$ref": "#/$defs/dropFilterConfig" },
+							{ "properties": { "type": { "const": "drop" } }, "required": [ "type" ] }
+						]
+					}
 					]
 				}
 			]
@@ -83,39 +89,13 @@
 
 		"conditionFilterConfig": {
 			"type": "object",
-			"description": "Condition filter module configuration. Conditionally processes records based on expressions.",
+			"description": "Condition filter module. Routes records based on an expression evaluated against each record. Records matching the expression go through the 'then' branch; others go through 'else'. An absent branch keeps the record unchanged. To drop records use the explicit 'drop' filter inside a branch.",
 			"required": [ "expression" ],
 			"properties": {
-				"lang": {
-					"type": "string",
-					"description": "Expression language for conditions.",
-					"enum": [
-						"cel",
-						"jsonata",
-						"jmespath",
-						"simple"
-					],
-					"default": "simple"
-				},
 				"expression": {
 					"type": "string",
-					"description": "Condition expression."
-				},
-				"onTrue": {
-					"type": "string",
-					"enum": [
-						"continue",
-						"skip"
-					],
-					"default": "continue"
-				},
-				"onFalse": {
-					"type": "string",
-					"enum": [
-						"continue",
-						"skip"
-					],
-					"default": "skip"
+					"minLength": 1,
+					"description": "Boolean expression evaluated against each record."
 				},
 				"then": {
 					"type": "array",
@@ -132,6 +112,11 @@
 					}
 				}
 			}
+		},
+
+		"dropFilterConfig": {
+			"type": "object",
+			"description": "Drop filter module. Removes every record it receives from the stream. Typically placed inside a condition branch to filter records out explicitly."
 		},
 
 		"setFilterConfig": {

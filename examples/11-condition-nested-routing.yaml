@@ -11,10 +11,7 @@ input:
   dataField: payments
 filters:
   - type: condition
-    lang: simple
     expression: status == "paid" && amount > 0
-    onTrue: continue
-    onFalse: continue
     then:
       - type: set
         target: routing.bucket

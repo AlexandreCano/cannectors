@@ -38,9 +38,6 @@ connector:
   filters:
     - type: condition
       expression: "status == 'completed' && total > 0"
-      lang: simple
-      onTrue: continue
-      onFalse: skip
       onError: log
 
     - type: mapping

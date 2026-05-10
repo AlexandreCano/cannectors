@@ -33,8 +33,6 @@ filters:
         - type: set
           target: is_active
           value: false
-      onTrue: continue
-      onFalse: continue
 
     - type: set
       target: source_system

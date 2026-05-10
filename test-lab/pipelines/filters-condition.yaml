@@ -12,10 +12,7 @@ input:
   dataField: records
 filters:
   - type: condition
-    lang: simple
     expression: status == "paid" && amount_int > 100
-    onTrue: continue
-    onFalse: continue
     then:
       - type: set
         target: routing.bucket

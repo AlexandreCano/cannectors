@@ -142,6 +142,12 @@ func registerBuiltinFilterModules() {
 		}
 		return module, nil
 	})
+
+	// drop - Discard every record it receives. Typically used inside a
+	// condition branch to make record filtering explicit (Story 24.9).
+	RegisterFilter("drop", func(_ connector.ModuleConfig, _ int) (filter.Module, error) {
+		return filter.NewDrop(), nil
+	})
 }
 
 // resolveNestedFilter resolves a NestedModuleConfig by serializing it back to
@@ -160,14 +166,10 @@ func resolveNestedFilter(nestedConfig *filter.NestedModuleConfig, index int) (fi
 	}
 
 	if len(nestedConfig.Mappings) > 0 {
-		mappings := make([]any, len(nestedConfig.Mappings))
-		for i, m := range nestedConfig.Mappings {
-			mappings[i] = map[string]any{
-				"source": m.Source,
-				"target": m.Target,
-			}
-		}
-		rawMap["mappings"] = mappings
+		// Re-emit the full FieldMapping (transforms, onMissing, defaultValue,
+		// …) — the nested constructor reparses through ParseModuleConfig and
+		// must see the same shape as a top-level mapping filter.
+		rawMap["mappings"] = nestedConfig.Mappings
 	}
 
 	if nestedConfig.OnError != "" {

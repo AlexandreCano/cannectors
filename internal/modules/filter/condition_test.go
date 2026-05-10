@@ -89,9 +89,7 @@ func TestConditionBasicEquality(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cond, err := NewConditionFromConfig(ConditionConfig{
 				Expression: tt.expression,
-				Lang:       "simple",
-				OnTrue:     "continue",
-				OnFalse:    "skip",
+				Else:       []*NestedModuleConfig{{Type: "drop"}},
 			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -199,9 +197,7 @@ func TestConditionNumericComparisons(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cond, err := NewConditionFromConfig(ConditionConfig{
 				Expression: tt.expression,
-				Lang:       "simple",
-				OnTrue:     "continue",
-				OnFalse:    "skip",
+				Else:       []*NestedModuleConfig{{Type: "drop"}},
 			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -297,9 +293,7 @@ func TestConditionLogicalOperators(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cond, err := NewConditionFromConfig(ConditionConfig{
 				Expression: tt.expression,
-				Lang:       "simple",
-				OnTrue:     "continue",
-				OnFalse:    "skip",
+				Else:       []*NestedModuleConfig{{Type: "drop"}},
 			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -367,9 +361,7 @@ func TestConditionNestedFieldAccess(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cond, err := NewConditionFromConfig(ConditionConfig{
 				Expression: tt.expression,
-				Lang:       "simple",
-				OnTrue:     "continue",
-				OnFalse:    "skip",
+				Else:       []*NestedModuleConfig{{Type: "drop"}},
 			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -436,9 +428,7 @@ func TestConditionArrayAccess(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cond, err := NewConditionFromConfig(ConditionConfig{
 				Expression: tt.expression,
-				Lang:       "simple",
-				OnTrue:     "continue",
-				OnFalse:    "skip",
+				Else:       []*NestedModuleConfig{{Type: "drop"}},
 			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -464,9 +454,7 @@ func TestConditionArrayAccess(t *testing.T) {
 func TestConditionMultipleRecords(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
-		Lang:       "simple",
-		OnTrue:     "continue",
-		OnFalse:    "skip",
+		Else:       []*NestedModuleConfig{{Type: "drop"}},
 	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -502,9 +490,6 @@ func TestConditionMultipleRecords(t *testing.T) {
 func TestConditionEmptyInput(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
-		Lang:       "simple",
-		OnTrue:     "continue",
-		OnFalse:    "skip",
 	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -534,185 +519,15 @@ func TestConditionConfigValidation(t *testing.T) {
 	// Valid configuration
 	_, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
-		Lang:       "simple",
 	}, nil)
 	if err != nil {
 		t.Errorf("valid config should not error: %v", err)
 	}
 }
 
-// TestConditionDefaultLang tests that default language is "simple"
-func TestConditionDefaultLang(t *testing.T) {
-	// Lang not specified should default to "simple"
-	cond, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "status == 'active'",
-	}, nil)
-	if err != nil {
-		t.Fatalf("NewConditionFromConfig() error = %v", err)
-	}
-
-	records := []map[string]any{{"status": "active"}}
-	result, err := cond.Process(context.Background(), records)
-	if err != nil {
-		t.Fatalf("Process() error = %v", err)
-	}
-
-	if len(result) != 1 {
-		t.Error("expected record to pass with default lang")
-	}
-}
-
 // ===========================================================================
 // Task 2: Routing Behavior Tests (onTrue/onFalse)
 // ===========================================================================
-
-// TestConditionOnTrueContinue tests onTrue="continue" (default) passes records when condition is true
-func TestConditionOnTrueContinue(t *testing.T) {
-	cond, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "status == 'active'",
-		OnTrue:     "continue",
-		OnFalse:    "skip",
-	}, nil)
-	if err != nil {
-		t.Fatalf("NewConditionFromConfig() error = %v", err)
-	}
-
-	records := []map[string]any{
-		{"id": 1, "status": "active"},
-	}
-
-	result, err := cond.Process(context.Background(), records)
-	if err != nil {
-		t.Fatalf("Process() error = %v", err)
-	}
-
-	if len(result) != 1 {
-		t.Errorf("expected 1 record to pass (onTrue=continue), got %d", len(result))
-	}
-}
-
-// TestConditionOnTrueSkip tests onTrue="skip" filters out records when condition is true
-func TestConditionOnTrueSkip(t *testing.T) {
-	cond, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "status == 'active'",
-		OnTrue:     "skip",
-		OnFalse:    "continue",
-	}, nil)
-	if err != nil {
-		t.Fatalf("NewConditionFromConfig() error = %v", err)
-	}
-
-	records := []map[string]any{
-		{"id": 1, "status": "active"},
-		{"id": 2, "status": "inactive"},
-	}
-
-	result, err := cond.Process(context.Background(), records)
-	if err != nil {
-		t.Fatalf("Process() error = %v", err)
-	}
-
-	// Only the "inactive" record should pass (onTrue=skip filters "active")
-	if len(result) != 1 {
-		t.Errorf("expected 1 record to pass (onTrue=skip), got %d", len(result))
-	}
-
-	if id, ok := result[0]["id"].(int); !ok || id != 2 {
-		t.Errorf("expected record with id=2 to pass, got %v", result[0]["id"])
-	}
-}
-
-// TestConditionOnFalseContinue tests onFalse="continue" passes records when condition is false
-func TestConditionOnFalseContinue(t *testing.T) {
-	cond, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "status == 'active'",
-		OnTrue:     "continue",
-		OnFalse:    "continue",
-	}, nil)
-	if err != nil {
-		t.Fatalf("NewConditionFromConfig() error = %v", err)
-	}
-
-	records := []map[string]any{
-		{"id": 1, "status": "active"},
-		{"id": 2, "status": "inactive"},
-	}
-
-	result, err := cond.Process(context.Background(), records)
-	if err != nil {
-		t.Fatalf("Process() error = %v", err)
-	}
-
-	// Both records should pass (onTrue=continue AND onFalse=continue)
-	if len(result) != 2 {
-		t.Errorf("expected 2 records to pass (onFalse=continue), got %d", len(result))
-	}
-}
-
-// TestConditionOnFalseSkip tests onFalse="skip" (default) filters out records when condition is false
-func TestConditionOnFalseSkip(t *testing.T) {
-	cond, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "status == 'active'",
-		OnTrue:     "continue",
-		OnFalse:    "skip",
-	}, nil)
-	if err != nil {
-		t.Fatalf("NewConditionFromConfig() error = %v", err)
-	}
-
-	records := []map[string]any{
-		{"id": 1, "status": "active"},
-		{"id": 2, "status": "inactive"},
-	}
-
-	result, err := cond.Process(context.Background(), records)
-	if err != nil {
-		t.Fatalf("Process() error = %v", err)
-	}
-
-	// Only "active" records should pass (onFalse=skip filters "inactive")
-	if len(result) != 1 {
-		t.Errorf("expected 1 record to pass (onFalse=skip), got %d", len(result))
-	}
-
-	if id, ok := result[0]["id"].(int); !ok || id != 1 {
-		t.Errorf("expected record with id=1 to pass, got %v", result[0]["id"])
-	}
-}
-
-// TestConditionDefaultRouting tests default routing behavior (onTrue=continue, onFalse=skip)
-func TestConditionDefaultRouting(t *testing.T) {
-	cond, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "qty > 10",
-		// Defaults: OnTrue="continue", OnFalse="skip"
-	}, nil)
-	if err != nil {
-		t.Fatalf("NewConditionFromConfig() error = %v", err)
-	}
-
-	records := []map[string]any{
-		{"id": 1, "qty": 5},   // false -> skip
-		{"id": 2, "qty": 15},  // true -> continue
-		{"id": 3, "qty": 10},  // false (not >) -> skip
-		{"id": 4, "qty": 100}, // true -> continue
-	}
-
-	result, err := cond.Process(context.Background(), records)
-	if err != nil {
-		t.Fatalf("Process() error = %v", err)
-	}
-
-	if len(result) != 2 {
-		t.Errorf("expected 2 records to pass with default routing, got %d", len(result))
-	}
-
-	expectedIDs := []int{2, 4}
-	for i, r := range result {
-		if id, ok := r["id"].(int); !ok || id != expectedIDs[i] {
-			t.Errorf("expected record with id=%d at position %d, got %v", expectedIDs[i], i, r["id"])
-		}
-	}
-}
 
 // TestConditionNullValueHandling tests handling of null values in conditions
 func TestConditionNullValueHandling(t *testing.T) {
@@ -752,8 +567,7 @@ func TestConditionNullValueHandling(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cond, err := NewConditionFromConfig(ConditionConfig{
 				Expression: tt.expression,
-				OnTrue:     "continue",
-				OnFalse:    "skip",
+				Else:       []*NestedModuleConfig{{Type: "drop"}},
 			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -806,8 +620,7 @@ func TestConditionTypeMismatchHandling(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cond, err := NewConditionFromConfig(ConditionConfig{
 				Expression: tt.expression,
-				OnTrue:     "continue",
-				OnFalse:    "skip",
+				Else:       []*NestedModuleConfig{{Type: "drop"}},
 			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -879,7 +692,6 @@ func TestConditionNestedThenMapping(t *testing.T) {
 				{Source: strPtrCond("id"), Target: "userId"},
 			},
 		}},
-		OnFalse: "skip",
 	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -915,11 +727,13 @@ func TestConditionNestedThenMapping(t *testing.T) {
 	}
 }
 
-// TestConditionNestedElseMapping tests 'else' with a nested mapping module
+// TestConditionNestedElseMapping tests 'else' with a nested mapping module.
+// Records matching the condition are dropped explicitly via the `drop` filter
+// in the `then` branch.
 func TestConditionNestedElseMapping(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active'",
-		OnTrue:     "skip", // Skip active records
+		Then:       []*NestedModuleConfig{{Type: "drop"}},
 		Else: []*NestedModuleConfig{{
 			Type: "mapping",
 			Mappings: []FieldMapping{
@@ -1009,17 +823,18 @@ func TestConditionNestedBothThenElse(t *testing.T) {
 	}
 }
 
-// TestConditionNestedRecursiveCondition tests nested condition within condition
+// TestConditionNestedRecursiveCondition tests nested condition within condition.
+// Uses explicit `drop` filters to remove records, since branches without
+// filters now keep records unchanged.
 func TestConditionNestedRecursiveCondition(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "level > 0",
 		Then: []*NestedModuleConfig{{
 			Type:       "condition",
 			Expression: "level > 5",
-			OnTrue:     "continue", // High level: keep
-			OnFalse:    "skip",     // Medium level: skip
+			Else:       []*NestedModuleConfig{{Type: "drop"}}, // Medium level: drop
 		}},
-		OnFalse: "skip", // Level 0: skip
+		Else: []*NestedModuleConfig{{Type: "drop"}}, // Level 0: drop
 	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -1043,110 +858,6 @@ func TestConditionNestedRecursiveCondition(t *testing.T) {
 
 	if result[0]["id"] != 3 {
 		t.Errorf("expected id=3, got %v", result[0]["id"])
-	}
-}
-
-// TestConditionNestedPriorityOverOnTrue tests that 'then' takes priority over onTrue
-func TestConditionNestedPriorityOverOnTrue(t *testing.T) {
-	cond, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "status == 'active'",
-		OnTrue:     "skip", // This should be ignored when 'then' is present
-		Then: []*NestedModuleConfig{{
-			Type: "mapping",
-			Mappings: []FieldMapping{
-				{Source: strPtrCond("id"), Target: "mappedId"},
-			},
-		}},
-		OnFalse: "skip",
-	}, nil)
-	if err != nil {
-		t.Fatalf("NewConditionFromConfig() error = %v", err)
-	}
-
-	records := []map[string]any{
-		{"id": 1, "status": "active"},
-	}
-
-	result, err := cond.Process(context.Background(), records)
-	if err != nil {
-		t.Fatalf("Process() error = %v", err)
-	}
-
-	// Record should be processed by 'then' module, not skipped
-	if len(result) != 1 {
-		t.Fatalf("expected 1 record (then takes priority over onTrue=skip), got %d", len(result))
-	}
-
-	if result[0]["mappedId"] != 1 {
-		t.Errorf("expected mappedId=1, got %v", result[0]["mappedId"])
-	}
-}
-
-// TestConditionNestedPriorityOverOnFalse tests that 'else' takes priority over onFalse
-func TestConditionNestedPriorityOverOnFalse(t *testing.T) {
-	cond, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "status == 'active'",
-		OnTrue:     "skip",
-		OnFalse:    "skip", // This should be ignored when 'else' is present
-		Else: []*NestedModuleConfig{{
-			Type: "mapping",
-			Mappings: []FieldMapping{
-				{Source: strPtrCond("id"), Target: "elseId"},
-			},
-		}},
-	}, nil)
-	if err != nil {
-		t.Fatalf("NewConditionFromConfig() error = %v", err)
-	}
-
-	records := []map[string]any{
-		{"id": 1, "status": "inactive"},
-	}
-
-	result, err := cond.Process(context.Background(), records)
-	if err != nil {
-		t.Fatalf("Process() error = %v", err)
-	}
-
-	// Record should be processed by 'else' module, not skipped
-	if len(result) != 1 {
-		t.Fatalf("expected 1 record (else takes priority over onFalse=skip), got %d", len(result))
-	}
-
-	if result[0]["elseId"] != 1 {
-		t.Errorf("expected elseId=1, got %v", result[0]["elseId"])
-	}
-}
-
-// TestConditionNestedModuleReturnsEmpty tests when nested module filters out record
-func TestConditionNestedModuleReturnsEmpty(t *testing.T) {
-	// Nested condition that filters out the record
-	cond, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "level > 0",
-		Then: []*NestedModuleConfig{{
-			Type:       "condition",
-			Expression: "level > 100", // This will be false
-			OnTrue:     "continue",
-			OnFalse:    "skip", // Skip the record
-		}},
-		OnFalse: "skip",
-	}, nil)
-	if err != nil {
-		t.Fatalf("NewConditionFromConfig() error = %v", err)
-	}
-
-	records := []map[string]any{
-		{"id": 1, "level": 10}, // level > 0: true -> then (level > 100: false -> skip)
-	}
-
-	result, err := cond.Process(context.Background(), records)
-	if err != nil {
-		t.Fatalf("Process() error = %v", err)
-	}
-
-	// Record should be filtered out by nested condition
-	if len(result) != 0 {
-		t.Errorf("expected 0 records (nested module filtered), got %d", len(result))
 	}
 }
 
@@ -1210,8 +921,7 @@ func TestConditionParenthesesGrouping(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cond, err := NewConditionFromConfig(ConditionConfig{
 				Expression: tt.expression,
-				OnTrue:     "continue",
-				OnFalse:    "skip",
+				Else:       []*NestedModuleConfig{{Type: "drop"}},
 			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -1291,8 +1001,7 @@ func TestConditionStringOperations(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cond, err := NewConditionFromConfig(ConditionConfig{
 				Expression: tt.expression,
-				OnTrue:     "continue",
-				OnFalse:    "skip",
+				Else:       []*NestedModuleConfig{{Type: "drop"}},
 			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -1359,8 +1068,7 @@ func TestConditionDeepNestedFieldAccess(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cond, err := NewConditionFromConfig(ConditionConfig{
 				Expression: tt.expression,
-				OnTrue:     "continue",
-				OnFalse:    "skip",
+				Else:       []*NestedModuleConfig{{Type: "drop"}},
 			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -1384,104 +1092,6 @@ func TestConditionDeepNestedFieldAccess(t *testing.T) {
 // ===========================================================================
 // Task 4: Expression Language Support Tests
 // ===========================================================================
-
-// TestConditionLangSimple tests that "simple" language works correctly
-func TestConditionLangSimple(t *testing.T) {
-	cond, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "status == 'active'",
-		Lang:       "simple",
-	}, nil)
-	if err != nil {
-		t.Fatalf("NewConditionFromConfig() error = %v", err)
-	}
-
-	records := []map[string]any{{"status": "active"}}
-	result, err := cond.Process(context.Background(), records)
-	if err != nil {
-		t.Fatalf("Process() error = %v", err)
-	}
-
-	if len(result) != 1 {
-		t.Errorf("expected 1 record with lang='simple', got %d", len(result))
-	}
-}
-
-// TestConditionLangCELNotImplemented tests that "cel" language returns appropriate error
-func TestConditionLangCELNotImplemented(t *testing.T) {
-	_, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "status == 'active'",
-		Lang:       "cel",
-	}, nil)
-	if err == nil {
-		t.Error("expected error for lang='cel' (not implemented)")
-	}
-	if !errors.Is(err, ErrUnsupportedLang) {
-		t.Errorf("expected ErrUnsupportedLang, got %v", err)
-	}
-}
-
-// TestConditionLangJSONataNotImplemented tests that "jsonata" language returns appropriate error
-func TestConditionLangJSONataNotImplemented(t *testing.T) {
-	_, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "status = 'active'",
-		Lang:       "jsonata",
-	}, nil)
-	if err == nil {
-		t.Error("expected error for lang='jsonata' (not implemented)")
-	}
-	if !errors.Is(err, ErrUnsupportedLang) {
-		t.Errorf("expected ErrUnsupportedLang, got %v", err)
-	}
-}
-
-// TestConditionLangJMESPathNotImplemented tests that "jmespath" language returns appropriate error
-func TestConditionLangJMESPathNotImplemented(t *testing.T) {
-	_, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "status == 'active'",
-		Lang:       "jmespath",
-	}, nil)
-	if err == nil {
-		t.Error("expected error for lang='jmespath' (not implemented)")
-	}
-	if !errors.Is(err, ErrUnsupportedLang) {
-		t.Errorf("expected ErrUnsupportedLang, got %v", err)
-	}
-}
-
-// TestConditionLangUnknown tests that unknown language returns appropriate error
-func TestConditionLangUnknown(t *testing.T) {
-	_, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "status == 'active'",
-		Lang:       "unknown-lang",
-	}, nil)
-	if err == nil {
-		t.Error("expected error for unknown lang")
-	}
-	if !errors.Is(err, ErrUnsupportedLang) {
-		t.Errorf("expected ErrUnsupportedLang, got %v", err)
-	}
-}
-
-// TestConditionLangDefaultIsSimple tests that empty lang defaults to "simple"
-func TestConditionLangDefaultIsSimple(t *testing.T) {
-	cond, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "value > 10",
-		// Lang not specified - should default to "simple"
-	}, nil)
-	if err != nil {
-		t.Fatalf("NewConditionFromConfig() error = %v", err)
-	}
-
-	records := []map[string]any{{"value": 15}}
-	result, err := cond.Process(context.Background(), records)
-	if err != nil {
-		t.Fatalf("Process() error = %v", err)
-	}
-
-	if len(result) != 1 {
-		t.Errorf("expected 1 record with default lang, got %d", len(result))
-	}
-}
 
 // ===========================================================================
 // Task 5: Error Handling and Validation Tests
@@ -1651,33 +1261,6 @@ func TestConditionInvalidOnErrorDefaultsToFail(t *testing.T) {
 	}
 }
 
-// TestConditionEmptyExpressionDefaultsToOnTrue ensures empty expressions return ErrEmptyExpression even when OnTrue is set.
-func TestConditionEmptyExpressionDefaultsToOnTrue(t *testing.T) {
-	_, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "",
-		OnTrue:     "continue",
-	}, nil)
-	if err == nil {
-		t.Fatal("NewConditionFromConfig() expected error for empty expression, got nil")
-	}
-	if !errors.Is(err, ErrEmptyExpression) {
-		t.Errorf("NewConditionFromConfig() expected ErrEmptyExpression, got %v", err)
-	}
-}
-
-func TestConditionEmptyExpressionOnTrueSkipFiltersAll(t *testing.T) {
-	_, err := NewConditionFromConfig(ConditionConfig{
-		Expression: " ",
-		OnTrue:     "skip",
-	}, nil)
-	if err == nil {
-		t.Fatal("NewConditionFromConfig() expected error for whitespace-only expression, got nil")
-	}
-	if !errors.Is(err, ErrEmptyExpression) {
-		t.Errorf("NewConditionFromConfig() expected ErrEmptyExpression, got %v", err)
-	}
-}
-
 // TestConditionErrorDetails tests that ConditionError Details field is properly populated
 func TestConditionErrorDetails(t *testing.T) {
 	// Use an expression that will actually cause an evaluation error
@@ -1758,8 +1341,7 @@ func TestConditionToBoolConversion(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cond, err := NewConditionFromConfig(ConditionConfig{
 				Expression: tt.expr,
-				OnTrue:     "continue",
-				OnFalse:    "skip",
+				Else:       []*NestedModuleConfig{{Type: "drop"}},
 			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -1778,52 +1360,6 @@ func TestConditionToBoolConversion(t *testing.T) {
 	}
 }
 
-// TestConditionInvalidOnTrueOnFalse tests that invalid onTrue/onFalse values are handled correctly
-func TestConditionInvalidOnTrueOnFalse(t *testing.T) {
-	tests := []struct {
-		name       string
-		onTrue     string
-		onFalse    string
-		shouldWarn bool
-	}{
-		{"valid values", "continue", "skip", false},
-		{"invalid onTrue", "contineu", "skip", true},   // typo
-		{"invalid onFalse", "continue", "skipp", true}, // typo
-		{"both invalid", "reject", "accept", true},
-		{"empty defaults", "", "", false}, // empty should use defaults
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cond, err := NewConditionFromConfig(ConditionConfig{
-				Expression: "value > 0",
-				OnTrue:     tt.onTrue,
-				OnFalse:    tt.onFalse,
-			}, nil)
-			if err != nil {
-				t.Fatalf("NewConditionFromConfig() error = %v", err)
-			}
-
-			// Test that it works despite invalid values (should default to valid ones)
-			records := []map[string]any{
-				{"value": 10}, // true condition
-				{"value": -5}, // false condition
-			}
-
-			result, err := cond.Process(context.Background(), records)
-			if err != nil {
-				t.Fatalf("Process() error = %v", err)
-			}
-
-			// Should process records successfully (invalid values are normalized)
-			// Note: len() can never be negative, but we check that processing succeeded
-			if result == nil {
-				t.Error("expected result to be non-nil")
-			}
-		})
-	}
-}
-
 // TestConditionInvalidExpressionError tests invalid expression detection
 func TestConditionInvalidExpressionError(t *testing.T) {
 	_, err := NewConditionFromConfig(ConditionConfig{
@@ -1836,33 +1372,6 @@ func TestConditionInvalidExpressionError(t *testing.T) {
 	// Error should wrap ErrInvalidExpression
 	if !errors.Is(err, ErrInvalidExpression) {
 		t.Errorf("expected ErrInvalidExpression, got %v", err)
-	}
-}
-
-// TestConditionDefaultOnErrorIsFail tests that default onError is "fail"
-func TestConditionDefaultOnErrorIsFail(t *testing.T) {
-	cond, err := NewConditionFromConfig(ConditionConfig{
-		Expression: "missing == 'value'",
-		// OnError not specified - should default to "fail"
-	}, nil)
-	if err != nil {
-		t.Fatalf("NewConditionFromConfig() error = %v", err)
-	}
-
-	records := []map[string]any{
-		{"other": "value"},
-	}
-
-	// With AllowUndefinedVariables, missing top-level fields return nil
-	// nil == 'value' is false, so record should be filtered out
-	result, err := cond.Process(context.Background(), records)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Record should be filtered out (condition evaluated to false because nil != 'value')
-	if len(result) != 0 {
-		t.Errorf("expected 0 records (condition false), got %d", len(result))
 	}
 }
 
@@ -1939,6 +1448,7 @@ func TestConditionChainWithMapping(t *testing.T) {
 	// Then apply condition on mapped output
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "value > 100",
+		Else:       []*NestedModuleConfig{{Type: "drop"}},
 	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -1994,6 +1504,7 @@ func TestConditionEmptyConditionBehavior(t *testing.T) {
 func TestConditionPreservesRecordOrder(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "keep == true",
+		Else:       []*NestedModuleConfig{{Type: "drop"}},
 	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -2033,6 +1544,7 @@ func TestConditionPreservesRecordOrder(t *testing.T) {
 func TestConditionDeterministicSameInputSameOutput(t *testing.T) {
 	cond, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "status == 'active' && amount > 50",
+		Else:       []*NestedModuleConfig{{Type: "drop"}},
 	}, nil)
 	if err != nil {
 		t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -2080,6 +1592,7 @@ func TestConditionDeterministicEvaluationConsistency(t *testing.T) {
 		t.Run(expr, func(t *testing.T) {
 			cond, err := NewConditionFromConfig(ConditionConfig{
 				Expression: expr,
+				Else:       []*NestedModuleConfig{{Type: "drop"}},
 			}, nil)
 			if err != nil {
 				t.Fatalf("NewConditionFromConfig() error = %v", err)
@@ -2112,72 +1625,6 @@ func TestConditionDeterministicEvaluationConsistency(t *testing.T) {
 						t.Errorf("iteration %d: result length %d != first result length %d",
 							i, len(result), len(firstResult))
 					}
-				}
-			}
-		})
-	}
-}
-
-// TestConditionDeterministicRoutingConsistency verifies routing is consistent
-func TestConditionDeterministicRoutingConsistency(t *testing.T) {
-	tests := []struct {
-		name      string
-		onTrue    string
-		onFalse   string
-		record    map[string]any
-		wantCount int
-	}{
-		{
-			name:      "onTrue=continue passes true condition",
-			onTrue:    "continue",
-			onFalse:   "skip",
-			record:    map[string]any{"value": true},
-			wantCount: 1,
-		},
-		{
-			name:      "onTrue=skip filters true condition",
-			onTrue:    "skip",
-			onFalse:   "continue",
-			record:    map[string]any{"value": true},
-			wantCount: 0,
-		},
-		{
-			name:      "onFalse=continue passes false condition",
-			onTrue:    "skip",
-			onFalse:   "continue",
-			record:    map[string]any{"value": false},
-			wantCount: 1,
-		},
-		{
-			name:      "onFalse=skip filters false condition",
-			onTrue:    "continue",
-			onFalse:   "skip",
-			record:    map[string]any{"value": false},
-			wantCount: 0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cond, err := NewConditionFromConfig(ConditionConfig{
-				Expression: "value == true",
-				OnTrue:     tt.onTrue,
-				OnFalse:    tt.onFalse,
-			}, nil)
-			if err != nil {
-				t.Fatalf("NewConditionFromConfig() error = %v", err)
-			}
-
-			// Run 50 times to verify consistency
-			for i := 0; i < 50; i++ {
-				result, err := cond.Process(context.Background(), []map[string]any{tt.record})
-				if err != nil {
-					t.Fatalf("Process() error on iteration %d = %v", i, err)
-				}
-
-				if len(result) != tt.wantCount {
-					t.Errorf("iteration %d: expected %d records, got %d",
-						i, tt.wantCount, len(result))
 				}
 			}
 		})

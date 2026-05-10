@@ -119,6 +119,11 @@ func newAPIKeyHandler(config *connector.AuthConfig) (*apiKeyHandler, error) {
 	if creds.Location == "" {
 		creds.Location = "header"
 	}
+	switch creds.Location {
+	case "header", "query":
+	default:
+		return nil, fmt.Errorf("invalid api-key location %q (expected 'header' or 'query')", creds.Location)
+	}
 	if creds.ParamName == "" {
 		creds.ParamName = "api_key"
 	}
@@ -141,7 +146,7 @@ func (h *apiKeyHandler) ApplyAuth(_ context.Context, req *http.Request) error {
 		q := req.URL.Query()
 		q.Set(h.paramName, h.key)
 		req.URL.RawQuery = q.Encode()
-	case "header", "":
+	case "header":
 		req.Header.Set(h.headerName, h.key)
 	}
 	return nil

@@ -75,33 +75,20 @@ func newOAuth2Handler(config *connector.AuthConfig, httpClient *http.Client) (*o
 		tokenURL:     creds.TokenURL,
 		clientID:     creds.ClientID,
 		clientSecret: creds.ClientSecret,
-		scopes:       creds.Scopes,
+		scopes:       strings.Fields(creds.Scope),
 		httpClient:   client,
 	}, nil
 }
 
-// oauth2RawCredentials is the parsing-time view of OAuth2 credentials.
-// `scope` follows RFC 6749 §3.3: a space-separated string.
-type oauth2RawCredentials struct {
-	TokenURL     string `json:"tokenUrl"`
-	ClientID     string `json:"clientId"`
-	ClientSecret string `json:"clientSecret"`
-	Scope        string `json:"scope,omitempty"`
-}
-
 // parseOAuth2Credentials parses raw OAuth2 credentials. The `scope` field is
-// split on whitespace per RFC 6749 §3.3.
+// kept as the raw RFC 6749 §3.3 space-separated string; the handler splits it
+// locally with strings.Fields when building requests.
 func parseOAuth2Credentials(raw json.RawMessage) (connector.CredentialsOAuth2, error) {
-	var parsed oauth2RawCredentials
+	var parsed connector.CredentialsOAuth2
 	if err := json.Unmarshal(raw, &parsed); err != nil {
 		return connector.CredentialsOAuth2{}, fmt.Errorf("invalid oauth2 credentials: %w", err)
 	}
-	return connector.CredentialsOAuth2{
-		TokenURL:     parsed.TokenURL,
-		ClientID:     parsed.ClientID,
-		ClientSecret: parsed.ClientSecret,
-		Scopes:       strings.Fields(parsed.Scope),
-	}, nil
+	return parsed, nil
 }
 
 // ApplyAuth applies OAuth2 authentication to the request.

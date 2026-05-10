@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/cannectors/runtime/pkg/connector"
@@ -269,6 +270,24 @@ func TestAPIKeyHandler_ApplyAuth_QueryDefaultParamName(t *testing.T) {
 	got := req.URL.Query().Get("api_key")
 	if got != "my-api-key" {
 		t.Errorf("query param api_key = %q, want %q", got, "my-api-key")
+	}
+}
+
+func TestAPIKeyHandler_InvalidLocation(t *testing.T) {
+	config := &connector.AuthConfig{
+		Type: "api-key",
+		Credentials: toJSON(t, map[string]string{
+			"key":      "my-api-key",
+			"location": "body",
+		}),
+	}
+
+	_, err := NewHandler(config, nil)
+	if err == nil {
+		t.Fatal("expected error for invalid api-key location, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid api-key location") {
+		t.Errorf("error = %v, want substring %q", err, "invalid api-key location")
 	}
 }
 

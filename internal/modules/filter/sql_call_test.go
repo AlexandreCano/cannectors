@@ -296,13 +296,17 @@ func newSQLCallTestModule(t *testing.T, db *sql.DB, cfg SQLCallConfig) *SQLCallM
 	t.Helper()
 
 	cacheStore, cacheTTL, cacheEnabled := setupCache(cfg)
+	onError, err := errhandling.ParseOnErrorStrategy(cfg.OnError)
+	if err != nil {
+		t.Fatalf("parsing onError: %v", err)
+	}
 	return &SQLCallModule{
 		db:                db,
 		driver:            "sqlite",
 		query:             cfg.Query,
 		mergeStrategy:     resolveMergeStrategy(cfg.MergeStrategy),
 		resultKey:         cfg.ResultKey,
-		onError:           errhandling.ParseOnErrorStrategy(cfg.OnError),
+		onError:           onError,
 		cache:             cacheStore,
 		cacheEnabled:      cacheEnabled,
 		cacheTTL:          cacheTTL,

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cannectors/runtime/internal/database"
+	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/pathutil"
@@ -96,9 +97,11 @@ func NewDatabaseOutputFromConfig(cfg *connector.ModuleConfig) (*DatabaseOutput, 
 	// Set defaults
 	timeout := connector.GetTimeoutDuration(config.TimeoutMs, defaultDatabaseOutputTimeout)
 
-	if config.OnError == "" {
-		config.OnError = "fail"
+	strategy, err := errhandling.ParseOnErrorStrategy(config.OnError)
+	if err != nil {
+		return nil, err
 	}
+	config.OnError = string(strategy)
 
 	// Create database config
 	dbConfig := database.Config{

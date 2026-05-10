@@ -57,7 +57,7 @@ func TestValidateConfig_MissingRequiredField(t *testing.T) {
 	// Check that error mentions the missing field
 	found := false
 	for _, err := range result.Errors {
-		if err.Type == "required" || strings.Contains(strings.ToLower(err.Message), strings.ToLower("required")) || strings.Contains(strings.ToLower(err.Message), strings.ToLower("filters")) {
+		if err.Type == "required" || strings.Contains(strings.ToLower(err.Message), "required") || strings.Contains(strings.ToLower(err.Message), "name") {
 			found = true
 			break
 		}
@@ -211,13 +211,12 @@ func TestValidateConfig_ActionableMessages(t *testing.T) {
 		{
 			name: "missing required field shows property name",
 			data: map[string]any{
-				"name":   "test",
 				"input":  map[string]any{"type": "httpPolling", "endpoint": "https://example.com", "schedule": "* * * * *"},
 				"output": map[string]any{"type": "httpRequest", "endpoint": "https://example.com", "method": "POST"},
-				// missing "filters"
+				// missing "name"
 			},
 			wantType:   "required",
-			wantSubstr: "filters",
+			wantSubstr: "name",
 		},
 		{
 			name: "wrong type shows expected and actual",

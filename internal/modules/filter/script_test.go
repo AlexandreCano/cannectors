@@ -38,15 +38,16 @@ func TestScriptModuleCreation(t *testing.T) {
 // TestScriptModuleCreation_WithOnError tests creating a script module with onError config.
 func TestScriptModuleCreation_WithOnError(t *testing.T) {
 	testCases := []struct {
-		name     string
-		onError  string
-		expected string
+		name      string
+		onError   string
+		expected  string
+		expectErr bool
 	}{
-		{"default", "", string(errhandling.OnErrorFail)},
-		{"fail", "fail", string(errhandling.OnErrorFail)},
-		{"skip", "skip", string(errhandling.OnErrorSkip)},
-		{"log", "log", string(errhandling.OnErrorLog)},
-		{"invalid defaults to fail", "invalid", string(errhandling.OnErrorFail)},
+		{"default", "", string(errhandling.OnErrorFail), false},
+		{"fail", "fail", string(errhandling.OnErrorFail), false},
+		{"skip", "skip", string(errhandling.OnErrorSkip), false},
+		{"log", "log", string(errhandling.OnErrorLog), false},
+		{"invalid is rejected", "invalid", "", true},
 	}
 
 	for _, tc := range testCases {
@@ -57,6 +58,12 @@ func TestScriptModuleCreation_WithOnError(t *testing.T) {
 			}
 
 			module, err := NewScriptFromConfig(config)
+			if tc.expectErr {
+				if err == nil {
+					t.Fatal("expected error for invalid onError, got nil")
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("expected no error, got: %v", err)
 			}

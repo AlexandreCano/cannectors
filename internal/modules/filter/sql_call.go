@@ -97,7 +97,10 @@ func NewSQLCallFromConfig(config SQLCallConfig) (*SQLCallModule, error) {
 	}
 
 	mergeStrategy := resolveMergeStrategy(config.MergeStrategy)
-	onError := errhandling.ParseOnErrorStrategy(config.OnError)
+	onError, err := errhandling.ParseOnErrorStrategy(config.OnError)
+	if err != nil {
+		return nil, err
+	}
 	timeout := connector.GetTimeoutDuration(config.TimeoutMs, defaultSQLCallTimeout)
 
 	db, driver, err := createDatabaseConnection(config, timeout)

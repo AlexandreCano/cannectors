@@ -77,7 +77,7 @@ func newPipeline() *connector.Pipeline {
 	}
 }
 
-// extractPipelineMetadata extracts name, version, description, and id.
+// extractPipelineMetadata extracts name, version, description, id, enabled, dryRunOptions.
 func extractPipelineMetadata(p *connector.Pipeline, data map[string]any) error {
 	name, ok := data["name"].(string)
 	if !ok {
@@ -96,6 +96,18 @@ func extractPipelineMetadata(p *connector.Pipeline, data map[string]any) error {
 
 	if id, ok := data["id"].(string); ok {
 		p.ID = id
+	}
+
+	if enabled, ok := data["enabled"].(bool); ok {
+		p.Enabled = enabled
+	}
+
+	if opts, ok := data["dryRunOptions"].(map[string]any); ok {
+		dro := &connector.DryRunOptions{}
+		if v, ok := opts["showCredentials"].(bool); ok {
+			dro.ShowCredentials = v
+		}
+		p.DryRunOptions = dro
 	}
 
 	return nil

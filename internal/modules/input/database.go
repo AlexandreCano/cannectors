@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cannectors/runtime/internal/database"
+	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/internal/pathutil"
@@ -108,6 +109,10 @@ func NewDatabaseInputFromConfig(cfg *connector.ModuleConfig) (*DatabaseInput, er
 	}
 	if config.ConnectionString == "" && config.ConnectionStringRef == "" {
 		return nil, ErrDatabaseMissingConnStr
+	}
+
+	if _, parseErr := errhandling.ParseOnErrorStrategy(config.OnError); parseErr != nil {
+		return nil, parseErr
 	}
 
 	// Set timeout

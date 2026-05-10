@@ -13,6 +13,7 @@ import (
 	"github.com/expr-lang/expr/vm"
 
 	"github.com/cannectors/runtime/internal/auth"
+	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/internal/httpclient"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/moduleconfig"
@@ -108,6 +109,10 @@ func NewHTTPPollingFromConfig(config *connector.ModuleConfig) (*HTTPPolling, err
 	}
 	if cfg.Endpoint == "" {
 		return nil, ErrMissingEndpoint
+	}
+
+	if _, parseErr := errhandling.ParseOnErrorStrategy(cfg.OnError); parseErr != nil {
+		return nil, parseErr
 	}
 
 	timeout := connector.GetTimeoutDuration(cfg.TimeoutMs, defaultTimeout)

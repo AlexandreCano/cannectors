@@ -1640,23 +1640,14 @@ func TestConditionOnErrorLog(t *testing.T) {
 	}
 }
 
-// TestConditionInvalidOnErrorDefaultsToFail ensures invalid onError values don't silently pass.
+// TestConditionInvalidOnErrorDefaultsToFail ensures invalid onError values are rejected at construction.
 func TestConditionInvalidOnErrorDefaultsToFail(t *testing.T) {
-	cond, err := NewConditionFromConfig(ConditionConfig{
+	_, err := NewConditionFromConfig(ConditionConfig{
 		Expression: "data.unknownMethod()",
 		ModuleBase: connector.ModuleBase{OnError: "invalid"},
 	}, nil)
-	if err != nil {
-		t.Fatalf("NewConditionFromConfig() error = %v", err)
-	}
-
-	records := []map[string]any{
-		{"data": "test"},
-	}
-
-	_, err = cond.Process(context.Background(), records)
 	if err == nil {
-		t.Error("expected error with invalid onError (default to fail), got nil")
+		t.Fatal("NewConditionFromConfig() expected error for invalid onError, got nil")
 	}
 }
 
@@ -2251,5 +2242,48 @@ func TestConditionDeterministicErrorHandling(t *testing.T) {
 	// Verify first error was also ErrInvalidExpression
 	if !errors.Is(err, ErrInvalidExpression) {
 		t.Errorf("first error: expected ErrInvalidExpression, got %v", err)
+	}
+}
+
+// TestConditionNestedDisabledModuleSkipped ensures nested then/else filters
+// with enabled:false are skipped at construction time, mirroring the top-level
+// filter behavior in internal/factory.
+func TestConditionNestedDisabledModuleSkipped(t *testing.T) {
+	disabled := false
+	enabled := true
+	cond, err := NewConditionFromConfig(ConditionConfig{
+		Expression: "true",
+		Then: []*NestedModuleConfig{
+			{Type: "set", Enabled: &enabled, Config: map[string]any{"target": "kept", "value": 1}},
+			{Type: "set", Enabled: &disabled, Config: map[string]any{"target": "skipped", "value": 2}},
+			{Type: "set", Config: map[string]any{"target": "default_enabled", "value": 3}},
+		},
+	}, func(cfg *NestedModuleConfig, _ int) (Module, error) {
+		target, _ := cfg.Config["target"].(string)
+		return NewSetFromConfig(SetConfig{
+			Target: target,
+			Value:  cfg.Config["value"],
+		})
+	})
+	if err != nil {
+		t.Fatalf("NewConditionFromConfig() error = %v", err)
+	}
+
+	out, err := cond.Process(context.Background(), []map[string]any{{}})
+	if err != nil {
+		t.Fatalf("Process error: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(out))
+	}
+	rec := out[0]
+	if _, ok := rec["kept"]; !ok {
+		t.Error("expected 'kept' field set by enabled nested filter")
+	}
+	if _, ok := rec["default_enabled"]; !ok {
+		t.Error("expected 'default_enabled' field set by filter without explicit enabled")
+	}
+	if _, ok := rec["skipped"]; ok {
+		t.Error("expected 'skipped' field NOT to be set (filter had enabled:false)")
 	}
 }

@@ -176,7 +176,10 @@ func newMappingError(code, message string, mapping MappingConfig, recordIdx, map
 //   - mappings: Array of field mappings (source/target format)
 //   - onError: Error handling mode ("fail", "skip", "log")
 func NewMappingFromConfig(mappings []FieldMapping, onError string) (*MappingModule, error) {
-	strategy := errhandling.ParseOnErrorStrategy(onError)
+	strategy, err := errhandling.ParseOnErrorStrategy(onError)
+	if err != nil {
+		return nil, err
+	}
 
 	// Parse and validate mappings
 	configs := make([]MappingConfig, 0, len(mappings))

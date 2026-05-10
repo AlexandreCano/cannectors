@@ -161,11 +161,9 @@ func NewHTTPRequestFromConfig(config *connector.ModuleConfig) (*HTTPRequestModul
 		reqConfig.Keys[i] = keyEntry{field: k.Field, paramType: k.ParamType, paramName: k.ParamName}
 	}
 
-	var onError errhandling.OnErrorStrategy
-	if cfg.OnError != "" {
-		onError = errhandling.ParseOnErrorStrategy(cfg.OnError)
-	} else {
-		onError = errhandling.OnErrorFail
+	onError, err := errhandling.ParseOnErrorStrategy(cfg.OnError)
+	if err != nil {
+		return nil, err
 	}
 
 	var successCodes []int

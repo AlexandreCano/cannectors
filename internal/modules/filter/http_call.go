@@ -200,7 +200,10 @@ func NewHTTPCallFromConfig(config HTTPCallConfig) (*HTTPCallModule, error) {
 	}
 
 	mergeStrategy := normalizeHTTPCallMergeStrategy(config.MergeStrategy)
-	onError := errhandling.ParseOnErrorStrategy(config.OnError)
+	onError, err := errhandling.ParseOnErrorStrategy(config.OnError)
+	if err != nil {
+		return nil, err
+	}
 	timeout := connector.GetTimeoutDuration(config.TimeoutMs, defaultHTTPCallTimeout)
 
 	httpClient := httpclient.NewClient(timeout)

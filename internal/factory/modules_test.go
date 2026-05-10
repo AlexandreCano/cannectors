@@ -376,3 +376,41 @@ func TestCondition_NestedThen_ResolvesCustomRegisteredFilter(t *testing.T) {
 		t.Fatal("custom filter registered for nested `then` was not invoked through the registry")
 	}
 }
+
+func TestCreateFilterModules_SkipsDisabled(t *testing.T) {
+	cfgs := []connector.ModuleConfig{
+		{Type: "set", Raw: mustJSON(map[string]any{"target": "a", "value": 1, "enabled": true})},
+		{Type: "set", Raw: mustJSON(map[string]any{"target": "b", "value": 2, "enabled": false})},
+		{Type: "set", Raw: mustJSON(map[string]any{"target": "c", "value": 3})},
+	}
+
+	mods, err := CreateFilterModules(cfgs)
+	if err != nil {
+		t.Fatalf("CreateFilterModules error: %v", err)
+	}
+	if len(mods) != 2 {
+		t.Fatalf("expected 2 enabled filters (skipped one with enabled:false), got %d", len(mods))
+	}
+}
+
+func TestCreateInputModule_DisabledRejected(t *testing.T) {
+	cfg := &connector.ModuleConfig{
+		Type: "httpPolling",
+		Raw:  mustJSON(map[string]any{"endpoint": "https://example.com/api", "enabled": false}),
+	}
+	_, err := CreateInputModule(cfg)
+	if err == nil {
+		t.Fatal("expected error for input module with enabled=false, got nil")
+	}
+}
+
+func TestCreateOutputModule_DisabledRejected(t *testing.T) {
+	cfg := &connector.ModuleConfig{
+		Type: "httpRequest",
+		Raw:  mustJSON(map[string]any{"endpoint": "https://example.com/api", "method": "POST", "enabled": false}),
+	}
+	_, err := CreateOutputModule(cfg)
+	if err == nil {
+		t.Fatal("expected error for output module with enabled=false, got nil")
+	}
+}

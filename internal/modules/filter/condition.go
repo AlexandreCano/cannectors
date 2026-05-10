@@ -96,6 +96,10 @@ type NestedModuleConfig struct {
 	Type     string         `json:"type"`
 	Config   map[string]any `json:"config,omitempty"`
 	Mappings []FieldMapping `json:"mappings,omitempty"`
+	// Enabled mirrors moduleBase.enabled — when explicitly false the nested
+	// module is skipped at construction time, just like top-level filters
+	// (cf. internal/factory/modules.go).
+	Enabled *bool `json:"enabled,omitempty"`
 	// For nested conditions
 	Expression string                `json:"expression,omitempty"`
 	Lang       string                `json:"lang,omitempty"`
@@ -268,7 +272,10 @@ func newConditionFromConfigWithDepth(config ConditionConfig, nestedCreator Neste
 
 	onTrue := normalizeOnCondition(config.OnTrue, OnConditionContinue)
 	onFalse := normalizeOnCondition(config.OnFalse, OnConditionSkip)
-	onError := errhandling.ParseOnErrorStrategy(config.OnError)
+	onError, err := errhandling.ParseOnErrorStrategy(config.OnError)
+	if err != nil {
+		return nil, err
+	}
 
 	// Compile expression
 	program, err := compileExpression(expression)
@@ -349,11 +356,17 @@ func compileExpression(expression string) (*vm.Program, error) {
 }
 
 // createNestedModules creates then and else nested modules with depth tracking.
+// Nested modules with `enabled: false` are skipped (not constructed, not run),
+// mirroring the top-level filter behavior in internal/factory.
 func createNestedModules(thenConfigs, elseConfigs []*NestedModuleConfig, nestedCreator NestedModuleCreator, depth int) ([]Module, []Module, error) {
 	var thenModules, elseModules []Module
 
 	for i, cfg := range thenConfigs {
 		if cfg == nil {
+			continue
+		}
+		if cfg.Enabled != nil && !*cfg.Enabled {
+			logger.Debug("skipping disabled nested 'then' module", "index", i, "type", cfg.Type)
 			continue
 		}
 		m, err := createNestedModuleWithDepth(cfg, nestedCreator, depth)
@@ -365,6 +378,10 @@ func createNestedModules(thenConfigs, elseConfigs []*NestedModuleConfig, nestedC
 
 	for i, cfg := range elseConfigs {
 		if cfg == nil {
+			continue
+		}
+		if cfg.Enabled != nil && !*cfg.Enabled {
+			logger.Debug("skipping disabled nested 'else' module", "index", i, "type", cfg.Type)
 			continue
 		}
 		m, err := createNestedModuleWithDepth(cfg, nestedCreator, depth)

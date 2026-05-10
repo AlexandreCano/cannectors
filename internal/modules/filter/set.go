@@ -11,12 +11,15 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/recordpath"
+	"github.com/cannectors/runtime/pkg/connector"
 )
 
 // SetConfig represents the configuration for a set filter module.
 type SetConfig struct {
+	connector.ModuleBase
 	// Target is the field path to set (supports dot notation for nested paths)
 	Target string `json:"target"`
 	// Value is the literal value to set
@@ -34,6 +37,10 @@ type SetModule struct {
 func NewSetFromConfig(config SetConfig) (*SetModule, error) {
 	if config.Target == "" {
 		return nil, errors.New("target field path is required")
+	}
+
+	if _, err := errhandling.ParseOnErrorStrategy(config.OnError); err != nil {
+		return nil, err
 	}
 
 	logger.Debug("set filter module initialized", "target", config.Target)

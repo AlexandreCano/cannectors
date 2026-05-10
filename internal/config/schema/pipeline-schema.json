@@ -4,8 +4,13 @@
 	"title": "Cannectors Pipeline Configuration Schema",
 	"description": "Schema for defining declarative modular pipeline configurations. Supports Input → Filter → Output pattern with extensible module types.",
 	"type": "object",
-	"required": ["name", "input", "filters", "output"],
+	"required": ["name", "input", "output"],
 	"properties": {
+		"id": {
+			"type": "string",
+			"description": "Optional pipeline identifier. Defaults to name when omitted.",
+			"pattern": "^[a-z][a-z0-9_-]*$"
+		},
 		"name": {
 			"type": "string",
 			"description": "Unique identifier for this connector.",
@@ -14,8 +19,8 @@
 		},
 		"version": {
 			"type": "string",
-			"description": "Connector version (semver).",
-			"pattern": "^\\d+\\.\\d+\\.\\d+$"
+			"description": "Connector version. Free-form non-empty string.",
+			"minLength": 1
 		},
 		"description": {
 			"type": "string",
@@ -23,8 +28,26 @@
 		},
 		"tags": {
 			"type": "array",
+			"description": "User-facing tags. Accepted but ignored by the runtime.",
 			"items": { "type": "string" },
 			"uniqueItems": true
+		},
+		"enabled": {
+			"type": "boolean",
+			"description": "Whether the pipeline is active.",
+			"default": true
+		},
+		"dryRunOptions": {
+			"type": "object",
+			"description": "Dry-run mode options.",
+			"properties": {
+				"showCredentials": {
+					"type": "boolean",
+					"description": "When true, dry-run shows resolved credentials instead of masked values.",
+					"default": false
+				}
+			},
+			"additionalProperties": false
 		},
 		"defaults": {
 			"$ref": "common-schema.json#/$defs/moduleDefaults",

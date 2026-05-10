@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/moduleconfig"
 	"github.com/cannectors/runtime/pkg/connector"
@@ -121,6 +122,7 @@ type Webhook struct {
 
 // WebhookInputConfig holds the parsed configuration for the webhook input module.
 type WebhookInputConfig struct {
+	connector.ModuleBase
 	Path          string           `json:"path,omitempty"`
 	ListenAddress string           `json:"listenAddress,omitempty"`
 	DataField     string           `json:"dataField,omitempty"`
@@ -158,6 +160,10 @@ func NewWebhookFromConfig(config *connector.ModuleConfig) (*Webhook, error) {
 		return nil, ErrMissingPath
 	}
 	endpoint := cfg.Path
+
+	if _, err := errhandling.ParseOnErrorStrategy(cfg.OnError); err != nil {
+		return nil, err
+	}
 
 	if cfg.Signature != nil {
 		if cfg.Signature.Header == "" {

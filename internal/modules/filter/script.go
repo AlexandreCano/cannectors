@@ -158,7 +158,10 @@ func NewScriptFromConfig(config ScriptConfig) (*ScriptModule, error) {
 	}
 
 	// Normalize onError
-	onError := errhandling.ParseOnErrorStrategy(config.OnError)
+	onError, err := errhandling.ParseOnErrorStrategy(config.OnError)
+	if err != nil {
+		return nil, err
+	}
 
 	moduleID := "inline"
 	if config.ScriptFile != "" {

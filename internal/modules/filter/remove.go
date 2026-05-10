@@ -9,12 +9,15 @@ import (
 	"context"
 	"errors"
 
+	"github.com/cannectors/runtime/internal/errhandling"
 	"github.com/cannectors/runtime/internal/logger"
 	"github.com/cannectors/runtime/internal/recordpath"
+	"github.com/cannectors/runtime/pkg/connector"
 )
 
 // RemoveConfig represents the configuration for a remove filter module.
 type RemoveConfig struct {
+	connector.ModuleBase
 	// Target is the field path to remove (supports dot notation for nested paths)
 	Target string `json:"target"`
 	// Targets is a list of field paths to remove (supports dot notation for nested paths)
@@ -29,6 +32,10 @@ type RemoveModule struct {
 // NewRemoveFromConfig creates a new remove filter module from configuration.
 // It validates that at least one target is provided (either via Target or Targets).
 func NewRemoveFromConfig(config RemoveConfig) (*RemoveModule, error) {
+	if _, err := errhandling.ParseOnErrorStrategy(config.OnError); err != nil {
+		return nil, err
+	}
+
 	targets := config.Targets
 
 	// Support single target for backward compatibility

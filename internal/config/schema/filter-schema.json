@@ -325,6 +325,7 @@
 				},
 				"target": {
 					"type": "string",
+					"minLength": 1,
 					"description": "Target field path."
 				},
 				"transforms": {
@@ -344,19 +345,27 @@
 					],
 					"default": "setNull"
 				}
-			}
+			},
+			"additionalProperties": false,
+			"allOf": [
+				{
+					"if": {
+						"properties": { "onMissing": { "const": "useDefault" } },
+						"required": ["onMissing"]
+					},
+					"then": { "required": ["defaultValue"] }
+				}
+			]
 		},
 
 		"transformOp": {
 			"type": "object",
-			"required": [
-				"op"
-			],
+			"required": [ "op" ],
 			"properties": {
 				"op": {
 					"type": "string",
 					"description": "Operation name.",
-					"examples": [
+					"enum": [
 						"trim",
 						"lowercase",
 						"uppercase",
@@ -378,6 +387,7 @@
 				},
 				"pattern": {
 					"type": "string",
+					"minLength": 1,
 					"description": "Regex pattern for replace/match operations."
 				},
 				"replacement": {
@@ -388,7 +398,17 @@
 					"type": "string",
 					"description": "Separator for split/join operations."
 				}
-			}
+			},
+			"additionalProperties": false,
+			"allOf": [
+				{
+					"if": {
+						"properties": { "op": { "const": "replace" } },
+						"required": ["op"]
+					},
+					"then": { "required": ["pattern"] }
+				}
+			]
 		}
 	}
 }

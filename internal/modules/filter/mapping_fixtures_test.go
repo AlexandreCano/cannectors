@@ -57,6 +57,7 @@ func (b *mappingBuilder) Target(target string) *mappingBuilder {
 
 func (b *mappingBuilder) DefaultValue(value any) *mappingBuilder {
 	b.mapping.DefaultValue = value
+	b.mapping.HasDefaultValue = true
 	return b
 }
 

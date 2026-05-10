@@ -4,6 +4,7 @@ package filter
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -53,12 +54,15 @@ var (
 // FieldMapping represents a field mapping configuration.
 // This is the input format from the pipeline configuration.
 // Source is a pointer to distinguish "not declared" (nil = delete field) from "empty string".
+// HasDefaultValue tracks whether defaultValue was explicitly provided (including null),
+// so onMissing:useDefault can accept an explicit null without being treated as absent.
 type FieldMapping struct {
-	Source       *string       `json:"source,omitempty"`
-	Target       string        `json:"target"`
-	DefaultValue any           `json:"defaultValue,omitempty"`
-	OnMissing    string        `json:"onMissing,omitempty"`
-	Transforms   []TransformOp `json:"transforms,omitempty"`
+	Source          *string       `json:"source,omitempty"`
+	Target          string        `json:"target"`
+	DefaultValue    any           `json:"defaultValue,omitempty"`
+	HasDefaultValue bool          `json:"-"`
+	OnMissing       string        `json:"onMissing,omitempty"`
+	Transforms      []TransformOp `json:"transforms,omitempty"`
 }
 
 // TransformOp represents a transform operation configuration.
@@ -68,6 +72,24 @@ type TransformOp struct {
 	Pattern     string `json:"pattern,omitempty"`
 	Replacement string `json:"replacement,omitempty"`
 	Separator   string `json:"separator,omitempty"`
+}
+
+// UnmarshalJSON tracks whether the defaultValue key was present (including
+// explicit null) so onMissing:useDefault can distinguish "absent" from
+// "explicitly null" — the schema only enforces presence, not non-null.
+func (f *FieldMapping) UnmarshalJSON(data []byte) error {
+	type alias FieldMapping
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	*f = FieldMapping(a)
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return err
+	}
+	_, f.HasDefaultValue = probe["defaultValue"]
+	return nil
 }
 
 // MappingModuleConfig is the top-level config struct for the mapping filter module.
@@ -434,10 +456,7 @@ func (m *MappingModule) applyTransformOp(value any, config TransformConfig) (any
 	case "join":
 		return applyJoin(value, config.Separator)
 	default:
-		// Unknown transform - return value unchanged
-		logger.Debug("unknown transform operation, passing value through",
-			slog.String("op", config.Op),
-		)
-		return value, nil
+		// Unreachable: parseMappingConfig validates ops against the schema enum.
+		return nil, fmt.Errorf("%w: unknown transform op %q", ErrInvalidMapping, config.Op)
 	}
 }

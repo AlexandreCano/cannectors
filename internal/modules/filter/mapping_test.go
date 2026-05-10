@@ -712,7 +712,7 @@ func TestMapping_Process_OnMissing(t *testing.T) {
 			name: "onMissing useDefault - uses defaultValue",
 			mappings: []FieldMapping{
 				{Source: strPtr("name"), Target: "fullName"},
-				{Source: strPtr("missing"), Target: "status", OnMissing: "useDefault", DefaultValue: "active"},
+				{Source: strPtr("missing"), Target: "status", OnMissing: "useDefault", HasDefaultValue: true, DefaultValue: "active"},
 			},
 			input: []map[string]any{
 				{"name": "John"},
@@ -725,7 +725,7 @@ func TestMapping_Process_OnMissing(t *testing.T) {
 		{
 			name: "onMissing useDefault with numeric default",
 			mappings: []FieldMapping{
-				{Source: strPtr("missing"), Target: "count", OnMissing: "useDefault", DefaultValue: 0},
+				{Source: strPtr("missing"), Target: "count", OnMissing: "useDefault", HasDefaultValue: true, DefaultValue: 0},
 			},
 			input: []map[string]any{
 				{"other": "value"},
@@ -738,7 +738,7 @@ func TestMapping_Process_OnMissing(t *testing.T) {
 		{
 			name: "onMissing useDefault with boolean default",
 			mappings: []FieldMapping{
-				{Source: strPtr("missing"), Target: "enabled", OnMissing: "useDefault", DefaultValue: true},
+				{Source: strPtr("missing"), Target: "enabled", OnMissing: "useDefault", HasDefaultValue: true, DefaultValue: true},
 			},
 			input: []map[string]any{
 				{"other": "value"},

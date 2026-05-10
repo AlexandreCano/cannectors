@@ -214,6 +214,7 @@ func TestExampleHTTPPipelines(t *testing.T) {
 	t.Run("09-filters-condition HTTP polling condition to HTTP request", func(t *testing.T) {
 		condition, err := filter.NewConditionFromConfig(filter.ConditionConfig{
 			Expression: `status == "active"`,
+			Else:       []*filter.NestedModuleConfig{{Type: "drop"}},
 		}, nil)
 		if err != nil {
 			t.Fatalf("create condition filter: %v", err)

@@ -150,7 +150,13 @@ func (h *HTTPRequestModule) doRequestWithHeaders(ctx context.Context, endpoint s
 		return h.recordRetryFailure(err, delaysMs, startTime, endpoint)
 	}
 
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
+	respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
+	if readErr != nil {
+		return h.recordRetryFailure(
+			fmt.Errorf("reading response body: %w", readErr),
+			delaysMs, startTime, endpoint,
+		)
+	}
 	success, successErr := h.isResponseSuccess(resp.StatusCode, resp.Header, respBody)
 	if successErr != nil {
 		return h.recordRetryFailure(successErr, delaysMs, startTime, endpoint)

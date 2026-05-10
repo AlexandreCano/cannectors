@@ -134,16 +134,18 @@ type DatabasePaginationConfig struct {
 }
 
 // Validate enforces the runtime contract: pagination.type must be one of
-// the supported strategies. cursor pagination additionally requires cursorField.
+// the supported strategies. Both strategies require param; cursor additionally
+// requires cursorField (mirrors common-schema.json#/$defs/databasePaginationConfig).
 func (p *DatabasePaginationConfig) Validate() error {
 	if p == nil {
 		return nil
 	}
 	switch p.Type {
-	case "limit-offset":
-		return nil
-	case "cursor":
-		if p.CursorField == "" {
+	case "limit-offset", "cursor":
+		if p.Param == "" {
+			return fmt.Errorf("pagination.param is required when pagination.type is %q", p.Type)
+		}
+		if p.Type == "cursor" && p.CursorField == "" {
 			return fmt.Errorf("pagination.cursorField is required when pagination.type is %q", p.Type)
 		}
 		return nil

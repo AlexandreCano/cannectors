@@ -4,6 +4,7 @@ package filter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -511,7 +512,7 @@ func (m *ScriptModule) processRecord(ctx context.Context, record map[string]any,
 				return nil, ctx.Err()
 			}
 			// Fallback: return a generic interruption error
-			return nil, fmt.Errorf("script execution interrupted: %v", err)
+			return nil, fmt.Errorf("script execution interrupted: %w", err)
 		}
 		return nil, m.handleJSError(err, recordIdx)
 	}
@@ -528,7 +529,8 @@ func (m *ScriptModule) processRecord(ctx context.Context, record map[string]any,
 // handleJSError converts a JavaScript error to a Go error with context.
 func (m *ScriptModule) handleJSError(err error, recordIdx int) error {
 	// Check if it's a Goja exception
-	if jsErr, ok := err.(*goja.Exception); ok {
+	var jsErr *goja.Exception
+	if errors.As(err, &jsErr) {
 		// Extract stack trace if available
 		stackTrace := ""
 		if jsErr.Value() != nil {

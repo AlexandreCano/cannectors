@@ -2306,7 +2306,7 @@ func (m *MockPreviewableOutputModuleWithOpts) Close() error {
 	return nil
 }
 
-func (m *MockPreviewableOutputModuleWithOpts) PreviewRequest(records []map[string]any, opts output.PreviewOptions) ([]output.RequestPreview, error) {
+func (m *MockPreviewableOutputModuleWithOpts) PreviewRequest(_ []map[string]any, opts output.PreviewOptions) ([]output.RequestPreview, error) {
 	*m.receivedOpts = opts // Capture the options
 	return m.previewResponses, nil
 }

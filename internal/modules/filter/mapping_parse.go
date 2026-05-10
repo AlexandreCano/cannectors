@@ -65,7 +65,7 @@ func parseMappingConfig(m FieldMapping, index int) (MappingConfig, error) {
 				}
 				re, err := regexp.Compile(t.Pattern)
 				if err != nil {
-					return config, fmt.Errorf("%w at index %d: invalid regex pattern in transform %d: %v", ErrInvalidMapping, index, i, err)
+					return config, fmt.Errorf("%w at index %d: invalid regex pattern in transform %d: %w", ErrInvalidMapping, index, i, err)
 				}
 				tc.CompiledPattern = re
 			}

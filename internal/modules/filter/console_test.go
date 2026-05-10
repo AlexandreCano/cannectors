@@ -26,7 +26,7 @@ func (h *testLogHandler) Handle(_ context.Context, r slog.Record) error {
 func (h *testLogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &testLogHandler{records: h.records, attrs: append(h.attrs, attrs...)}
 }
-func (h *testLogHandler) WithGroup(name string) slog.Handler { return h }
+func (h *testLogHandler) WithGroup(_ string) slog.Handler { return h }
 
 func mustJSConsole(t *testing.T, vm *goja.Runtime) *jsConsole {
 	t.Helper()

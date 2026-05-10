@@ -2,7 +2,6 @@ package logger
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"strings"
 
@@ -50,16 +49,6 @@ func EnsureTraceID(ctx context.Context) (context.Context, string) {
 	}
 	id := NewTraceID()
 	return WithTraceID(ctx, id), id
-}
-
-// FromContext returns the default Logger augmented with the trace_id field
-// from ctx (if present). When no trace ID is set, the default Logger is
-// returned unchanged.
-func FromContext(ctx context.Context) *slog.Logger {
-	if id := TraceIDFrom(ctx); id != "" {
-		return Logger.With(slog.String(TraceIDField, id))
-	}
-	return Logger
 }
 
 // TraceIDFromHTTPHeader extracts a trace ID from incoming HTTP headers.

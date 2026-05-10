@@ -26,9 +26,6 @@ import (
 
 // Error definitions
 var (
-	// ErrNotImplemented is returned when a feature is not yet implemented.
-	ErrNotImplemented = errors.New("not implemented")
-
 	// ErrNilPipeline is returned when a nil pipeline is provided.
 	ErrNilPipeline = errors.New("pipeline is nil")
 
@@ -160,7 +157,7 @@ func ValidateCronExpression(expr string) error {
 
 	_, err := parser.Parse(expr)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalidCronExpression, err)
+		return fmt.Errorf("%w: %w", ErrInvalidCronExpression, err)
 	}
 
 	return nil

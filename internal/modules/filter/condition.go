@@ -268,7 +268,7 @@ func compileExpression(expression string) (*vm.Program, error) {
 	// undefined variables as nil rather than causing evaluation errors.
 	program, err := expr.Compile(expression, expr.AllowUndefinedVariables())
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidExpression, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidExpression, err)
 	}
 	return program, nil
 }

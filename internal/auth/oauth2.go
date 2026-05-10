@@ -181,14 +181,14 @@ func (h *oauth2Handler) fetchToken(ctx context.Context) (string, time.Time, erro
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.tokenURL, strings.NewReader(formData.Encode()))
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("%w: creating token request: %v", ErrOAuth2TokenFailed, err)
+		return "", time.Time{}, fmt.Errorf("%w: creating token request: %w", ErrOAuth2TokenFailed, err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	// Execute request
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("%w: executing token request: %v", ErrOAuth2TokenFailed, err)
+		return "", time.Time{}, fmt.Errorf("%w: executing token request: %w", ErrOAuth2TokenFailed, err)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
@@ -200,7 +200,7 @@ func (h *oauth2Handler) fetchToken(ctx context.Context) (string, time.Time, erro
 	limitedReader := io.LimitReader(resp.Body, maxTokenResponseSize)
 	body, err := io.ReadAll(limitedReader)
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("%w: reading token response: %v", ErrOAuth2TokenFailed, err)
+		return "", time.Time{}, fmt.Errorf("%w: reading token response: %w", ErrOAuth2TokenFailed, err)
 	}
 
 	// Check for error response
@@ -217,7 +217,7 @@ func (h *oauth2Handler) fetchToken(ctx context.Context) (string, time.Time, erro
 	// Parse response
 	var tokenResp tokenResponse
 	if err := json.Unmarshal(body, &tokenResp); err != nil {
-		return "", time.Time{}, fmt.Errorf("%w: parsing token response: %v", ErrOAuth2TokenFailed, err)
+		return "", time.Time{}, fmt.Errorf("%w: parsing token response: %w", ErrOAuth2TokenFailed, err)
 	}
 
 	// Validate access token

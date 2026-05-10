@@ -95,7 +95,7 @@ func (f *FieldMapping) UnmarshalJSON(data []byte) error {
 // explicitly set (including to null), it is emitted; otherwise it is omitted.
 // The default Go marshaller cannot express this because `omitempty` drops
 // nil interface values regardless of intent.
-func (f FieldMapping) MarshalJSON() ([]byte, error) {
+func (f *FieldMapping) MarshalJSON() ([]byte, error) {
 	out := make(map[string]any, 6)
 	if f.Source != nil {
 		out["source"] = *f.Source
@@ -409,7 +409,8 @@ func (m *MappingModule) getSourceValue(record map[string]any, mapping MappingCon
 // handleTransformError creates an appropriate error for transform failures.
 func (m *MappingModule) handleTransformError(err error, mapping MappingConfig, recordIdx, mappingIdx int, value any, target map[string]any) (map[string]any, error) {
 	transformOp := ""
-	if transformErr, ok := err.(TransformError); ok {
+	var transformErr TransformError
+	if errors.As(err, &transformErr) {
 		transformOp = transformErr.Op
 	}
 	message := fmt.Sprintf("transform failed for field %q -> %q at record %d, mapping %d: %v",

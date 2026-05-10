@@ -5,6 +5,7 @@ package config
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -137,7 +138,8 @@ func ValidateConfig(data map[string]any) *ValidationResult {
 		result.Valid = false
 
 		// Convert validation errors to our format
-		if detailedErr, ok := validationErr.(*jsonschema.ValidationError); ok {
+		var detailedErr *jsonschema.ValidationError
+		if errors.As(validationErr, &detailedErr) {
 			result.Errors = convertValidationErrors(detailedErr)
 		} else {
 			result.Errors = append(result.Errors, ValidationError{

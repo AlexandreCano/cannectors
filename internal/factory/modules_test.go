@@ -3,6 +3,7 @@ package factory
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -318,7 +319,7 @@ func TestCreateInputModule_ConstructorError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error from constructor")
 	}
-	if err != testErr {
+	if !errors.Is(err, testErr) {
 		t.Errorf("expected test error, got %v", err)
 	}
 	if got != nil {

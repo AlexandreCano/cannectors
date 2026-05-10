@@ -21,7 +21,6 @@ const MaxOAuth2Retries = 2
 
 // Error types for authentication
 var (
-	ErrNilConfig          = errors.New("authentication configuration is nil")
 	ErrUnknownType        = errors.New("unknown authentication type")
 	ErrMissingAPIKey      = errors.New("api key is required for api-key authentication")
 	ErrMissingBearerToken = errors.New("token is required for bearer authentication")

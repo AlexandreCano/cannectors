@@ -469,14 +469,3 @@ func NewRateLimitError(message string, originalErr error) *ClassifiedError {
 		OriginalErr: originalErr,
 	}
 }
-
-// NewNotFoundError creates a ClassifiedError for not found errors.
-func NewNotFoundError(message string, originalErr error) *ClassifiedError {
-	return &ClassifiedError{
-		Category:    CategoryNotFound,
-		Retryable:   false,
-		StatusCode:  404,
-		Message:     message,
-		OriginalErr: originalErr,
-	}
-}

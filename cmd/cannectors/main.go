@@ -481,6 +481,7 @@ func (a *PipelineExecutorAdapter) Execute(pipeline *connector.Pipeline) (*connec
 	}
 	filterModules, err := factory.CreateFilterModules(pipeline.Filters)
 	if err != nil {
+		_ = inputModule.Close()
 		return &connector.ExecutionResult{
 			PipelineID:  pipeline.ID,
 			Status:      "error",
@@ -494,6 +495,7 @@ func (a *PipelineExecutorAdapter) Execute(pipeline *connector.Pipeline) (*connec
 	}
 	outputModule, err := factory.CreateOutputModule(pipeline.Output)
 	if err != nil {
+		_ = inputModule.Close()
 		return &connector.ExecutionResult{
 			PipelineID:  pipeline.ID,
 			Status:      "error",

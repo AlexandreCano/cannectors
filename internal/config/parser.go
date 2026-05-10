@@ -4,6 +4,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -99,14 +100,16 @@ func parseJSONError(err error, content string) ParseError {
 	}
 
 	// Try to extract line/column from json.SyntaxError
-	if syntaxErr, ok := err.(*json.SyntaxError); ok {
+	var syntaxErr *json.SyntaxError
+	if errors.As(err, &syntaxErr) {
 		parseErr.Offset = syntaxErr.Offset
 		parseErr.Line, parseErr.Column = offsetToLineColumn(content, syntaxErr.Offset)
 		parseErr.Message = fmt.Sprintf("JSON syntax error at offset %d: %s", syntaxErr.Offset, syntaxErr.Error())
 	}
 
 	// Try to extract information from json.UnmarshalTypeError
-	if typeErr, ok := err.(*json.UnmarshalTypeError); ok {
+	var typeErr *json.UnmarshalTypeError
+	if errors.As(err, &typeErr) {
 		parseErr.Offset = typeErr.Offset
 		parseErr.Line, parseErr.Column = offsetToLineColumn(content, typeErr.Offset)
 		parseErr.Message = fmt.Sprintf("type error at field '%s': expected %s, got %s",
@@ -404,7 +407,8 @@ func parseYAMLError(err error) ParseError {
 	}
 
 	// Try to extract line/column from yaml.TypeError
-	if typeErr, ok := err.(*yaml.TypeError); ok {
+	var typeErr *yaml.TypeError
+	if errors.As(err, &typeErr) {
 		// TypeError contains multiple error strings
 		parseErr.Message = fmt.Sprintf("YAML type error: %s", strings.Join(typeErr.Errors, "; "))
 	}

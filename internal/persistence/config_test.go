@@ -42,6 +42,7 @@ func TestParseStatePersistenceConfig_TimestampOnly(t *testing.T) {
 	result := ParseStatePersistenceConfig(config)
 	if result == nil {
 		t.Fatal("ParseStatePersistenceConfig returned nil")
+		return
 	}
 
 	if !result.TimestampEnabled() {
@@ -50,8 +51,13 @@ func TestParseStatePersistenceConfig_TimestampOnly(t *testing.T) {
 	if result.IDEnabled() {
 		t.Error("IDEnabled() = true, want false")
 	}
-	if result.Timestamp.QueryParam != "since" {
-		t.Errorf("Timestamp.QueryParam = %q, want %q", result.Timestamp.QueryParam, "since")
+	timestamp := result.Timestamp
+	if timestamp == nil {
+		t.Fatal("Timestamp config is nil")
+		return
+	}
+	if timestamp.QueryParam != "since" {
+		t.Errorf("Timestamp.QueryParam = %q, want %q", timestamp.QueryParam, "since")
 	}
 }
 
@@ -69,6 +75,7 @@ func TestParseStatePersistenceConfig_IDOnly(t *testing.T) {
 	result := ParseStatePersistenceConfig(config)
 	if result == nil {
 		t.Fatal("ParseStatePersistenceConfig returned nil")
+		return
 	}
 
 	if result.TimestampEnabled() {
@@ -77,11 +84,16 @@ func TestParseStatePersistenceConfig_IDOnly(t *testing.T) {
 	if !result.IDEnabled() {
 		t.Error("IDEnabled() = false, want true")
 	}
-	if result.ID.Field != "data.id" {
-		t.Errorf("ID.Field = %q, want %q", result.ID.Field, "data.id")
+	id := result.ID
+	if id == nil {
+		t.Fatal("ID config is nil")
+		return
 	}
-	if result.ID.QueryParam != "after_id" {
-		t.Errorf("ID.QueryParam = %q, want %q", result.ID.QueryParam, "after_id")
+	if id.Field != "data.id" {
+		t.Errorf("ID.Field = %q, want %q", id.Field, "data.id")
+	}
+	if id.QueryParam != "after_id" {
+		t.Errorf("ID.QueryParam = %q, want %q", id.QueryParam, "after_id")
 	}
 }
 
@@ -104,6 +116,7 @@ func TestParseStatePersistenceConfig_Both(t *testing.T) {
 	result := ParseStatePersistenceConfig(config)
 	if result == nil {
 		t.Fatal("ParseStatePersistenceConfig returned nil")
+		return
 	}
 
 	if !result.TimestampEnabled() {

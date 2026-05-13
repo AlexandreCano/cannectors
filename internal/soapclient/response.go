@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/clbanning/mxj/v2"
+
+	"github.com/cannectors/runtime/pkg/connector"
 )
 
 // SOAPResponse contains the parsed SOAP response plus raw envelope metadata.
@@ -14,6 +16,7 @@ type SOAPResponse struct {
 	EnvelopeXML []byte
 	Data        map[string]any
 	Attachments map[string]MTOMAttachment
+	RetryInfo   *connector.RetryInfo
 }
 
 // ParseXMLResponse converts SOAP XML to map data using mxj.

@@ -237,7 +237,7 @@ func TestClient_Call_UsesRetryConfig(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(httpclient.NewClient(time.Second))
-	_, err := client.Call(context.Background(), SOAPOperation{
+	resp, err := client.Call(context.Background(), SOAPOperation{
 		Endpoint:   server.URL,
 		SOAPAction: "urn:Ping",
 		Body:       `<Ping/>`,
@@ -254,6 +254,9 @@ func TestClient_Call_UsesRetryConfig(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&calls); got != 2 {
 		t.Fatalf("calls = %d, want 2", got)
+	}
+	if resp.RetryInfo == nil || resp.RetryInfo.TotalAttempts != 2 || resp.RetryInfo.RetryCount != 1 {
+		t.Fatalf("unexpected retry info: %#v", resp.RetryInfo)
 	}
 }
 

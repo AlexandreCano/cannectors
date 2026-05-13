@@ -368,6 +368,12 @@
 					"type": "string",
 					"description": "Record path containing the attachment bytes.",
 					"minLength": 1
+				},
+				"encoding": {
+					"type": "string",
+					"description": "Encoding of string values read from sourceField. 'binary' sends the string bytes as-is; 'base64' decodes the string before attaching it.",
+					"enum": [ "binary", "base64" ],
+					"default": "binary"
 				}
 			}
 		},

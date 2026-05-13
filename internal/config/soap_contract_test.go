@@ -46,12 +46,36 @@ func TestSchemaSOAPModulesAccepted(t *testing.T) {
 			"operation":"ImportOrders",
 			"body":"<m:ImportOrders/>",
 			"requestMode":"batch",
-			"mtom":{"enabled":true,"attachments":[{"contentId":"{{record.id}}-pdf","contentType":"application/pdf","sourceField":"document"}]},
+			"mtom":{"enabled":true,"attachments":[{"contentId":"{{record.id}}-pdf","contentType":"application/pdf","sourceField":"document","encoding":"base64"}]},
 			"wsSecurity":{"username":"user","password":"pass","passwordType":"PasswordDigest","mustUnderstand":true}
 		}
 	}`
 	if !validatePipelineJSON(t, raw) {
 		t.Fatal("SOAP input/filter/output pipeline should validate")
+	}
+}
+
+func TestSchemaSOAPMTOMAttachmentEncodingEnum(t *testing.T) {
+	cases := []struct {
+		name      string
+		encoding  string
+		wantValid bool
+	}{
+		{name: "binary", encoding: "binary", wantValid: true},
+		{name: "base64", encoding: "base64", wantValid: true},
+		{name: "invalid", encoding: "hex", wantValid: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			output := fmt.Sprintf(
+				`{"type":"soapRequest","endpoint":"https://e/x","operation":"Op","body":"<Op/>","mtom":{"enabled":true,"attachments":[{"contentId":"doc","contentType":"application/pdf","sourceField":"document","encoding":%q}]}}`,
+				tc.encoding,
+			)
+			raw := fmt.Sprintf(`{"name":"x","version":"1.0.0","input":{"type":"webhook","path":"/in"},"output":%s}`, output)
+			if got := validatePipelineJSON(t, raw); got != tc.wantValid {
+				t.Fatalf("valid=%v want %v", got, tc.wantValid)
+			}
+		})
 	}
 }
 

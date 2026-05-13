@@ -17,7 +17,7 @@ func TestParseConfigSOAPRequestBase(t *testing.T) {
 		"headers":[{"xml":"<m:Trace>abc</m:Trace>"}],
 		"httpHeaders":{"X-Correlation-ID":"abc"},
 		"wsSecurity":{"username":"alice","password":"secret","passwordType":"PasswordDigest","mustUnderstand":true},
-		"mtom":{"enabled":true,"attachments":[{"contentId":"doc-1","contentType":"application/pdf","sourceField":"document"}]},
+		"mtom":{"enabled":true,"attachments":[{"contentId":"doc-1","contentType":"application/pdf","sourceField":"document","encoding":"base64"}]},
 		"timeoutMs":5000
 	}`)
 
@@ -31,7 +31,7 @@ func TestParseConfigSOAPRequestBase(t *testing.T) {
 	if cfg.WSSecurity == nil || !cfg.WSSecurity.MustUnderstand || cfg.WSSecurity.PasswordType != "PasswordDigest" {
 		t.Fatalf("unexpected wsSecurity: %#v", cfg.WSSecurity)
 	}
-	if !cfg.MTOM.Enabled || len(cfg.MTOM.Attachments) != 1 || cfg.MTOM.Attachments[0].SourceField != "document" {
+	if !cfg.MTOM.Enabled || len(cfg.MTOM.Attachments) != 1 || cfg.MTOM.Attachments[0].SourceField != "document" || cfg.MTOM.Attachments[0].Encoding != "base64" {
 		t.Fatalf("unexpected mtom: %#v", cfg.MTOM)
 	}
 	if len(cfg.Headers) != 1 || cfg.Headers[0].XML == "" {

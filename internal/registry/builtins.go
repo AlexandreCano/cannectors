@@ -29,6 +29,14 @@ func registerBuiltinInputModules() {
 		return input.NewHTTPPollingFromConfig(cfg)
 	})
 
+	// soapPolling - SOAP polling input module
+	RegisterInput("soapPolling", func(cfg *connector.ModuleConfig) (input.Module, error) {
+		if cfg == nil {
+			return nil, nil
+		}
+		return input.NewSOAPPollingFromConfig(cfg)
+	})
+
 	// webhook - Webhook input module
 	RegisterInput("webhook", func(cfg *connector.ModuleConfig) (input.Module, error) {
 		if cfg == nil {
@@ -100,6 +108,19 @@ func registerBuiltinFilterModules() {
 		module, err := filter.NewHTTPCallFromConfig(httpCallConfig)
 		if err != nil {
 			return nil, fmt.Errorf("invalid http_call config at index %d: %w", index, err)
+		}
+		return module, nil
+	})
+
+	// soap_call - SOAP call filter module with request enrichment and caching
+	RegisterFilter("soap_call", func(cfg connector.ModuleConfig, index int) (filter.Module, error) {
+		soapCallConfig, err := moduleconfig.ParseModuleConfig[filter.SOAPCallConfig](cfg)
+		if err != nil {
+			return nil, fmt.Errorf("invalid soap_call config at index %d: %w", index, err)
+		}
+		module, err := filter.NewSOAPCallFromConfig(soapCallConfig)
+		if err != nil {
+			return nil, fmt.Errorf("invalid soap_call config at index %d: %w", index, err)
 		}
 		return module, nil
 	})
@@ -197,6 +218,14 @@ func registerBuiltinOutputModules() {
 			return nil, nil
 		}
 		return output.NewHTTPRequestFromConfig(cfg)
+	})
+
+	// soapRequest - SOAP request output module
+	RegisterOutput("soapRequest", func(cfg *connector.ModuleConfig) (output.Module, error) {
+		if cfg == nil {
+			return nil, nil
+		}
+		return output.NewSOAPRequestFromConfig(cfg)
 	})
 
 	// database - Database output module for SQL operations

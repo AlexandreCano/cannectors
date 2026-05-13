@@ -2,9 +2,12 @@ package registry
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/cannectors/runtime/internal/modules/filter"
+	"github.com/cannectors/runtime/internal/modules/output"
+	"github.com/cannectors/runtime/pkg/connector"
 )
 
 // TestResolveNestedFilter_PreservesMappingConfig locks the regression flagged
@@ -40,6 +43,70 @@ func TestResolveNestedFilter_PreservesMappingConfig(t *testing.T) {
 	if _, err := module.Process(context.Background(), []map[string]any{{}}); err == nil {
 		t.Fatal("expected error from onMissing:fail when source field is absent")
 	}
+}
+
+func TestBuiltins_RegisterSOAPModules(t *testing.T) {
+	inputCtor := GetInputConstructor("soapPolling")
+	if inputCtor == nil {
+		t.Fatal("soapPolling input constructor is not registered")
+	}
+	inputRaw := mustRegistryJSON(t, map[string]any{
+		"endpoint":  "https://example.com/soap",
+		"operation": "List",
+		"body":      "<List/>",
+	})
+	inputModule, err := inputCtor(&connector.ModuleConfig{Type: "soapPolling", Raw: inputRaw})
+	if err != nil {
+		t.Fatalf("soapPolling constructor: %v", err)
+	}
+	if inputModule == nil {
+		t.Fatal("soapPolling constructor returned nil")
+	}
+	_ = inputModule.Close()
+
+	filterCtor := GetFilterConstructor("soap_call")
+	if filterCtor == nil {
+		t.Fatal("soap_call filter constructor is not registered")
+	}
+	filterRaw := mustRegistryJSON(t, map[string]any{
+		"endpoint":  "https://example.com/soap",
+		"operation": "Lookup",
+		"body":      "<Lookup/>",
+	})
+	filterModule, err := filterCtor(connector.ModuleConfig{Type: "soap_call", Raw: filterRaw}, 0)
+	if err != nil {
+		t.Fatalf("soap_call constructor: %v", err)
+	}
+	if filterModule == nil {
+		t.Fatal("soap_call constructor returned nil")
+	}
+
+	outputCtor := GetOutputConstructor("soapRequest")
+	if outputCtor == nil {
+		t.Fatal("soapRequest output constructor is not registered")
+	}
+	outputRaw := mustRegistryJSON(t, map[string]any{
+		"endpoint":  "https://example.com/soap",
+		"operation": "Submit",
+		"body":      "<Submit/>",
+	})
+	outputModule, err := outputCtor(&connector.ModuleConfig{Type: "soapRequest", Raw: outputRaw})
+	if err != nil {
+		t.Fatalf("soapRequest constructor: %v", err)
+	}
+	if _, ok := outputModule.(output.PreviewableModule); !ok {
+		t.Fatalf("soapRequest should implement PreviewableModule, got %T", outputModule)
+	}
+	_ = outputModule.Close()
+}
+
+func mustRegistryJSON(t *testing.T, cfg map[string]any) json.RawMessage {
+	t.Helper()
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
 }
 
 // TestResolveNestedFilter_PreservesExplicitNullDefault locks the round-trip

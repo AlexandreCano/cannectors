@@ -155,6 +155,7 @@ func (c *Client) Call(ctx context.Context, op SOAPOperation) (SOAPResponse, erro
 		Headers:     captured.Header.Clone(),
 		EnvelopeXML: xmlBody,
 		Attachments: attachments,
+		RetryInfo:   capturingClient.retryInfo,
 	}
 
 	fault, faultErr := ParseSOAPFault(xmlBody)
@@ -205,6 +206,7 @@ type capturingHTTPClient struct {
 	authHandler auth.Handler
 	retry       *connector.RetryConfig
 	response    *capturedHTTPResponse
+	retryInfo   *connector.RetryInfo
 }
 
 func (c *capturingHTTPClient) Do(req *http.Request) (*http.Response, error) {
@@ -223,7 +225,12 @@ func (c *capturingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 func (c *capturingHTTPClient) do(req *http.Request) (*http.Response, error) {
 	if c.retry != nil {
-		return c.base.DoWithRetry(req.Context(), req, *c.retry, httpclient.RetryHooks{})
+		collector := newSOAPRetryCollector()
+		resp, err := c.base.DoWithRetry(req.Context(), req, *c.retry, httpclient.RetryHooks{
+			OnRetry: collector.OnRetry,
+		})
+		c.retryInfo = collector.Info()
+		return resp, err
 	}
 	return c.base.Do(req)
 }
@@ -245,6 +252,42 @@ func (c *capturingHTTPClient) capture(resp *http.Response) {
 }
 
 type rawXMLFragment string
+
+type soapRetryCollector struct {
+	start    time.Time
+	attempts int
+	delaysMs []int64
+}
+
+func newSOAPRetryCollector() *soapRetryCollector {
+	return &soapRetryCollector{start: time.Now()}
+}
+
+func (c *soapRetryCollector) OnRetry(attempt int, retryErr error, nextDelay time.Duration) {
+	c.attempts = attempt + 1
+	if retryErr == nil {
+		return
+	}
+	if nextDelay > 0 {
+		c.delaysMs = append(c.delaysMs, nextDelay.Milliseconds())
+	}
+}
+
+func (c *soapRetryCollector) Info() *connector.RetryInfo {
+	if len(c.delaysMs) == 0 {
+		return nil
+	}
+	info := &connector.RetryInfo{
+		TotalAttempts:   c.attempts,
+		RetryCount:      c.attempts - 1,
+		RetryDelaysMs:   append([]int64(nil), c.delaysMs...),
+		TotalDurationMs: time.Since(c.start).Milliseconds(),
+	}
+	if info.RetryCount < len(c.delaysMs) {
+		info.RetryCount = len(c.delaysMs)
+	}
+	return info
+}
 
 func (r rawXMLFragment) MarshalXML(enc *xml.Encoder, _ xml.StartElement) error {
 	dec := xml.NewDecoder(strings.NewReader(string(r)))

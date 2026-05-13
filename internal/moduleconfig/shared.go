@@ -61,6 +61,7 @@ type AttachmentTemplate struct {
 	ContentID   string `json:"contentId"`
 	ContentType string `json:"contentType"`
 	SourceField string `json:"sourceField"`
+	Encoding    string `json:"encoding,omitempty"`
 }
 
 // SQLRequestBase mirrors common-schema.json#/$defs/sqlRequestBase.

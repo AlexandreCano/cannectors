@@ -1,0 +1,29 @@
+name: soap-output-retry-on-fault
+version: 1.0.0
+description: Test-lab SOAP output retries after a transient SOAP fault then succeeds.
+tags:
+  - test-lab
+  - soap
+  - retry
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/reliability/source/records
+  dataField: records
+filters: []
+output:
+  type: soapRequest
+  endpoint: http://localhost:18080/soap/fault-then-ok
+  soapAction: urn:SubmitOrder
+  operation: SubmitOrder
+  requestMode: batch
+  body: |
+    <SubmitOrder>
+      <FirstOrderId>{{record.records[0].id}}</FirstOrderId>
+    </SubmitOrder>
+  retry:
+    maxAttempts: 2
+    delayMs: 50
+    backoffMultiplier: 1
+    maxDelayMs: 100
+    retryableStatusCodes: [500]

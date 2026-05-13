@@ -1,0 +1,26 @@
+name: soap-output-batch
+version: 1.0.0
+description: Send records to a SOAP operation in batch mode.
+tags:
+  - soap
+  - soap-output
+input:
+  type: webhook
+  path: /webhooks/orders
+filters: []
+output:
+  type: soapRequest
+  endpoint: https://soap.example.com/import
+  soapAction: urn:ImportOrders
+  operation: ImportOrders
+  requestMode: batch
+  body: |
+    <m:ImportOrders xmlns:m="urn:orders">
+      <m:RecordCount>{{record.recordCount}}</m:RecordCount>
+      <m:FirstOrderId>{{record.records[0].orderId | default: ""}}</m:FirstOrderId>
+    </m:ImportOrders>
+  success:
+    statusCodes:
+      - 200
+      - 202
+

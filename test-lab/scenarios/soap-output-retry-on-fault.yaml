@@ -1,0 +1,15 @@
+name: soap-output-retry-on-fault
+description: SOAP output retries after a transient SOAP fault and then succeeds.
+pipeline: test-lab/pipelines/soap-output-retry-on-fault.yaml
+expect_status: success
+assertions:
+  - http_count_eq:
+      method: POST
+      path: /soap/fault-then-ok
+      status: 500
+      expected: 1
+  - http_count_eq:
+      method: POST
+      path: /soap/fault-then-ok
+      status: 200
+      expected: 1

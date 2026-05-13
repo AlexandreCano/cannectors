@@ -1,0 +1,35 @@
+name: soap-call-enrichment
+version: 1.0.0
+description: Poll orders every five minutes, enrich each record with a SOAP lookup, cache responses, and append the SOAP result under a result key.
+tags:
+  - soap
+  - enrichment
+input:
+  type: httpPolling
+  schedule: "*/5 * * * *"
+  endpoint: https://source.example.com/api/orders
+  dataField: orders
+filters:
+  - type: soap_call
+    endpoint: https://soap.example.com/customers
+    soapAction: urn:GetCustomer
+    operation: GetCustomer
+    body: |
+      <m:GetCustomer xmlns:m="urn:customers">
+        <m:CustomerId>{{record.customerId}}</m:CustomerId>
+      </m:GetCustomer>
+    dataField: Envelope.Body.GetCustomerResponse.Customer
+    mergeStrategy: append
+    resultKey: customer
+    cache:
+      enabled: true
+      maxSize: 1000
+      ttlSeconds: 300
+      key: "{{record.customerId}}"
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/orders/enriched
+  method: POST
+  requestMode: batch
+  headers:
+    Content-Type: application/json

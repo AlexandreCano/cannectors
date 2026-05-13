@@ -39,6 +39,7 @@ func TestExampleConfigsAreSchemaCompliant(t *testing.T) {
 		"OAUTH_CLIENT_ID": "stub", "OAUTH_CLIENT_SECRET": "stub",
 		"REFERENCE_DATABASE_URL": "postgres://stub:stub@localhost:5432/stub?sslmode=disable",
 		"ORDERS_API_TOKEN":       "stub", "SOURCE_API_KEY": "stub",
+		"SOAP_PASSWORD":       "stub",
 		"SOURCE_BEARER_TOKEN": "stub",
 		"SOURCE_API_TOKEN":    "stub", "SOURCE_CLIENT_ID": "stub",
 		"SOURCE_CLIENT_SECRET":   "stub",

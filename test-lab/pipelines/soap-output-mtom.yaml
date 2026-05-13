@@ -1,0 +1,33 @@
+name: soap-output-mtom
+version: 1.0.0
+description: Test-lab SOAP output emitting a base64-decoded MTOM attachment.
+tags:
+  - test-lab
+  - soap
+  - mtom
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/soap/source/documents
+  dataField: documents
+filters: []
+output:
+  type: soapRequest
+  endpoint: http://localhost:18080/soap/documents/upload
+  soapAction: urn:UploadDocument
+  operation: UploadDocument
+  requestMode: single
+  body: |
+    <UploadDocument>
+      <DocumentId>{{record.documentId}}</DocumentId>
+      <File>
+        <xop:Include xmlns:xop="http://www.w3.org/2004/08/xop/include" href="cid:{{record.documentId}}"/>
+      </File>
+    </UploadDocument>
+  mtom:
+    enabled: true
+    attachments:
+      - contentId: "{{record.documentId}}"
+        contentType: application/pdf
+        sourceField: documentBase64
+        encoding: base64

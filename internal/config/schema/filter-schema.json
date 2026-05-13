@@ -12,7 +12,7 @@
 			"properties": {
 				"type": {
 					"type": "string",
-					"description": "Filter type. Canonical: mapping, condition, drop, set, remove, script, http_call, sql_call.",
+					"description": "Filter type. Canonical: mapping, condition, drop, set, remove, script, http_call, soap_call, sql_call.",
 					"minLength": 1
 				}
 			},
@@ -48,6 +48,12 @@
 							"allOf": [
 								{ "$ref": "#/$defs/httpCallFilterConfig" },
 								{ "properties": { "type": { "const": "http_call" } }, "required": [ "type" ] }
+							]
+						},
+						{
+							"allOf": [
+								{ "$ref": "#/$defs/soapCallFilterConfig" },
+								{ "properties": { "type": { "const": "soap_call" } }, "required": [ "type" ] }
 							]
 						},
 						{
@@ -210,6 +216,57 @@
 							"$ref": "common-schema.json#/$defs/retryConfig"
 						}
 					}
+				}
+			]
+		},
+
+		"soapCallFilterConfig": {
+			"allOf": [
+				{ "$ref": "common-schema.json#/$defs/soapRequestBase" },
+				{
+					"type": "object",
+					"description": "SOAP call filter module configuration. Makes SOAP requests to external APIs for record enrichment.",
+					"properties": {
+						"keys": {
+							"type": "array",
+							"description": "List of key configurations for extracting values from records and using them in request metadata.",
+							"items": {
+								"$ref": "common-schema.json#/$defs/httpCallKeyConfig"
+							}
+						},
+						"cache": {
+							"$ref": "#/$defs/cacheConfig"
+						},
+						"mergeStrategy": {
+							"type": "string",
+							"description": "How to merge SOAP response with input records.",
+							"enum": [
+								"merge",
+								"replace",
+								"append"
+							],
+							"default": "merge"
+						},
+						"resultKey": {
+							"type": "string",
+							"minLength": 1,
+							"description": "Key for storing the SOAP response when append mode is used."
+						},
+						"dataField": {
+							"type": "string",
+							"description": "Field path to extract from the parsed SOAP response map before merge/replace/append. When omitted, the full parsed SOAP response is used."
+						},
+						"retry": {
+							"$ref": "common-schema.json#/$defs/retryConfig"
+						}
+					}
+				},
+				{
+					"if": {
+						"properties": { "mergeStrategy": { "const": "append" } },
+						"required": ["mergeStrategy"]
+					},
+					"then": { "required": ["resultKey"] }
 				}
 			]
 		},

@@ -25,6 +25,8 @@ input:
 filters:
   - type: condition
     expression: status == "paid"
+    else:
+      - type: drop
 output:
   type: httpRequest
   endpoint: https://destination.example.com/api/invoices

@@ -1,0 +1,15 @@
+{
+  "name": "soap-fault-then-ok-step2",
+  "priority": 1,
+  "scenarioName": "soap-fault-then-ok",
+  "requiredScenarioState": "succeeded",
+  "request": {
+    "method": "POST",
+    "urlPath": "/soap/fault-then-ok"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "text/xml; charset=utf-8" },
+    "body": "<Envelope><Body><SubmitOrderResponse><ok>true</ok></SubmitOrderResponse></Body></Envelope>"
+  }
+}

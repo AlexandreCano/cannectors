@@ -1,0 +1,18 @@
+{
+  "name": "soap-source-documents",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/soap/source/documents"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "documents": [
+        { "documentId": "doc-1", "documentBase64": "cGRmLWJ5dGVz" }
+      ]
+    }
+  }
+}
+

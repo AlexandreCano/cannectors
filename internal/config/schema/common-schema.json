@@ -213,6 +213,171 @@
 			}
 		},
 
+		"soapRequestBase": {
+			"type": "object",
+			"description": "Common SOAP request configuration shared by soapPolling, soap_call, and soapRequest modules. The body is raw XML; no WSDL parsing is performed at runtime.",
+			"required": [ "endpoint", "operation", "body" ],
+			"properties": {
+				"endpoint": {
+					"type": "string",
+					"description": "SOAP endpoint URL. Templates are accepted; the final URL is validated at runtime after template resolution.",
+					"minLength": 1
+				},
+				"soapVersion": {
+					"type": "string",
+					"description": "SOAP envelope and HTTP binding version.",
+					"enum": [ "1.1", "1.2" ],
+					"default": "1.1"
+				},
+				"soapAction": {
+					"type": "string",
+					"description": "SOAP action. SOAP 1.1 sends this as the SOAPAction header; SOAP 1.2 sends it as a Content-Type action parameter."
+				},
+				"operation": {
+					"type": "string",
+					"description": "Logical SOAP operation name.",
+					"minLength": 1
+				},
+				"body": {
+					"type": "string",
+					"description": "Raw XML body fragment. Templates ({{record.field}}) are XML-escaped at runtime.",
+					"minLength": 1
+				},
+				"headers": {
+					"type": "array",
+					"description": "Raw SOAP header XML fragments.",
+					"items": {
+						"$ref": "#/$defs/soapHeaderTemplate"
+					}
+				},
+				"authentication": {
+					"$ref": "auth-schema.json#/$defs/auth",
+					"description": "HTTP transport authentication."
+				},
+				"wsSecurity": {
+					"$ref": "#/$defs/soapSecurityConfig"
+				},
+				"mtom": {
+					"$ref": "#/$defs/soapMTOMConfig"
+				},
+				"httpHeaders": {
+					"$ref": "#/$defs/httpHeaders",
+					"description": "Additional HTTP headers. Content-Type and SOAPAction are controlled by the SOAP version."
+				},
+				"timeoutMs": {
+					"type": "integer",
+					"description": "Request timeout in milliseconds. When omitted, each module applies its own runtime default.",
+					"minimum": 1
+				}
+			},
+			"allOf": [
+				{
+					"if": {
+						"properties": { "soapVersion": { "const": "1.2" } },
+						"required": [ "soapVersion" ]
+					},
+					"then": {
+						"properties": {
+							"httpHeaders": {
+								"propertyNames": {
+									"not": { "pattern": "^(?i)soapaction$" }
+								}
+							}
+						}
+					}
+				}
+			]
+		},
+
+		"soapHeaderTemplate": {
+			"type": "object",
+			"description": "Raw SOAP header XML fragment.",
+			"required": [ "xml" ],
+			"additionalProperties": false,
+			"properties": {
+				"xml": {
+					"type": "string",
+					"minLength": 1
+				}
+			}
+		},
+
+		"soapSecurityConfig": {
+			"type": "object",
+			"description": "WS-Security UsernameToken configuration. Only PasswordText and PasswordDigest are supported.",
+			"required": [ "username", "password" ],
+			"additionalProperties": false,
+			"properties": {
+				"username": {
+					"type": "string",
+					"minLength": 1
+				},
+				"password": {
+					"type": "string",
+					"minLength": 1
+				},
+				"passwordType": {
+					"type": "string",
+					"enum": [ "PasswordText", "PasswordDigest" ],
+					"default": "PasswordText"
+				},
+				"tokenId": {
+					"type": "string",
+					"minLength": 1
+				},
+				"mustUnderstand": {
+					"type": "boolean",
+					"default": false
+				}
+			}
+		},
+
+		"soapMTOMConfig": {
+			"type": "object",
+			"description": "MTOM/XOP configuration. The raw XML body must contain matching xop:Include cid references for outgoing attachments.",
+			"additionalProperties": false,
+			"properties": {
+				"enabled": {
+					"type": "boolean",
+					"default": false
+				},
+				"attachments": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/soapAttachmentTemplate"
+					}
+				}
+			}
+		},
+
+		"soapAttachmentTemplate": {
+			"type": "object",
+			"description": "Outgoing MTOM attachment template.",
+			"required": [ "contentId", "contentType", "sourceField" ],
+			"additionalProperties": false,
+			"properties": {
+				"contentId": {
+					"type": "string",
+					"minLength": 1
+				},
+				"contentType": {
+					"type": "string",
+					"minLength": 1
+				},
+				"sourceField": {
+					"type": "string",
+					"description": "Record path containing the attachment bytes.",
+					"minLength": 1
+				},
+				"encoding": {
+					"type": "string",
+					"description": "Encoding of string values read from sourceField. 'binary' sends the string bytes as-is; 'base64' decodes the string before attaching it.",
+					"enum": [ "binary", "base64" ],
+					"default": "binary"
+				}
+			}
+		},
+
 		"pagination": {
 			"type": "object",
 			"description": "Pagination configuration for HTTP polling.",

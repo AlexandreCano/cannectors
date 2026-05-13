@@ -26,11 +26,15 @@ func normalizeHTTPCallMethod(method string) (string, error) {
 // schema enum already restricts callers, but this is the runtime safety net
 // (Story 24.11 AC7). Empty string falls back to the module default.
 func normalizeHTTPCallMergeStrategy(s string) (string, error) {
+	return normalizeMergeStrategy("http_call", s)
+}
+
+func normalizeMergeStrategy(moduleType, s string) (string, error) {
 	if s == "" {
 		return defaultHTTPCallStrategy, nil
 	}
 	if s != "merge" && s != "replace" && s != "append" {
-		return "", fmt.Errorf("invalid mergeStrategy %q for http_call: must be one of merge, replace, append", s)
+		return "", fmt.Errorf("invalid mergeStrategy %q for %s: must be one of merge, replace, append", s, moduleType)
 	}
 	return s, nil
 }

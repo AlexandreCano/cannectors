@@ -1,0 +1,11 @@
+name: soap-output-fault
+description: SOAP output fails with a typed SOAP fault surfaced in logs.
+pipeline: test-lab/pipelines/soap-output-fault.yaml
+expect_status: error
+assertions:
+  - http_count_eq:
+      method: POST
+      path: /soap/fault
+      status: 500
+      expected: 1
+  - log_contains: "SOAP fault soap:Server: Lab transient fault"

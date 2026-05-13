@@ -1,0 +1,26 @@
+name: soap-polling-basic-v11
+version: 1.0.0
+description: Poll a SOAP 1.1 operation and forward extracted records as an HTTP batch.
+tags:
+  - soap
+  - soap-polling
+input:
+  type: soapPolling
+  endpoint: https://soap.example.com/orders/v11
+  soapVersion: "1.1"
+  soapAction: urn:ListOrders
+  operation: ListOrders
+  body: |
+    <m:ListOrders xmlns:m="urn:orders">
+      <m:Status>ready</m:Status>
+    </m:ListOrders>
+  dataField: Envelope.Body.ListOrdersResponse.Orders.Order
+filters: []
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/orders/import
+  method: POST
+  requestMode: batch
+  headers:
+    Content-Type: application/json
+

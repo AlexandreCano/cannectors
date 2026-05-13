@@ -155,9 +155,9 @@ func ValidateConfig(data map[string]any) *ValidationResult {
 
 // Known valid types for each module category.
 var (
-	validInputTypes  = []string{"webhook", "httpPolling", "database"}
-	validFilterTypes = []string{"mapping", "condition", "script", "http_call", "sql_call", "set", "remove"}
-	validOutputTypes = []string{"httpRequest", "database"}
+	validInputTypes  = []string{"webhook", "httpPolling", "soapPolling", "database"}
+	validFilterTypes = []string{"mapping", "condition", "script", "http_call", "soap_call", "sql_call", "set", "remove"}
+	validOutputTypes = []string{"httpRequest", "soapRequest", "database"}
 )
 
 // convertValidationErrors converts jsonschema validation errors to actionable messages.

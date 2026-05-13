@@ -1,0 +1,24 @@
+name: soap-polling-v11
+version: 1.0.0
+description: Test-lab SOAP 1.1 polling to HTTP batch output.
+tags:
+  - test-lab
+  - soap
+input:
+  type: soapPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/soap/orders/v11
+  soapVersion: "1.1"
+  soapAction: urn:ListOrders
+  operation: ListOrders
+  body: <ListOrders/>
+  dataField: Envelope.Body.ListOrdersResponse.Orders.Order
+filters: []
+output:
+  type: httpRequest
+  endpoint: http://localhost:18080/soap/destination/orders
+  method: POST
+  requestMode: batch
+  headers:
+    Content-Type: application/json
+

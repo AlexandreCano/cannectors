@@ -1,0 +1,30 @@
+diff --git a/soap/soap.go b/soap/soap.go
+--- a/soap/soap.go
++++ b/soap/soap.go
+@@
+-	XMLName     xml.Name `xml:"http://schemas.xmlsoap.org/soap/envelope/ Envelope"`
++	XMLName     xml.Name `xml:"Envelope"`
+@@
++	SOAP11 SOAPVersion = "1.1"
++	SOAP12 SOAPVersion = "1.2"
++	XmlNsSoapEnv12  string = "http://www.w3.org/2003/05/soap-envelope"
++type SOAPVersion string
+@@
++	soapVersion      SOAPVersion
+@@
++	soapVersion:      SOAP11,
+@@
++func WithSOAPVersion(version SOAPVersion) Option
+@@
++	if s.opts.soapVersion == SOAP12 {
++		envelope.XmlNS = XmlNsSoapEnv12
++	}
+@@
++	} else if s.opts.soapVersion == SOAP12 {
++		req.Header.Add("Content-Type", fmt.Sprintf(`application/soap+xml; charset="utf-8"; action=%q`, soapAction))
+@@
+-	req.Header.Add("SOAPAction", soapAction)
++	if s.opts.soapVersion != SOAP12 {
++		req.Header.Add("SOAPAction", soapAction)
++	}
+

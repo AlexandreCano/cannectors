@@ -12,6 +12,8 @@ input:
 filters:
   - type: condition
     expression: id != nil
+    else:
+      - type: drop
 output:
   type: httpRequest
   endpoint: https://destination.example.com/api/shipments

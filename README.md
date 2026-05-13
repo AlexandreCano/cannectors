@@ -6,10 +6,10 @@ output` flow.
 
 ## What It Does
 
-- Pull records from HTTP APIs, webhooks, PostgreSQL, MySQL, or SQLite.
-- Transform records with mapping, condition, script, set, remove, HTTP call, and
-  SQL call filters.
-- Send records to HTTP APIs or databases.
+- Pull records from HTTP APIs, SOAP APIs, webhooks, PostgreSQL, MySQL, or SQLite.
+- Transform records with mapping, condition, script, set, remove, HTTP call,
+  SOAP call, and SQL call filters.
+- Send records to HTTP APIs, SOAP APIs, or databases.
 - Handle authentication, retries, scheduling, state persistence, and dry-run
   previews from configuration.
 
@@ -66,7 +66,6 @@ output:
 - [Operations guide](docs/OPERATIONS.md)
 - [Maintained examples](examples/README.md)
 - [Module extensibility](docs/MODULE_EXTENSIBILITY.md)
-- [Architecture](docs/ARCHITECTURE.md)
 
 ## Examples
 

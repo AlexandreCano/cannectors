@@ -1,10 +1,5 @@
 # Cannectors — AI Agent Instructions
 
-## Fichiers liés
-
-- @_bmad-output/project-context.md
-- @test-patterns.md
-
 ## Project Maturity
 
 **Le projet n'est pas en production et n'est pas utilisé par des tiers.**
@@ -30,9 +25,22 @@ Règles :
 - ✅ Si un diagnostic lint pré-existant est remonté sur du code non touché par la tâche, ignore-le (ne nettoie pas opportunément) sauf si le user le demande
 - ✅ En cas d'échec irréductible (ex: test flaky connu, lint qui demande un refacto hors-scope), remonte-le explicitement au user avant de marquer la tâche finie
 
-## Library Usage (override project-context)
+### Patterns de tests
 
-**Override de la règle `Library Usage` du `project-context.md`** : sur ce projet, tu **n'as pas besoin de demander l'autorisation** avant d'ajouter ou d'utiliser une librairie.
+#### Fixtures mapping
+
+`internal/modules/filter/mapping_fixtures_test.go` centralise le setup des tests mapping :
+
+- `rb()` construit des records `map[string]any` sans répéter des literals inline.
+- `mb()` construit des valeurs `FieldMapping` sans répéter la plomberie `strPtr`.
+- `tb()` construit des valeurs `TransformOp` pour les cas riches en transforms.
+- `assertMapped` et `assertRecordsEqual` gardent le boilerplate process/assert cohérent.
+
+Utilise ces helpers quand tu ajoutes des tests mapping, avant d'introduire un nouveau setup local.
+
+## Library Usage
+
+Sur ce projet, tu **n'as pas besoin de demander l'autorisation** avant d'ajouter ou d'utiliser une librairie.
 
 - ✅ Privilégie systématiquement les librairies maintenues (stdlib, `golang.org/x/...`, ou écosystème Go bien établi) plutôt que de réimplémenter une logique existante (validation, parsing, retry, backoff, LRU, time, URL, etc.)
 - ✅ Si un package stdlib ou `golang.org/x/...` couvre déjà le besoin, utilise-le directement — pas de roue réinventée

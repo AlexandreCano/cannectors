@@ -43,6 +43,15 @@ Validate one example:
 | [22-defaults-inheritance.yaml](22-defaults-inheritance.yaml) | Top-level defaults and module overrides |
 | [23-auth-basic-bearer-query-key.yaml](23-auth-basic-bearer-query-key.yaml) | Bearer, basic, and query API key auth |
 | [24-empty-filter-pass-through.yaml](24-empty-filter-pass-through.yaml) | Empty filter chain pass-through |
+| [40-soap-polling-basic-v11.yaml](40-soap-polling-basic-v11.yaml) | SOAP 1.1 polling input |
+| [40b-soap-polling-basic-v12.yaml](40b-soap-polling-basic-v12.yaml) | SOAP 1.2 polling input |
+| [41-soap-polling-cursor.yaml](41-soap-polling-cursor.yaml) | Cursor pagination in a SOAP body |
+| [42-soap-call-enrichment.yaml](42-soap-call-enrichment.yaml) | SOAP enrichment filter with cache and append |
+| [43-soap-output-batch.yaml](43-soap-output-batch.yaml) | Batched SOAP output |
+| [44-soap-output-mtom-emission.yaml](44-soap-output-mtom-emission.yaml) | SOAP MTOM attachment emission |
+| [44b-soap-input-mtom-reception.yaml](44b-soap-input-mtom-reception.yaml) | SOAP MTOM attachment reception |
+| [45-soap-output-wssecurity-passwordtext.yaml](45-soap-output-wssecurity-passwordtext.yaml) | WS-Security UsernameToken PasswordText |
+| [45b-soap-output-wssecurity-passworddigest.yaml](45b-soap-output-wssecurity-passworddigest.yaml) | WS-Security UsernameToken PasswordDigest |
 
 ## Assets
 

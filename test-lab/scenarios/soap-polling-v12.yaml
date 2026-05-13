@@ -1,0 +1,18 @@
+name: soap-polling-v12
+description: SOAP 1.2 input fetches records and sends them to an HTTP batch destination.
+pipeline: test-lab/pipelines/soap-polling-v12.yaml
+expect_status: success
+assertions:
+  - http_count_eq:
+      method: POST
+      path: /soap/orders/v12
+      body_contains: ListOrders
+      status: 200
+      expected: 1
+  - http_count_eq:
+      method: POST
+      path: /soap/destination/orders
+      body_contains: SOAP12-1
+      status: 200
+      expected: 1
+

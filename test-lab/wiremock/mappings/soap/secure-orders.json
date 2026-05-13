@@ -1,0 +1,14 @@
+{
+  "name": "soap-secure-orders",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/soap/secure/orders"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "text/xml; charset=utf-8" },
+    "body": "<Envelope><Body><SubmitOrderResponse><ok>true</ok></SubmitOrderResponse></Body></Envelope>"
+  }
+}
+

@@ -1,0 +1,16 @@
+name: soap-output-mtom
+description: SOAP output sends a multipart MTOM request with an XOP include.
+pipeline: test-lab/pipelines/soap-output-mtom.yaml
+expect_status: success
+assertions:
+  - http_count_eq:
+      method: GET
+      path: /soap/source/documents
+      status: 200
+      expected: 1
+  - http_count_eq:
+      method: POST
+      path: /soap/documents/upload
+      body_contains: "cid:doc-1"
+      status: 200
+      expected: 1

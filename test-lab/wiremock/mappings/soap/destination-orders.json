@@ -1,0 +1,14 @@
+{
+  "name": "soap-destination-orders",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/soap/destination/orders"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "ok": true }
+  }
+}
+

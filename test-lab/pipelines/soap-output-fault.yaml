@@ -1,0 +1,29 @@
+name: soap-output-fault
+version: 1.0.0
+description: Test-lab SOAP output surfacing a typed SOAP fault.
+tags:
+  - test-lab
+  - soap
+input:
+  type: httpPolling
+  schedule: "* * * * * *"
+  endpoint: http://localhost:18080/reliability/source/records
+  dataField: records
+filters: []
+output:
+  type: soapRequest
+  endpoint: http://localhost:18080/soap/fault
+  soapAction: urn:SubmitOrder
+  operation: SubmitOrder
+  requestMode: single
+  body: |
+    <SubmitOrder>
+      <OrderId>{{record.id}}</OrderId>
+    </SubmitOrder>
+  retry:
+    maxAttempts: 0
+    delayMs: 1
+    backoffMultiplier: 1
+    maxDelayMs: 1
+    retryableStatusCodes: [500]
+

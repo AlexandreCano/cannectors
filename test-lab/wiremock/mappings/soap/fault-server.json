@@ -1,0 +1,14 @@
+{
+  "name": "soap-fault-server",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/soap/fault"
+  },
+  "response": {
+    "status": 500,
+    "headers": { "Content-Type": "text/xml; charset=utf-8" },
+    "body": "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"><soap:Body><soap:Fault><faultcode>soap:Server</faultcode><faultstring>Lab transient fault</faultstring></soap:Fault></soap:Body></soap:Envelope>"
+  }
+}
+

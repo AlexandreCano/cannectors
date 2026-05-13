@@ -1,0 +1,30 @@
+name: soap-polling-cursor
+version: 1.0.0
+description: Poll a cursor-paginated SOAP operation by injecting the cursor into the XML body.
+tags:
+  - soap
+  - pagination
+input:
+  type: soapPolling
+  endpoint: https://soap.example.com/orders/cursor
+  soapAction: urn:ListOrdersPage
+  operation: ListOrdersPage
+  body: |
+    <m:ListOrdersPage xmlns:m="urn:orders">
+      <m:Cursor>{{record.pagination.cursor | default: ""}}</m:Cursor>
+      <m:Limit>100</m:Limit>
+    </m:ListOrdersPage>
+  dataField: Envelope.Body.ListOrdersPageResponse.Orders.Order
+  pagination:
+    type: cursor
+    param: cursor
+    nextCursorField: Envelope.Body.ListOrdersPageResponse.NextCursor
+filters: []
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/orders/import
+  method: POST
+  requestMode: batch
+  headers:
+    Content-Type: application/json
+

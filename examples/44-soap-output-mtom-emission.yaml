@@ -1,0 +1,31 @@
+name: soap-output-mtom-emission
+version: 1.0.0
+description: Send a SOAP request with a base64 record field decoded into an outgoing MTOM attachment.
+tags:
+  - soap
+  - mtom
+input:
+  type: webhook
+  path: /webhooks/documents
+filters: []
+output:
+  type: soapRequest
+  endpoint: https://soap.example.com/documents/upload
+  soapAction: urn:UploadDocument
+  operation: UploadDocument
+  requestMode: single
+  body: |
+    <m:UploadDocument xmlns:m="urn:documents">
+      <m:DocumentId>{{record.documentId}}</m:DocumentId>
+      <m:File>
+        <xop:Include xmlns:xop="http://www.w3.org/2004/08/xop/include" href="cid:{{record.documentId}}"/>
+      </m:File>
+    </m:UploadDocument>
+  mtom:
+    enabled: true
+    attachments:
+      - contentId: "{{record.documentId}}"
+        contentType: application/pdf
+        sourceField: documentBase64
+        encoding: base64
+

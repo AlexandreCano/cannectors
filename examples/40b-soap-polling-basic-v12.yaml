@@ -1,0 +1,26 @@
+name: soap-polling-basic-v12
+version: 1.0.0
+description: Poll a SOAP 1.2 operation. The SOAP action is sent as a content-type parameter.
+tags:
+  - soap
+  - soap12
+input:
+  type: soapPolling
+  endpoint: https://soap.example.com/orders/v12
+  soapVersion: "1.2"
+  soapAction: urn:ListOrders
+  operation: ListOrders
+  body: |
+    <m:ListOrders xmlns:m="urn:orders">
+      <m:Status>ready</m:Status>
+    </m:ListOrders>
+  dataField: Envelope.Body.ListOrdersResponse.Orders.Order
+filters: []
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/orders/import
+  method: POST
+  requestMode: batch
+  headers:
+    Content-Type: application/json
+

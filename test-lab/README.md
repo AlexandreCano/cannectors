@@ -155,6 +155,23 @@ All pipelines use the CRON expression `* * * * * *` (every second) so that the h
 test-lab/scripts/run-pipeline-once.sh test-lab/pipelines/pagination-page.yaml
 ```
 
+### SOAP scenarios
+
+SOAP pipelines exercise SOAP 1.1/1.2 polling, WS-Security UsernameToken
+PasswordText and PasswordDigest, MTOM emission, fault propagation, and retry
+after a transient SOAP fault. Run only the SOAP subset with:
+
+```bash
+make test-lab-up
+python3 test-lab/run.py soap
+```
+
+MTOM reception is covered by the hermetic Go test
+`TestSOAPPolling_MTOMResponseAttachesPartsToRecords`. WireMock can serve a
+literal multipart body, but keeping that body in JSON mappings is brittle, so
+the lab currently focuses on MTOM emission and the unit test covers response
+parsing.
+
 ### HTTP pagination (story 22.1)
 
 Three pipelines validate the three pagination strategies of `httpPolling` against deterministic WireMock stubs.

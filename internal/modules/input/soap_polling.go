@@ -143,7 +143,7 @@ func (s *SOAPPolling) fetchSingle(ctx context.Context, record map[string]any) ([
 	if err != nil {
 		return nil, err
 	}
-	return s.recordsFromResponse(resp.Data)
+	return s.recordsFromSOAPResponse(resp)
 }
 
 func (s *SOAPPolling) call(ctx context.Context, record map[string]any) (soapclient.SOAPResponse, error) {
@@ -167,6 +167,28 @@ func (s *SOAPPolling) recordsFromResponse(data map[string]any) ([]map[string]any
 		return nil, err
 	}
 	return soaputil.ValueAsRecords(value)
+}
+
+func (s *SOAPPolling) recordsFromSOAPResponse(resp soapclient.SOAPResponse) ([]map[string]any, error) {
+	records, err := s.recordsFromResponse(resp.Data)
+	if err != nil {
+		return nil, err
+	}
+	if len(resp.Attachments) == 0 {
+		return records, nil
+	}
+	attachments := make(map[string]any, len(resp.Attachments))
+	for cid, attachment := range resp.Attachments {
+		attachments[cid] = map[string]any{
+			"contentId":   attachment.ContentID,
+			"contentType": attachment.ContentType,
+			"data":        attachment.Data,
+		}
+	}
+	for _, record := range records {
+		record["_soapAttachments"] = attachments
+	}
+	return records, nil
 }
 
 func (s *SOAPPolling) fetchWithPagination(ctx context.Context) ([]map[string]any, error) {
@@ -194,7 +216,7 @@ func (s *SOAPPolling) fetchPageBased(ctx context.Context) ([]map[string]any, err
 		if err != nil {
 			return nil, err
 		}
-		records, err := s.recordsFromResponse(resp.Data)
+		records, err := s.recordsFromSOAPResponse(resp)
 		if err != nil {
 			return nil, err
 		}
@@ -228,7 +250,7 @@ func (s *SOAPPolling) fetchOffsetBased(ctx context.Context) ([]map[string]any, e
 		if err != nil {
 			return nil, err
 		}
-		records, err := s.recordsFromResponse(resp.Data)
+		records, err := s.recordsFromSOAPResponse(resp)
 		if err != nil {
 			return nil, err
 		}
@@ -259,7 +281,7 @@ func (s *SOAPPolling) fetchCursorBased(ctx context.Context) ([]map[string]any, e
 		if err != nil {
 			return nil, err
 		}
-		records, err := s.recordsFromResponse(resp.Data)
+		records, err := s.recordsFromSOAPResponse(resp)
 		if err != nil {
 			return nil, err
 		}

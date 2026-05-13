@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -202,6 +203,62 @@ func TestSOAPPolling_StatePersistenceValuesAreTemplated(t *testing.T) {
 
 	if _, err := module.Fetch(context.Background()); err != nil {
 		t.Fatalf("Fetch: %v", err)
+	}
+}
+
+func TestSOAPPolling_MTOMResponseAttachesPartsToRecords(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		var b strings.Builder
+		writer := multipart.NewWriter(&b)
+		root, err := writer.CreatePart(map[string][]string{
+			"Content-Type": {"application/xop+xml; charset=utf-8"},
+			"Content-ID":   {"<root>"},
+		})
+		if err != nil {
+			t.Fatalf("CreatePart root: %v", err)
+		}
+		_, _ = root.Write([]byte(`<Envelope><Body><ListDocumentsResponse><Documents><Document><id>doc-1</id><file><xop:Include xmlns:xop="http://www.w3.org/2004/08/xop/include" href="cid:file-1"/></file></Document></Documents></ListDocumentsResponse></Body></Envelope>`))
+		part, err := writer.CreatePart(map[string][]string{
+			"Content-Type": {"application/pdf"},
+			"Content-ID":   {"<file-1>"},
+		})
+		if err != nil {
+			t.Fatalf("CreatePart attachment: %v", err)
+		}
+		_, _ = part.Write([]byte("pdf-bytes"))
+		if err := writer.Close(); err != nil {
+			t.Fatalf("closing multipart writer: %v", err)
+		}
+		w.Header().Set("Content-Type", `multipart/related; type="application/xop+xml"; start="<root>"; boundary="`+writer.Boundary()+`"`)
+		_, _ = w.Write([]byte(b.String()))
+	}))
+	defer server.Close()
+
+	module := newSOAPTestPolling(t, map[string]any{
+		"endpoint":  server.URL,
+		"operation": "ListDocuments",
+		"body":      `<ListDocuments/>`,
+		"dataField": "Envelope.Body.ListDocumentsResponse.Documents.Document",
+	})
+	defer func() { _ = module.Close() }()
+	records, err := module.Fetch(context.Background())
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	attachments, ok := records[0]["_soapAttachments"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing _soapAttachments: %#v", records[0])
+	}
+	file, ok := attachments["file-1"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing file-1 attachment: %#v", attachments)
+	}
+	data, ok := file["data"].([]byte)
+	if !ok {
+		t.Fatalf("attachment data = %T, want []byte", file["data"])
+	}
+	if string(data) != "pdf-bytes" {
+		t.Fatalf("unexpected attachment data: %#v", file)
 	}
 }
 

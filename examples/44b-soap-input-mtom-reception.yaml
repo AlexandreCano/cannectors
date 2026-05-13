@@ -1,0 +1,29 @@
+name: soap-input-mtom-reception
+version: 1.0.0
+description: Poll a SOAP operation whose response may be multipart/related MTOM; parsed attachments are exposed under each record's _soapAttachments map.
+tags:
+  - soap
+  - mtom
+input:
+  type: soapPolling
+  endpoint: https://soap.example.com/documents/download
+  soapAction: urn:ListDocuments
+  operation: ListDocuments
+  body: |
+    <m:ListDocuments xmlns:m="urn:documents">
+      <m:Folder>inbox</m:Folder>
+    </m:ListDocuments>
+  dataField: Envelope.Body.ListDocumentsResponse.Documents.Document
+filters: []
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/documents
+  method: POST
+  requestMode: batch
+  headers:
+    Content-Type: application/json
+
+# Runtime convention for received MTOM parts:
+# each returned record includes _soapAttachments[contentId] with contentId,
+# contentType, and data ([]byte). Phase 5 docs show mapping patterns for
+# copying these values into domain-specific fields.

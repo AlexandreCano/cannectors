@@ -1,0 +1,17 @@
+{
+  "name": "soap-fault-then-ok-step1",
+  "priority": 1,
+  "scenarioName": "soap-fault-then-ok",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "succeeded",
+  "request": {
+    "method": "POST",
+    "urlPath": "/soap/fault-then-ok"
+  },
+  "response": {
+    "status": 500,
+    "headers": { "Content-Type": "text/xml; charset=utf-8" },
+    "body": "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"><soap:Body><soap:Fault><faultcode>soap:Server</faultcode><faultstring>Retryable lab fault</faultstring><detail><retryable>true</retryable></detail></soap:Fault></soap:Body></soap:Envelope>"
+  }
+}
+

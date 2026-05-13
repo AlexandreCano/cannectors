@@ -11,6 +11,7 @@ func TestParseSOAPFault_SOAP11(t *testing.T) {
 	}
 	if fault == nil {
 		t.Fatal("expected fault")
+		return
 	}
 	if fault.Version != SOAPVersion11 || fault.Code != "soap:Client" || fault.Reason != "Bad request" || fault.Detail != "<code>E1</code>" {
 		t.Fatalf("unexpected fault: %#v", fault)
@@ -26,6 +27,7 @@ func TestParseSOAPFault_SOAP12(t *testing.T) {
 	}
 	if fault == nil {
 		t.Fatal("expected fault")
+		return
 	}
 	if fault.Version != SOAPVersion12 || fault.Code != "env:Sender" || fault.Reason != "Invalid" || fault.Detail != "<code>E2</code>" {
 		t.Fatalf("unexpected fault: %#v", fault)

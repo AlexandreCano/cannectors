@@ -15,6 +15,7 @@ func TestNewStateStore(t *testing.T) {
 	store := NewStateStore(tmpDir)
 	if store == nil {
 		t.Fatal("NewStateStore returned nil")
+		return
 	}
 	if store.basePath != tmpDir {
 		t.Errorf("basePath = %q, want %q", store.basePath, tmpDir)
@@ -25,6 +26,7 @@ func TestNewStateStore_DefaultPath(t *testing.T) {
 	store := NewStateStore("")
 	if store == nil {
 		t.Fatal("NewStateStore returned nil")
+		return
 	}
 	if store.basePath != DefaultStatePath {
 		t.Errorf("basePath = %q, want default %q", store.basePath, DefaultStatePath)

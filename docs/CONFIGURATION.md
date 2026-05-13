@@ -58,7 +58,7 @@ See [examples/22-defaults-inheritance.yaml](../examples/22-defaults-inheritance.
 
 ## Authentication
 
-HTTP input, HTTP output, and HTTP enrichment modules support these authentication
+HTTP and SOAP input, output, and enrichment modules support these authentication
 types:
 
 | Type | Required credentials |
@@ -77,11 +77,13 @@ authentication:
     token: ${SOURCE_BEARER_TOKEN}
 ```
 
+SOAP modules also support WS-Security UsernameToken through `wsSecurity`.
+
 See [examples/23-auth-basic-bearer-query-key.yaml](../examples/23-auth-basic-bearer-query-key.yaml).
 
 ## Scheduling
 
-Polling and database inputs can run on a CRON schedule.
+HTTP polling, SOAP polling, and database inputs can run on a CRON schedule.
 
 ```yaml
 input:
@@ -94,8 +96,8 @@ the pipeline on schedule. Without a schedule, the pipeline runs once.
 
 ## State Persistence
 
-HTTP polling can persist cursors, timestamps, or IDs so the next run resumes
-from the last processed record.
+HTTP and SOAP polling can persist cursors, timestamps, or IDs so the next run
+resumes from the last processed record.
 
 ```yaml
 input:

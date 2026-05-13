@@ -45,6 +45,27 @@ Examples:
 - [HMAC webhook to HTTP output](../examples/05-webhook-hmac-to-http-single.yaml)
 - [queued webhook to database](../examples/06-webhook-queue-rate-limit-to-database.yaml)
 
+### `soapPolling`
+
+Polls a SOAP operation and extracts records from the XML response.
+
+```yaml
+input:
+  type: soapPolling
+  endpoint: https://soap.example.com/orders
+  operation: ListOrders
+  body: |
+    <m:ListOrders xmlns:m="urn:orders"/>
+  dataField: Envelope.Body.ListOrdersResponse.Orders.Order
+```
+
+Examples:
+
+- [SOAP 1.1 polling](../examples/40-soap-polling-basic-v11.yaml)
+- [SOAP 1.2 polling](../examples/40b-soap-polling-basic-v12.yaml)
+- [cursor pagination](../examples/41-soap-polling-cursor.yaml)
+- [MTOM response attachments](../examples/44b-soap-input-mtom-reception.yaml)
+
 ### `database`
 
 Reads records from PostgreSQL, MySQL, or SQLite.
@@ -153,6 +174,25 @@ Examples:
 - [merge cache](../examples/17-sql-call-merge-cache.yaml)
 - [append query file](../examples/18-sql-call-append-query-file.yaml)
 
+### `soap_call`
+
+Enriches records with SOAP calls.
+
+```yaml
+filters:
+  - type: soap_call
+    endpoint: https://soap.example.com/customer
+    operation: GetCustomer
+    body: |
+      <GetCustomerRequest>
+        <id>{{record.customerId}}</id>
+      </GetCustomerRequest>
+    mergeStrategy: append
+    resultKey: soap
+```
+
+See [examples/42-soap-call-enrichment.yaml](../examples/42-soap-call-enrichment.yaml).
+
 ### `set` And `remove`
 
 Adds, updates, or removes record fields.
@@ -204,3 +244,26 @@ output:
 ```
 
 See [examples/21-database-output-transaction-query-file.yaml](../examples/21-database-output-transaction-query-file.yaml).
+
+### `soapRequest`
+
+Sends records to a SOAP operation in `batch` or `single` mode.
+
+```yaml
+output:
+  type: soapRequest
+  endpoint: https://soap.example.com/import
+  operation: ImportOrders
+  requestMode: batch
+  body: |
+    <m:ImportOrders xmlns:m="urn:orders">
+      <m:RecordCount>{{record.recordCount}}</m:RecordCount>
+    </m:ImportOrders>
+```
+
+Examples:
+
+- [batch SOAP output](../examples/43-soap-output-batch.yaml)
+- [MTOM attachment emission](../examples/44-soap-output-mtom-emission.yaml)
+- [WS-Security PasswordText](../examples/45-soap-output-wssecurity-passwordtext.yaml)
+- [WS-Security PasswordDigest](../examples/45b-soap-output-wssecurity-passworddigest.yaml)

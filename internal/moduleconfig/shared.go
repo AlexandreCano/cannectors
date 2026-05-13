@@ -20,6 +20,49 @@ type HTTPRequestBase struct {
 	TimeoutMs        int                   `json:"timeoutMs,omitempty"`
 }
 
+// SOAPRequestBase mirrors common-schema.json#/$defs/soapRequestBase.
+// Embedded by all SOAP module configs (soapPolling, soapRequest, soap_call).
+type SOAPRequestBase struct {
+	Endpoint       string                     `json:"endpoint"`
+	SOAPVersion    string                     `json:"soapVersion,omitempty"`
+	SOAPAction     string                     `json:"soapAction,omitempty"`
+	Operation      string                     `json:"operation"`
+	Body           string                     `json:"body"`
+	Headers        []SOAPHeaderFragmentConfig `json:"headers,omitempty"`
+	Authentication *connector.AuthConfig      `json:"authentication,omitempty"`
+	WSSecurity     *SOAPSecurityConfig        `json:"wsSecurity,omitempty"`
+	MTOM           MTOMTemplateConfig         `json:"mtom,omitempty"`
+	HTTPHeaders    map[string]string          `json:"httpHeaders,omitempty"`
+	TimeoutMs      int                        `json:"timeoutMs,omitempty"`
+}
+
+// SOAPHeaderFragmentConfig is a raw SOAP header XML fragment from YAML config.
+type SOAPHeaderFragmentConfig struct {
+	XML string `json:"xml"`
+}
+
+// SOAPSecurityConfig configures WS-Security UsernameToken.
+type SOAPSecurityConfig struct {
+	Username       string `json:"username"`
+	Password       string `json:"password"`
+	PasswordType   string `json:"passwordType,omitempty"`
+	TokenID        string `json:"tokenId,omitempty"`
+	MustUnderstand bool   `json:"mustUnderstand,omitempty"`
+}
+
+// MTOMTemplateConfig configures SOAP MTOM/XOP attachment templates from YAML config.
+type MTOMTemplateConfig struct {
+	Enabled     bool                 `json:"enabled"`
+	Attachments []AttachmentTemplate `json:"attachments,omitempty"`
+}
+
+// AttachmentTemplate maps a record field to an outgoing MTOM MIME part.
+type AttachmentTemplate struct {
+	ContentID   string `json:"contentId"`
+	ContentType string `json:"contentType"`
+	SourceField string `json:"sourceField"`
+}
+
 // SQLRequestBase mirrors common-schema.json#/$defs/sqlRequestBase.
 // Embedded by all SQL module configs (database input, database output, sql_call).
 type SQLRequestBase struct {

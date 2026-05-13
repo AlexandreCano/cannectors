@@ -300,6 +300,9 @@ var httpRetryEligibleTypes = map[string]struct{}{
 	"httpPolling": {},
 	"http_call":   {},
 	"httpRequest": {},
+	"soapPolling": {},
+	"soap_call":   {},
+	"soapRequest": {},
 }
 
 // applyDefaults resolves retry/onError/timeoutMs per module (module > defaults)

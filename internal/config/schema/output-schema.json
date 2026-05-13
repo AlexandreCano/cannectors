@@ -12,7 +12,7 @@
 			"properties": {
 				"type": {
 					"type": "string",
-					"description": "Output type. Canonical: httpRequest, database.",
+					"description": "Output type. Canonical: httpRequest, soapRequest, database.",
 					"minLength": 1
 				}
 			},
@@ -20,6 +20,7 @@
 				{ "$ref": "common-schema.json#/$defs/moduleBase" },
 				{ "oneOf": [
 					{ "allOf": [ { "$ref": "#/$defs/httpRequestOutputConfig" }, { "properties": { "type": { "const": "httpRequest" } }, "required": [ "type" ] } ] },
+					{ "allOf": [ { "$ref": "#/$defs/soapRequestOutputConfig" }, { "properties": { "type": { "const": "soapRequest" } }, "required": [ "type" ] } ] },
 					{ "allOf": [ { "$ref": "#/$defs/databaseOutputConfig" }, { "properties": { "type": { "const": "database" } }, "required": [ "type" ] } ] }
 				] }
 			]
@@ -44,6 +45,30 @@
 							"items": {
 								"$ref": "common-schema.json#/$defs/httpCallKeyConfig"
 							}
+						},
+						"requestMode": {
+							"type": "string",
+							"description": "Request mode: 'batch' (all records in one request, default) or 'single' (one request per record).",
+							"enum": [ "batch", "single" ],
+							"default": "batch"
+						}
+					}
+				}
+			]
+		},
+
+		"soapRequestOutputConfig": {
+			"allOf": [
+				{ "$ref": "common-schema.json#/$defs/soapRequestBase" },
+				{
+					"type": "object",
+					"description": "SOAP request output module configuration. Sends records to a SOAP endpoint.",
+					"properties": {
+						"success": {
+							"$ref": "#/$defs/successCondition"
+						},
+						"retry": {
+							"$ref": "common-schema.json#/$defs/retryConfig"
 						},
 						"requestMode": {
 							"type": "string",

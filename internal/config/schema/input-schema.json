@@ -12,7 +12,7 @@
 			"properties": {
 				"type": {
 					"type": "string",
-					"description": "Input type. Canonical: httpPolling, webhook, database.",
+					"description": "Input type. Canonical: httpPolling, soapPolling, webhook, database.",
 					"minLength": 1
 				}
 			},
@@ -21,6 +21,7 @@
 				{ "oneOf": [
 					{ "allOf": [ { "$ref": "#/$defs/webhookInputConfig" }, { "properties": { "type": { "const": "webhook" } }, "required": [ "type" ] } ] },
 					{ "allOf": [ { "$ref": "#/$defs/httpPollingInputConfig" }, { "properties": { "type": { "const": "httpPolling" } }, "required": [ "type" ] } ] },
+					{ "allOf": [ { "$ref": "#/$defs/soapPollingInputConfig" }, { "properties": { "type": { "const": "soapPolling" } }, "required": [ "type" ] } ] },
 					{ "allOf": [ { "$ref": "#/$defs/databaseInputConfig" }, { "properties": { "type": { "const": "database" } }, "required": [ "type" ] } ] }
 				] }
 			]
@@ -47,6 +48,36 @@
 						"dataField": {
 							"type": "string",
 							"description": "JSON field path containing the array of records to extract from the response."
+						},
+						"retry": {
+							"$ref": "common-schema.json#/$defs/retryConfig"
+						}
+					}
+				}
+			]
+		},
+
+		"soapPollingInputConfig": {
+			"allOf": [
+				{ "$ref": "common-schema.json#/$defs/soapRequestBase" },
+				{
+					"type": "object",
+					"description": "SOAP polling input module configuration. Without 'schedule', runs once. With 'schedule', registered with the CRON scheduler.",
+					"properties": {
+						"schedule": {
+							"type": "string",
+							"description": "Optional CRON expression for polling. Validated at runtime.",
+							"minLength": 9
+						},
+						"pagination": {
+							"$ref": "common-schema.json#/$defs/pagination"
+						},
+						"statePersistence": {
+							"$ref": "common-schema.json#/$defs/statePersistenceConfig"
+						},
+						"dataField": {
+							"type": "string",
+							"description": "XML map field path containing the array of records to extract from the SOAP response."
 						},
 						"retry": {
 							"$ref": "common-schema.json#/$defs/retryConfig"

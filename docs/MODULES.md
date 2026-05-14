@@ -104,17 +104,62 @@ See [examples/10-mapping-transforms-all.yaml](../examples/10-mapping-transforms-
 
 ### `condition`
 
-Keeps, drops, or routes records based on expressions.
+Routes records by evaluating an `expr` boolean expression. Matching records
+go through the `then` branch; the rest go through `else`. An absent branch
+keeps the record unchanged. To remove records, place an explicit `drop`
+filter inside the relevant branch.
 
 ```yaml
 filters:
   - type: condition
     expression: "status == 'active'"
-    onTrue: continue
-    onFalse: skip
+    then:
+      - type: set
+        target: routing.bucket
+        value: active
+    else:
+      - type: drop
 ```
 
 See [examples/11-condition-nested-routing.yaml](../examples/11-condition-nested-routing.yaml).
+
+### `loop`
+
+Iterates over an array field on each record and runs a nested filter chain
+for every item. The current item is exposed under the `itemName` alias; the
+root record stays available as `record`. Loop metadata is exposed read-only
+at `_metadata.loop.<itemName>.index`.
+
+```yaml
+filters:
+  - type: loop
+    field: cells
+    itemName: cell
+    filters:
+      - type: condition
+        expression: "cell.columnId == 1"
+        then:
+          - type: mapping
+            mappings:
+              - source: cell.displayValue
+                target: record.eventId
+```
+
+Rules to keep in mind:
+
+- `field`, `itemName`, and `filters` are required. `itemName` cannot be
+  `record`, `_metadata`, or `loop`, and cannot duplicate an active parent
+  loop alias when nesting.
+- Nested filters can read `_metadata.loop.<alias>.index` but **must not
+  write** under `_metadata.loop`; runtime-owned state is read-only.
+- Nested filters returning zero records remove the item from the array.
+  Returning more than one record per item is rejected in v1 (item expansion
+  is out of scope).
+- Items that are not objects pass through unchanged; sub-path writes such
+  as `it.foo` on a scalar item are rejected to prevent silent map
+  auto-creation.
+
+See [examples/25-loop-cells-extraction.yaml](../examples/25-loop-cells-extraction.yaml).
 
 ### `script`
 

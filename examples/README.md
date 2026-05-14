@@ -43,6 +43,7 @@ Validate one example:
 | [22-defaults-inheritance.yaml](22-defaults-inheritance.yaml) | Top-level defaults and module overrides |
 | [23-auth-basic-bearer-query-key.yaml](23-auth-basic-bearer-query-key.yaml) | Bearer, basic, and query API key auth |
 | [24-empty-filter-pass-through.yaml](24-empty-filter-pass-through.yaml) | Empty filter chain pass-through |
+| [25-loop-cells-extraction.yaml](25-loop-cells-extraction.yaml) | Loop over a `cells[]` array and extract values by columnId |
 | [40-soap-polling-basic-v11.yaml](40-soap-polling-basic-v11.yaml) | SOAP 1.1 polling input |
 | [40b-soap-polling-basic-v12.yaml](40b-soap-polling-basic-v12.yaml) | SOAP 1.2 polling input |
 | [41-soap-polling-cursor.yaml](41-soap-polling-cursor.yaml) | Cursor pagination in a SOAP body |

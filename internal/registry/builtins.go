@@ -169,6 +169,18 @@ func registerBuiltinFilterModules() {
 	RegisterFilter("drop", func(_ connector.ModuleConfig, _ int) (filter.Module, error) {
 		return filter.NewDrop(), nil
 	})
+
+	// loop - Iterate over an array field on each record, running a nested
+	// filter chain per item. Nested filters are resolved via the registry
+	// through resolveNestedFilter, so custom filter types work transparently
+	// inside the loop.
+	RegisterFilter("loop", func(cfg connector.ModuleConfig, index int) (filter.Module, error) {
+		loopConfig, err := moduleconfig.ParseModuleConfig[filter.LoopConfig](cfg)
+		if err != nil {
+			return nil, fmt.Errorf("invalid loop config at index %d: %w", index, err)
+		}
+		return filter.NewLoopFromConfig(loopConfig, resolveNestedFilter)
+	})
 }
 
 // resolveNestedFilter resolves a NestedModuleConfig by serializing it back to

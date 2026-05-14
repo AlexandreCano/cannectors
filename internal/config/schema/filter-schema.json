@@ -12,7 +12,7 @@
 			"properties": {
 				"type": {
 					"type": "string",
-					"description": "Filter type. Canonical: mapping, condition, drop, set, remove, script, http_call, soap_call, sql_call.",
+					"description": "Filter type. Canonical: mapping, condition, drop, loop, set, remove, script, http_call, soap_call, sql_call.",
 					"minLength": 1
 				}
 			},
@@ -73,6 +73,12 @@
 							{ "$ref": "#/$defs/dropFilterConfig" },
 							{ "properties": { "type": { "const": "drop" } }, "required": [ "type" ] }
 						]
+					},
+					{
+						"allOf": [
+							{ "$ref": "#/$defs/loopFilterConfig" },
+							{ "properties": { "type": { "const": "loop" } }, "required": [ "type" ] }
+						]
 					}
 					]
 				}
@@ -123,6 +129,30 @@
 		"dropFilterConfig": {
 			"type": "object",
 			"description": "Drop filter module. Removes every record it receives from the stream. Typically placed inside a condition branch to filter records out explicitly."
+		},
+
+		"loopFilterConfig": {
+			"type": "object",
+			"description": "Loop filter module. Iterates over an array field on each record, running a nested filter chain per item. The current item is exposed under the configured 'itemName' alias; the root record stays available as 'record'. Loop metadata is exposed read-only at '_metadata.loop.<itemName>.index'.",
+			"required": [ "field", "itemName", "filters" ],
+			"properties": {
+				"field": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Path to the array field, relative to the input record (root record for the outermost loop, parent scope for nested loops). Supports dot notation."
+				},
+				"itemName": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Alias exposed to nested filters for the current item. Cannot be 'record', '_metadata', or 'loop', and must not duplicate an active parent loop alias.",
+					"not": { "enum": [ "record", "_metadata", "loop" ] }
+				},
+				"filters": {
+					"type": "array",
+					"description": "Nested filters executed for every item.",
+					"items": { "$ref": "#/$defs/filterModule" }
+				}
+			}
 		},
 
 		"setFilterConfig": {

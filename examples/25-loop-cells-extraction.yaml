@@ -1,0 +1,45 @@
+name: loop-cells-extraction
+version: 1.0.0
+description: Iterate over a cells[] array and extract values into flat record fields by columnId.
+tags:
+  - loop
+  - smartsheet
+input:
+  type: httpPolling
+  schedule: "*/15 * * * *"
+  endpoint: https://source.example.com/api/rows
+  dataField: rows
+filters:
+  - type: loop
+    field: cells
+    itemName: cell
+    filters:
+      - type: condition
+        expression: cell.columnId == 1
+        then:
+          - type: mapping
+            mappings:
+              - source: cell.displayValue
+                target: record.eventId
+      - type: condition
+        expression: cell.columnId == 2
+        then:
+          - type: mapping
+            mappings:
+              - source: cell.displayValue
+                target: record.coordinates
+      - type: condition
+        expression: cell.columnId == 3
+        then:
+          - type: mapping
+            mappings:
+              - source: cell.displayValue
+                target: record.customerName
+  - type: remove
+    target:
+      - cells
+output:
+  type: httpRequest
+  endpoint: https://destination.example.com/api/events
+  method: POST
+  requestMode: single
